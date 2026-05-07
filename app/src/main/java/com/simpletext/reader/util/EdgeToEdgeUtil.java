@@ -32,13 +32,16 @@ public final class EdgeToEdgeUtil {
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
                     | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            boolean imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
 
             if (topBar != null) {
                 topBar.setPadding(topPad.left, topPad.top + bars.top, topPad.right, topPad.bottom);
             }
             if (bottomContent != null) {
+                int bottomInset = imeVisible ? Math.max(bars.bottom, ime.bottom) : bars.bottom;
                 bottomContent.setPadding(bottomPad.left, bottomPad.top, bottomPad.right,
-                        bottomPad.bottom + bars.bottom);
+                        bottomPad.bottom + bottomInset);
             }
             return insets;
         });

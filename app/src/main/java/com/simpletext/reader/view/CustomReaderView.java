@@ -3,6 +3,8 @@ package com.simpletext.reader.view;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Typeface;
 import android.text.Layout;
 import android.text.StaticLayout;
@@ -38,6 +40,9 @@ public class CustomReaderView extends View {
     }
 
     private final TextPaint paint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG | TextPaint.SUBPIXEL_TEXT_FLAG);
+    private final Paint searchHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint activeSearchHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path searchHighlightPath = new Path();
     private final OverScroller scroller;
     private final int touchSlop;
     private final int minFlingVelocity;
@@ -56,6 +61,8 @@ public class CustomReaderView extends View {
     private int marginVerticalPx = 16;
     private int overlapLines = 0;
     private Typeface typeface = Typeface.DEFAULT;
+    private String searchQuery = "";
+    private int activeSearchIndex = -1;
 
     private int readerScrollY = 0;
     private int maxScrollY = 0;
@@ -79,6 +86,9 @@ public class CustomReaderView extends View {
         paint.setColor(textColor);
         paint.setTextSize(spToPx(fontSizeSp));
         paint.setTypeface(typeface);
+        searchHighlightPaint.setStyle(Paint.Style.FILL);
+        activeSearchHighlightPaint.setStyle(Paint.Style.FILL);
+        updateSearchHighlightColors();
     }
 
     public void setReaderListener(ReaderListener listener) {
@@ -104,24 +114,70 @@ public class CustomReaderView extends View {
                                int marginHorizontalPx,
                                int marginVerticalPx,
                                Typeface typeface) {
+        float nextLineSpacing = Math.max(0.8f, lineSpacingMultiplier);
+        int nextMarginHorizontal = Math.max(0, marginHorizontalPx);
+        int nextMarginVertical = Math.max(0, marginVerticalPx);
+        Typeface nextTypeface = typeface != null ? typeface : Typeface.DEFAULT;
+
+        boolean layoutAffectingChange = Float.compare(this.fontSizeSp, fontSizeSp) != 0
+                || Float.compare(this.lineSpacingMultiplier, nextLineSpacing) != 0
+                || this.marginHorizontalPx != nextMarginHorizontal
+                || this.marginVerticalPx != nextMarginVertical
+                || this.typeface != nextTypeface;
+
+        boolean colorChange = this.textColor != textColor || this.backgroundColor != backgroundColor;
+
         this.fontSizeSp = fontSizeSp;
-        this.lineSpacingMultiplier = Math.max(0.8f, lineSpacingMultiplier);
+        this.lineSpacingMultiplier = nextLineSpacing;
         this.textColor = textColor;
         this.backgroundColor = backgroundColor;
-        this.marginHorizontalPx = Math.max(0, marginHorizontalPx);
-        this.marginVerticalPx = Math.max(0, marginVerticalPx);
-        this.typeface = typeface != null ? typeface : Typeface.DEFAULT;
+        this.marginHorizontalPx = nextMarginHorizontal;
+        this.marginVerticalPx = nextMarginVertical;
+        this.typeface = nextTypeface;
 
         paint.setColor(textColor);
         paint.setTextSize(spToPx(fontSizeSp));
         paint.setTypeface(this.typeface);
-        rebuildLayout();
-        invalidate();
-        notifyScrollChanged();
+        updateSearchHighlightColors();
+
+        if (layoutAffectingChange) {
+            rebuildLayout();
+            notifyScrollChanged();
+        }
+
+        if (layoutAffectingChange || colorChange) {
+            invalidate();
+        }
     }
 
     public void setOverlapLines(int overlapLines) {
         this.overlapLines = Math.max(0, Math.min(8, overlapLines));
+    }
+
+
+    public void setSearchHighlight(String query, int activeSearchIndex) {
+        this.searchQuery = query != null ? query : "";
+        this.activeSearchIndex = this.searchQuery.isEmpty() ? -1 : activeSearchIndex;
+        invalidate();
+    }
+
+    private void updateSearchHighlightColors() {
+        boolean light = isLightColor(backgroundColor);
+        if (light) {
+            searchHighlightPaint.setColor(Color.argb(88, 255, 216, 96));
+            activeSearchHighlightPaint.setColor(Color.argb(150, 255, 184, 56));
+        } else {
+            searchHighlightPaint.setColor(Color.argb(108, 255, 221, 105));
+            activeSearchHighlightPaint.setColor(Color.argb(170, 255, 195, 75));
+        }
+    }
+
+    private boolean isLightColor(int color) {
+        int r = Color.red(color);
+        int g = Color.green(color);
+        int b = Color.blue(color);
+        double luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+        return luminance > 160;
     }
 
     private void rebuildLayout() {
@@ -169,11 +225,46 @@ public class CustomReaderView extends View {
         if (layout == null) return;
 
         canvas.save();
-        canvas.clipRect(getPaddingLeft(), getPaddingTop(), getWidth() - getPaddingRight(), getHeight() - getPaddingBottom());
+        canvas.clipRect(getPaddingLeft(),
+                getPaddingTop(),
+                getWidth() - getPaddingRight(),
+                getFullLineClipBottom());
         canvas.translate(getPaddingLeft() + marginHorizontalPx,
                 getPaddingTop() + marginVerticalPx - readerScrollY);
+        drawSearchHighlights(canvas);
         layout.draw(canvas);
         canvas.restore();
+    }
+
+    private void drawSearchHighlights(Canvas canvas) {
+        if (layout == null || text.isEmpty() || searchQuery == null || searchQuery.isEmpty()) return;
+
+        int lineCount = layout.getLineCount();
+        if (lineCount <= 0) return;
+
+        int layoutTopY = Math.max(0, readerScrollY - marginVerticalPx);
+        int viewportHeight = getViewportHeight();
+        int layoutBottomY = Math.min(layout.getHeight(), layoutTopY + viewportHeight);
+
+        int startLine = Math.max(0, layout.getLineForVertical(layoutTopY) - 1);
+        int endLine = Math.min(lineCount - 1, layout.getLineForVertical(Math.max(0, layoutBottomY - 1)) + 1);
+
+        int startChar = Math.max(0, layout.getLineStart(startLine) - Math.max(0, searchQuery.length() - 1));
+        int endChar = Math.min(text.length(), layout.getLineEnd(endLine) + Math.max(0, searchQuery.length() - 1));
+        int step = Math.max(1, searchQuery.length());
+
+        int index = text.indexOf(searchQuery, startChar);
+        while (index >= 0 && index < endChar) {
+            int matchEnd = Math.min(text.length(), index + searchQuery.length());
+            if (matchEnd > startChar) {
+                searchHighlightPath.reset();
+                layout.getSelectionPath(index, matchEnd, searchHighlightPath);
+                canvas.drawPath(searchHighlightPath,
+                        index == activeSearchIndex ? activeSearchHighlightPaint : searchHighlightPaint);
+            }
+            int nextStart = Math.max(index + step, index + 1);
+            index = text.indexOf(searchQuery, nextStart);
+        }
     }
 
     @Override
@@ -241,7 +332,7 @@ public class CustomReaderView extends View {
     }
 
     public void setReaderScrollY(int y) {
-        int clamped = Math.max(0, Math.min(maxScrollY, y));
+        int clamped = clampScrollY(y);
         if (clamped != readerScrollY) {
             readerScrollY = clamped;
             invalidate();
@@ -255,6 +346,44 @@ public class CustomReaderView extends View {
 
     public int getMaxScrollY() {
         return maxScrollY;
+    }
+
+    private int clampScrollY(int y) {
+        return Math.max(0, Math.min(maxScrollY, y));
+    }
+
+    private int snapScrollYToLineTop(int y) {
+        if (layout == null || text.isEmpty()) return clampScrollY(y);
+
+        int clamped = clampScrollY(y);
+        int layoutY = Math.max(0, clamped - marginVerticalPx);
+        int line = layout.getLineForVertical(layoutY);
+
+        // Align the visible top edge to a real StaticLayout line boundary.
+        // This prevents the top line from being clipped in half after tap paging.
+        return clampScrollY(layout.getLineTop(line) + marginVerticalPx);
+    }
+
+    private int getFullLineClipBottom() {
+        if (layout == null) return getHeight() - getPaddingBottom();
+
+        int viewTop = getPaddingTop();
+        int viewBottom = getHeight() - getPaddingBottom();
+        int viewportHeight = Math.max(1, viewBottom - viewTop);
+
+        int layoutTopY = Math.max(0, readerScrollY - marginVerticalPx);
+        int visibleBottomInLayout = Math.min(layout.getHeight(), layoutTopY + viewportHeight);
+
+        int line = layout.getLineForVertical(Math.max(0, visibleBottomInLayout));
+        int lineBottom = layout.getLineBottom(line);
+
+        if (lineBottom > visibleBottomInLayout) {
+            int fullBottomInLayout = Math.max(0, layout.getLineTop(line));
+            int screenBottom = getPaddingTop() + marginVerticalPx - readerScrollY + fullBottomInLayout;
+            return Math.max(viewTop, Math.min(viewBottom, screenBottom));
+        }
+
+        return viewBottom;
     }
 
     private void notifyScrollChanged() {
@@ -289,16 +418,16 @@ public class CustomReaderView extends View {
     public void scrollToPage(int page) {
         int total = getTotalPageCount();
         page = Math.max(1, Math.min(total, page));
-        setReaderScrollY((page - 1) * getPageStepPx());
+        setReaderScrollY(snapScrollYToLineTop((page - 1) * getPageStepPx()));
     }
 
     public void pageBy(int direction) {
-        scrollByPixels(direction * getPageStepPx());
+        setReaderScrollY(snapScrollYToLineTop(readerScrollY + direction * getPageStepPx()));
     }
 
     public void scrollToPercent(float percent) {
         percent = Math.max(0f, Math.min(1f, percent));
-        setReaderScrollY(Math.round(maxScrollY * percent));
+        setReaderScrollY(snapScrollYToLineTop(Math.round(maxScrollY * percent)));
     }
 
     public int getCurrentCharPosition() {
@@ -317,7 +446,7 @@ public class CustomReaderView extends View {
         // the status/page strip, and so search results feel like they move to the
         // actual visible location.
         int context = Math.round(getLineHeightPx() * 1.2f);
-        setReaderScrollY(layout.getLineTop(line) + marginVerticalPx - context);
+        setReaderScrollY(snapScrollYToLineTop(layout.getLineTop(line) + marginVerticalPx - context));
     }
 
     private float spToPx(float sp) {

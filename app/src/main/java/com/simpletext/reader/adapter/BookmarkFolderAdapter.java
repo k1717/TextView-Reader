@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.simpletext.reader.R;
 import com.simpletext.reader.model.Bookmark;
+import com.simpletext.reader.util.FileUtils;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -34,6 +35,7 @@ import java.util.Date;
 public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private static final int TYPE_FOLDER = 0;
     private static final int TYPE_BOOKMARK = 1;
+    private static final int TYPE_SECTION = 2;
 
     public interface Listener {
         void onFolderClick(String filePath);
@@ -50,6 +52,14 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
         boolean expanded;
         boolean currentFile;
         Bookmark bookmark;
+
+        static Row section(String title, int count) {
+            Row r = new Row();
+            r.type = TYPE_SECTION;
+            r.fileName = title;
+            r.count = count;
+            return r;
+        }
 
         static Row folder(String filePath, String fileName, int count, boolean expanded, boolean currentFile) {
             Row r = new Row();
@@ -89,8 +99,8 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
         this.dialogBgColor = dialogBgColor;
         this.folderBgColor = folderBgColor;
         this.textColor = textColor;
-        this.subTextColor = subTextColor;
-        this.pathTextColor = blendColors(dialogBgColor, subTextColor, 0.55f);
+        this.subTextColor = blendColors(dialogBgColor, textColor, 0.76f);
+        this.pathTextColor = blendColors(dialogBgColor, textColor, 0.66f);
 
         // Stronger folder boundary so expanded/shrunk file folders are clearly visible.
         this.folderBorderColor = blendColors(folderBgColor, textColor, 0.42f);
@@ -129,10 +139,10 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
 
         if (expandedFolders == null) expandedFolders = new HashSet<>();
 
-        Map<String, List<Bookmark>> grouped = new LinkedHashMap<>();
         List<Bookmark> sorted = new ArrayList<>(allBookmarks);
-
         Collections.sort(sorted, (a, b) -> {
+            int byType = Integer.compare(typeRank(a), typeRank(b));
+            if (byType != 0) return byType;
             String af = safeFileName(a);
             String bf = safeFileName(b);
             int byName = af.compareToIgnoreCase(bf);
@@ -144,30 +154,58 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
             return Integer.compare(a.getCharPosition(), b.getCharPosition());
         });
 
-        for (Bookmark b : sorted) {
-            String key = b.getFilePath() != null ? b.getFilePath() : "";
-            if (!grouped.containsKey(key)) grouped.put(key, new ArrayList<>());
-            grouped.get(key).add(b);
-        }
+        folderCount = 0;
+        for (int rank = 0; rank <= 4; rank++) {
+            Map<String, List<Bookmark>> grouped = new LinkedHashMap<>();
+            int sectionCount = 0;
+            for (Bookmark b : sorted) {
+                if (typeRank(b) != rank) continue;
+                sectionCount++;
+                String key = b.getFilePath() != null ? b.getFilePath() : "";
+                if (!grouped.containsKey(key)) grouped.put(key, new ArrayList<>());
+                grouped.get(key).add(b);
+            }
+            if (sectionCount == 0) continue;
 
-        folderCount = grouped.size();
+            rows.add(Row.section(typeTitle(rank), sectionCount));
 
-        for (Map.Entry<String, List<Bookmark>> entry : grouped.entrySet()) {
-            String path = entry.getKey();
-            List<Bookmark> bookmarks = entry.getValue();
-            Collections.sort(bookmarks, Comparator.comparingInt(Bookmark::getCharPosition));
+            for (Map.Entry<String, List<Bookmark>> entry : grouped.entrySet()) {
+                String path = entry.getKey();
+                List<Bookmark> bookmarks = entry.getValue();
+                Collections.sort(bookmarks, Comparator.comparingInt(Bookmark::getCharPosition));
 
-            String fileName = bookmarks.isEmpty() ? new File(path).getName() : safeFileName(bookmarks.get(0));
-            boolean expanded = expandedFolders.contains(path);
-            boolean current = currentFilePath != null && currentFilePath.equals(path);
+                String fileName = bookmarks.isEmpty() ? new File(path).getName() : safeFileName(bookmarks.get(0));
+                boolean expanded = expandedFolders.contains(path);
+                boolean current = currentFilePath != null && currentFilePath.equals(path);
 
-            rows.add(Row.folder(path, fileName, bookmarks.size(), expanded, current));
-            if (expanded) {
-                for (Bookmark b : bookmarks) rows.add(Row.bookmark(b));
+                rows.add(Row.folder(path, fileName, bookmarks.size(), expanded, current));
+                folderCount++;
+                if (expanded) {
+                    for (Bookmark b : bookmarks) rows.add(Row.bookmark(b));
+                }
             }
         }
 
         notifyDataSetChanged();
+    }
+
+    private static int typeRank(Bookmark b) {
+        String name = safeFileName(b);
+        if (FileUtils.isTextFile(name)) return 0;
+        if (FileUtils.isPdfFile(name)) return 1;
+        if (FileUtils.isEpubFile(name)) return 2;
+        if (FileUtils.isWordFile(name)) return 3;
+        return 4;
+    }
+
+    private static String typeTitle(int rank) {
+        switch (rank) {
+            case 0: return "TXT";
+            case 1: return "PDF";
+            case 2: return "EPUB";
+            case 3: return "Word";
+            default: return "Other";
+        }
     }
 
     private static String safeFileName(Bookmark b) {
@@ -190,6 +228,21 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         LayoutInflater inflater = LayoutInflater.from(parent.getContext());
+        if (viewType == TYPE_SECTION) {
+            TextView title = new TextView(parent.getContext());
+            float d = parent.getResources().getDisplayMetrics().density;
+            int padH = Math.round(12 * d);
+            int padV = Math.round(2 * d);
+            title.setPadding(padH, padV, padH, padV);
+            title.setTextSize(12f);
+            title.setAllCaps(false);
+            RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
+                    RecyclerView.LayoutParams.WRAP_CONTENT,
+                    Math.round(24 * d));
+            lp.setMargins(0, Math.round(2 * d), 0, Math.round(3 * d));
+            title.setLayoutParams(lp);
+            return new SectionHolder(title);
+        }
         if (viewType == TYPE_FOLDER) {
             View view = inflater.inflate(R.layout.item_bookmark_folder, parent, false);
             return new FolderHolder(view);
@@ -201,10 +254,31 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         Row row = rows.get(position);
-        if (holder instanceof FolderHolder) {
+        if (holder instanceof SectionHolder) {
+            ((SectionHolder) holder).bind(row);
+        } else if (holder instanceof FolderHolder) {
             ((FolderHolder) holder).bind(row);
         } else {
             ((BookmarkHolder) holder).bind(row.bookmark);
+        }
+    }
+
+    class SectionHolder extends RecyclerView.ViewHolder {
+        TextView title;
+        SectionHolder(View itemView) {
+            super(itemView);
+            title = (TextView) itemView;
+        }
+        void bind(Row row) {
+            title.setText(row.fileName + "  •  " + row.count);
+            title.setTextColor(blendColors(dialogBgColor, textColor, 0.90f));
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(blendColors(dialogBgColor, textColor, 0.12f));
+            bg.setCornerRadius(12f * title.getResources().getDisplayMetrics().density);
+            bg.setStroke(Math.max(1, Math.round(1f * title.getResources().getDisplayMetrics().density)),
+                    blendColors(dialogBgColor, textColor, 0.22f));
+            title.setBackground(bg);
+            title.setGravity(android.view.Gravity.CENTER_VERTICAL);
         }
     }
 
@@ -226,7 +300,7 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
         }
 
         void bind(Row row) {
-            itemView.setBackground(rowBackground(folderBgColor, folderBorderColor, 4f, 1.6f, itemView));
+            itemView.setBackground(rowBackground(folderBgColor, folderBorderColor, 8f, 1.4f, itemView));
 
             arrow.setText(row.expanded ? "▾" : "▸");
             arrow.setTextColor(textColor);
@@ -236,10 +310,10 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
             title.setTextColor(textColor);
 
             meta.setText(row.count + (row.count == 1 ? " bookmark" : " bookmarks"));
-            meta.setTextColor(blendColors(folderBgColor, textColor, 0.78f));
+            meta.setTextColor(blendColors(folderBgColor, textColor, 0.84f));
 
             path.setText(row.filePath != null ? row.filePath : "");
-            path.setTextColor(blendColors(folderBgColor, textColor, 0.55f));
+            path.setTextColor(blendColors(folderBgColor, textColor, 0.68f));
         }
     }
 

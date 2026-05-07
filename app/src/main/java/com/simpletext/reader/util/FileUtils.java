@@ -4,6 +4,8 @@ import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.OpenableColumns;
+import android.text.Html;
+import android.text.Spanned;
 import android.util.Log;
 
 import com.simpletext.reader.model.TextChunk;
@@ -15,6 +17,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
@@ -24,6 +27,17 @@ import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 /**
  * File utilities including broad CJK encoding detection.
@@ -533,6 +547,318 @@ public class FileUtils {
         return localFile;
     }
 
+
+    /**
+     * Read any app-supported readable file and normalize it into plain text.
+     * This keeps the existing reader, paging, search, recent-file, and bookmark logic
+     * shared across TXT, PDF, EPUB, and Word documents.
+     */
+    public static String readReadableFile(Context context, File file) throws IOException {
+        String lower = lowerName(file != null ? file.getName() : null);
+
+        if (lower.endsWith(".pdf")) {
+            throw new IOException("PDF files use the original-page PDF viewer, not text extraction.");
+        }
+        if (lower.endsWith(".epub")) {
+            return readEpubFile(file);
+        }
+        if (isWordFileName(lower)) {
+            return readWordFile(file);
+        }
+        return readTextFile(file);
+    }
+
+    /**
+     * Human-readable format label used in file info and list subtitles.
+     */
+    public static String getReadableFileType(String fileName) {
+        String lower = lowerName(fileName);
+        if (lower.endsWith(".pdf")) return "PDF";
+        if (lower.endsWith(".epub")) return "EPUB";
+        if (isWordFileName(lower)) return "Word";
+        if (isTextFile(fileName)) return "Text";
+        return "File";
+    }
+
+    public static boolean isSupportedReadableFile(String fileName) {
+        return isTextFile(fileName)
+                || isPdfFile(fileName)
+                || isEpubFile(fileName)
+                || isWordFile(fileName);
+    }
+
+    public static boolean isPdfFile(String fileName) {
+        return lowerName(fileName).endsWith(".pdf");
+    }
+
+    public static boolean isEpubFile(String fileName) {
+        return lowerName(fileName).endsWith(".epub");
+    }
+
+    public static boolean isWordFile(String fileName) {
+        return isWordFileName(lowerName(fileName));
+    }
+
+    private static boolean isWordFileName(String lowerName) {
+        return lowerName.endsWith(".docx")
+                || lowerName.endsWith(".docm")
+                || lowerName.endsWith(".dotx")
+                || lowerName.endsWith(".dotm");
+    }
+
+    private static String readWordFile(File file) throws IOException {
+        try (ZipFile zip = new ZipFile(file)) {
+            ZipEntry documentXml = zip.getEntry("word/document.xml");
+            if (documentXml == null) {
+                throw new IOException("Unsupported Word file. Only OOXML Word files (.docx/.docm/.dotx/.dotm) are supported.");
+            }
+
+            Document doc;
+            try (InputStream is = zip.getInputStream(documentXml)) {
+                doc = secureDocumentBuilder().parse(is);
+            } catch (Exception e) {
+                throw new IOException("Cannot parse Word document text", e);
+            }
+
+            StringBuilder out = new StringBuilder();
+            NodeList paragraphs = doc.getElementsByTagName("w:p");
+            if (paragraphs.getLength() == 0) {
+                paragraphs = doc.getElementsByTagNameNS("*", "p");
+            }
+
+            for (int i = 0; i < paragraphs.getLength(); i++) {
+                StringBuilder paragraph = new StringBuilder();
+                appendWordNodeText(paragraphs.item(i), paragraph);
+                String line = paragraph.toString().trim();
+                if (!line.isEmpty()) out.append(line);
+                out.append('\n');
+            }
+
+            return sanitizeExtractedText(out.toString());
+        }
+    }
+
+    private static void appendWordNodeText(Node node, StringBuilder out) {
+        if (node == null) return;
+
+        String name = node.getNodeName();
+        String local = node.getLocalName();
+        if ("w:t".equals(name) || "t".equals(local)) {
+            String text = node.getTextContent();
+            if (text != null) out.append(text);
+            return;
+        }
+        if ("w:tab".equals(name) || "tab".equals(local)) {
+            out.append('\t');
+            return;
+        }
+        if ("w:br".equals(name) || "w:cr".equals(name)
+                || "br".equals(local) || "cr".equals(local)) {
+            out.append('\n');
+            return;
+        }
+
+        NodeList children = node.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            appendWordNodeText(children.item(i), out);
+        }
+    }
+
+    private static String readEpubFile(File file) throws IOException {
+        try (ZipFile zip = new ZipFile(file)) {
+            List<String> chapterPaths = findEpubSpinePaths(zip);
+            if (chapterPaths.isEmpty()) {
+                chapterPaths = findEpubHtmlEntries(zip);
+            }
+
+            if (chapterPaths.isEmpty()) {
+                throw new IOException("No readable EPUB chapters found");
+            }
+
+            StringBuilder out = new StringBuilder();
+            for (String path : chapterPaths) {
+                ZipEntry entry = zip.getEntry(path);
+                if (entry == null || entry.isDirectory()) continue;
+                String html;
+                try (InputStream is = zip.getInputStream(entry)) {
+                    byte[] data = readAllBytes(is);
+                    html = decodeBestEffort(data, detectEncodingFromBytes(sampleBytes(data)));
+                }
+                String text = htmlToPlainText(html);
+                if (!text.trim().isEmpty()) {
+                    out.append(text.trim()).append("\n\n");
+                }
+            }
+            return sanitizeExtractedText(out.toString());
+        }
+    }
+
+    private static List<String> findEpubSpinePaths(ZipFile zip) {
+        ArrayList<String> result = new ArrayList<>();
+        try {
+            ZipEntry containerEntry = zip.getEntry("META-INF/container.xml");
+            if (containerEntry == null) return result;
+
+            Document containerDoc;
+            try (InputStream is = zip.getInputStream(containerEntry)) {
+                containerDoc = secureDocumentBuilder().parse(is);
+            }
+
+            NodeList rootFiles = containerDoc.getElementsByTagName("rootfile");
+            if (rootFiles.getLength() == 0) {
+                rootFiles = containerDoc.getElementsByTagNameNS("*", "rootfile");
+            }
+            if (rootFiles.getLength() == 0) return result;
+
+            Node rootFile = rootFiles.item(0);
+            NamedNodeMap rootAttrs = rootFile.getAttributes();
+            Node fullPathAttr = rootAttrs != null ? rootAttrs.getNamedItem("full-path") : null;
+            if (fullPathAttr == null) return result;
+
+            String opfPath = fullPathAttr.getNodeValue();
+            ZipEntry opfEntry = zip.getEntry(opfPath);
+            if (opfEntry == null) return result;
+
+            Document opfDoc;
+            try (InputStream is = zip.getInputStream(opfEntry)) {
+                opfDoc = secureDocumentBuilder().parse(is);
+            }
+
+            String basePath = "";
+            int slash = opfPath.lastIndexOf('/');
+            if (slash >= 0) basePath = opfPath.substring(0, slash + 1);
+
+            java.util.Map<String, String> manifest = new java.util.LinkedHashMap<>();
+            NodeList items = opfDoc.getElementsByTagName("item");
+            if (items.getLength() == 0) {
+                items = opfDoc.getElementsByTagNameNS("*", "item");
+            }
+            for (int i = 0; i < items.getLength(); i++) {
+                Node item = items.item(i);
+                NamedNodeMap itemAttrs = item.getAttributes();
+                if (itemAttrs == null) continue;
+                Node id = itemAttrs.getNamedItem("id");
+                Node href = itemAttrs.getNamedItem("href");
+                if (id != null && href != null) {
+                    manifest.put(id.getNodeValue(), normalizeZipPath(basePath + decodeZipHref(href.getNodeValue())));
+                }
+            }
+
+            NodeList itemRefs = opfDoc.getElementsByTagName("itemref");
+            if (itemRefs.getLength() == 0) {
+                itemRefs = opfDoc.getElementsByTagNameNS("*", "itemref");
+            }
+            for (int i = 0; i < itemRefs.getLength(); i++) {
+                Node itemRef = itemRefs.item(i);
+                NamedNodeMap itemRefAttrs = itemRef.getAttributes();
+                if (itemRefAttrs == null) continue;
+                Node idRef = itemRefAttrs.getNamedItem("idref");
+                if (idRef == null) continue;
+                String path = manifest.get(idRef.getNodeValue());
+                if (path != null && isEpubHtmlPath(path) && zip.getEntry(path) != null) {
+                    result.add(path);
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "EPUB spine parse failed; falling back to entry order", e);
+        }
+        return result;
+    }
+
+    private static List<String> findEpubHtmlEntries(ZipFile zip) {
+        ArrayList<String> result = new ArrayList<>();
+        java.util.Enumeration<? extends ZipEntry> entries = zip.entries();
+        while (entries.hasMoreElements()) {
+            ZipEntry entry = entries.nextElement();
+            if (!entry.isDirectory() && isEpubHtmlPath(entry.getName())) {
+                result.add(entry.getName());
+            }
+        }
+        java.util.Collections.sort(result);
+        return result;
+    }
+
+    private static boolean isEpubHtmlPath(String path) {
+        String lower = lowerName(path);
+        return lower.endsWith(".xhtml") || lower.endsWith(".html") || lower.endsWith(".htm");
+    }
+
+    private static String htmlToPlainText(String html) {
+        if (html == null || html.isEmpty()) return "";
+
+        String cleaned = html
+                .replaceAll("(?is)<script[^>]*>.*?</script>", " ")
+                .replaceAll("(?is)<style[^>]*>.*?</style>", " ")
+                .replaceAll("(?i)<br\\s*/?>", "\n")
+                .replaceAll("(?i)</p\\s*>", "\n")
+                .replaceAll("(?i)</div\\s*>", "\n")
+                .replaceAll("(?i)</h[1-6]\\s*>", "\n")
+                .replaceAll("(?i)</li\\s*>", "\n");
+
+        Spanned spanned = Html.fromHtml(cleaned, Html.FROM_HTML_MODE_LEGACY);
+        return spanned.toString();
+    }
+
+    private static DocumentBuilder secureDocumentBuilder() throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        factory.setExpandEntityReferences(false);
+        setXmlFeatureQuietly(factory, "http://apache.org/xml/features/disallow-doctype-decl", true);
+        setXmlFeatureQuietly(factory, "http://xml.org/sax/features/external-general-entities", false);
+        setXmlFeatureQuietly(factory, "http://xml.org/sax/features/external-parameter-entities", false);
+        setXmlFeatureQuietly(factory, "http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        return factory.newDocumentBuilder();
+    }
+
+    private static void setXmlFeatureQuietly(DocumentBuilderFactory factory, String feature, boolean enabled) {
+        try {
+            factory.setFeature(feature, enabled);
+        } catch (Exception ignored) {
+            // Some Android XML parser implementations do not expose every hardening flag.
+        }
+    }
+
+
+    private static String decodeZipHref(String href) {
+        if (href == null) return "";
+        try {
+            return URLDecoder.decode(href, "UTF-8");
+        } catch (Exception ignored) {
+            return href;
+        }
+    }
+
+    private static String normalizeZipPath(String path) {
+        if (path == null) return "";
+        String normalized = path.replace('\\', '/');
+        while (normalized.contains("//")) normalized = normalized.replace("//", "/");
+        ArrayList<String> parts = new ArrayList<>();
+        for (String part : normalized.split("/")) {
+            if (part.isEmpty() || ".".equals(part)) continue;
+            if ("..".equals(part)) {
+                if (!parts.isEmpty()) parts.remove(parts.size() - 1);
+            } else {
+                parts.add(part);
+            }
+        }
+        return String.join("/", parts);
+    }
+
+    private static String sanitizeExtractedText(String text) {
+        String normalized = sanitizeDecodedText(text != null ? text : "");
+        normalized = normalized
+                .replace('\u00A0', ' ')
+                .replaceAll("[ \\t]+\\n", "\n")
+                .replaceAll("\\n[ \\t]+", "\n")
+                .replaceAll("\\n{4,}", "\n\n\n")
+                .trim();
+        return normalized.isEmpty() ? " " : normalized;
+    }
+
+    private static String lowerName(String fileName) {
+        return fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
+    }
+
     /**
      * Format file size for display.
      */
@@ -548,12 +874,10 @@ public class FileUtils {
     }
 
     /**
-     * Check if file extension is a supported text file.
+     * Check if file extension is a supported plain-text file.
      */
     public static boolean isTextFile(String fileName) {
-        if (fileName == null) return false;
-
-        String lower = fileName.toLowerCase();
+        String lower = lowerName(fileName);
         return lower.endsWith(".txt") || lower.endsWith(".text")
                 || lower.endsWith(".log") || lower.endsWith(".md")
                 || lower.endsWith(".csv") || lower.endsWith(".ini")

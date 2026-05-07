@@ -1,7 +1,13 @@
 package com.simpletext.reader.adapter;
 
+import android.content.res.ColorStateList;
+import android.graphics.Color;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -24,6 +30,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
     private List<File> files = new ArrayList<>();
     private OnFileClickListener listener;
     private int sortMode = PrefsManager.SORT_NAME_ASC;
+    private boolean sortEnabled = true;
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
 
     public void setListener(OnFileClickListener listener) { this.listener = listener; }
@@ -40,7 +47,15 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
         notifyDataSetChanged();
     }
 
+    public void setSortEnabled(boolean enabled) {
+        if (this.sortEnabled == enabled) return;
+        this.sortEnabled = enabled;
+        sortFiles();
+        notifyDataSetChanged();
+    }
+
     private void sortFiles() {
+        if (!sortEnabled) return;
         Collections.sort(files, (a, b) -> {
             // Directories always first
             if (a.isDirectory() && !b.isDirectory()) return -1;
@@ -90,34 +105,103 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
         ImageView icon;
         TextView name, info;
 
+        private final Handler touchHandler = new Handler(Looper.getMainLooper());
+        private float downX;
+        private float downY;
+        private boolean tapCancelled;
+        private boolean longPressed;
+        private final int tapSlop;
+        private Runnable pendingLongPress;
+
         ViewHolder(View v) {
             super(v);
             icon = v.findViewById(R.id.file_icon);
             name = v.findViewById(R.id.file_name);
             info = v.findViewById(R.id.file_info);
-            v.setOnClickListener(x -> {
-                int pos = getAdapterPosition();
-                if (pos != RecyclerView.NO_POSITION && listener != null) listener.onFileClick(files.get(pos));
-            });
-            v.setOnLongClickListener(x -> {
-                int pos = getAdapterPosition();
-                if (pos != RecyclerView.NO_POSITION && listener != null) listener.onFileLongClick(files.get(pos));
-                return true;
+            tapSlop = Math.max(10, ViewConfiguration.get(v.getContext()).getScaledTouchSlop());
+
+            v.setOnTouchListener((view, event) -> {
+                switch (event.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        downX = event.getX();
+                        downY = event.getY();
+                        tapCancelled = false;
+                        longPressed = false;
+                        view.setPressed(true);
+                        if (pendingLongPress != null) touchHandler.removeCallbacks(pendingLongPress);
+                        pendingLongPress = () -> {
+                            if (!tapCancelled && listener != null) {
+                                int pos = getAdapterPosition();
+                                if (pos != RecyclerView.NO_POSITION) {
+                                    longPressed = true;
+                                    view.setPressed(false);
+                                    view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                                    listener.onFileLongClick(files.get(pos));
+                                }
+                            }
+                        };
+                        touchHandler.postDelayed(pendingLongPress, ViewConfiguration.getLongPressTimeout());
+                        return true;
+
+                    case MotionEvent.ACTION_MOVE:
+                        float dx = event.getX() - downX;
+                        float dy = event.getY() - downY;
+                        if (Math.hypot(dx, dy) > tapSlop) {
+                            tapCancelled = true;
+                            view.setPressed(false);
+                            if (pendingLongPress != null) touchHandler.removeCallbacks(pendingLongPress);
+                        }
+                        return true;
+
+                    case MotionEvent.ACTION_UP:
+                        view.setPressed(false);
+                        if (pendingLongPress != null) touchHandler.removeCallbacks(pendingLongPress);
+                        if (!tapCancelled && !longPressed && listener != null) {
+                            int pos = getAdapterPosition();
+                            if (pos != RecyclerView.NO_POSITION) {
+                                view.performClick();
+                                listener.onFileClick(files.get(pos));
+                            }
+                        }
+                        return true;
+
+                    case MotionEvent.ACTION_CANCEL:
+                        view.setPressed(false);
+                        tapCancelled = true;
+                        if (pendingLongPress != null) touchHandler.removeCallbacks(pendingLongPress);
+                        return false;
+
+                    default:
+                        return false;
+                }
             });
         }
 
         void bind(File file) {
+            boolean dark = PrefsManager.getInstance(itemView.getContext())
+                    .shouldUseDarkColors(itemView.getContext());
+            int primaryText = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
+            int secondaryText = dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
+            int iconTint = dark ? Color.rgb(232, 234, 237) : Color.rgb(72, 76, 82);
+
             name.setText(file.getName());
+            name.setTextColor(primaryText);
+            info.setTextColor(secondaryText);
+
             if (file.isDirectory()) {
                 icon.setImageResource(R.drawable.ic_folder);
-                File[] children = file.listFiles();
-                info.setText((children != null ? children.length : 0) + " items");
+                // Avoid file.listFiles() here: it is synchronous disk I/O and was
+                // running on every scroll for every visible directory row, which
+                // hung the UI thread on big roots like /storage/emulated/0.
+                info.setText(R.string.folder);
             } else {
                 icon.setImageResource(R.drawable.ic_text_file);
                 String size = FileUtils.formatFileSize(file.length());
                 String date = dateFormat.format(new Date(file.lastModified()));
-                info.setText(size + "  •  " + date);
+                String type = FileUtils.getReadableFileType(file.getName());
+                info.setText(type + "  •  " + size + "  •  " + date);
             }
+            icon.setImageTintList(ColorStateList.valueOf(iconTint));
         }
     }
 }

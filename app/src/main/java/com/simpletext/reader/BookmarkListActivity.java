@@ -32,19 +32,23 @@ import androidx.core.graphics.Insets;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.simpletext.reader.adapter.BookmarkAdapter;
+import com.simpletext.reader.adapter.BookmarkFolderAdapter;
 import com.simpletext.reader.model.Bookmark;
 import com.simpletext.reader.util.BookmarkManager;
 import com.simpletext.reader.util.PrefsManager;
+import com.simpletext.reader.util.FileUtils;
 
 import java.io.File;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 public class BookmarkListActivity extends AppCompatActivity
-        implements BookmarkAdapter.OnBookmarkClickListener {
+        implements BookmarkFolderAdapter.Listener {
 
     private RecyclerView recyclerView;
-    private BookmarkAdapter adapter;
+    private BookmarkFolderAdapter adapter;
+    private final Set<String> expandedFolders = new HashSet<>();
     private TextView emptyText;
     private BookmarkManager bookmarkManager;
 
@@ -311,8 +315,13 @@ public class BookmarkListActivity extends AppCompatActivity
 
         bookmarkManager = BookmarkManager.getInstance(this);
 
-        adapter = new BookmarkAdapter();
-        adapter.setShowFileName(true);
+        adapter = new BookmarkFolderAdapter();
+        boolean dark = isDarkUi();
+        int bg = dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
+        int fg = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
+        int sub = dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
+        int panel = dark ? Color.rgb(24, 24, 24) : Color.rgb(245, 245, 245);
+        adapter.setThemeColors(bg, fg, sub, panel);
         adapter.setListener(this);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
@@ -335,8 +344,20 @@ public class BookmarkListActivity extends AppCompatActivity
         } else {
             emptyText.setVisibility(View.GONE);
             recyclerView.setVisibility(View.VISIBLE);
-            adapter.setBookmarks(bookmarks);
+            if (expandedFolders.isEmpty()) {
+                for (Bookmark b : bookmarks) {
+                    if (b.getFilePath() != null) expandedFolders.add(b.getFilePath());
+                }
+            }
+            adapter.setBookmarks(bookmarks, expandedFolders, null);
         }
+    }
+
+    @Override
+    public void onFolderClick(String folderFilePath) {
+        if (expandedFolders.contains(folderFilePath)) expandedFolders.remove(folderFilePath);
+        else expandedFolders.add(folderFilePath);
+        loadBookmarks();
     }
 
     @Override
@@ -347,9 +368,20 @@ public class BookmarkListActivity extends AppCompatActivity
             return;
         }
 
-        Intent intent = new Intent(this, ReaderActivity.class);
-        intent.putExtra(ReaderActivity.EXTRA_FILE_PATH, bookmark.getFilePath());
-        intent.putExtra(ReaderActivity.EXTRA_JUMP_TO_POSITION, bookmark.getCharPosition());
+        Intent intent;
+        if (FileUtils.isPdfFile(file.getName())) {
+            intent = new Intent(this, PdfReaderActivity.class);
+            intent.putExtra(PdfReaderActivity.EXTRA_FILE_PATH, bookmark.getFilePath());
+            intent.putExtra(PdfReaderActivity.EXTRA_JUMP_TO_PAGE, bookmark.getCharPosition());
+        } else if (FileUtils.isEpubFile(file.getName()) || FileUtils.isWordFile(file.getName())) {
+            intent = new Intent(this, DocumentPageActivity.class);
+            intent.putExtra(DocumentPageActivity.EXTRA_FILE_PATH, bookmark.getFilePath());
+            intent.putExtra(DocumentPageActivity.EXTRA_JUMP_TO_PAGE, bookmark.getCharPosition());
+        } else {
+            intent = new Intent(this, ReaderActivity.class);
+            intent.putExtra(ReaderActivity.EXTRA_FILE_PATH, bookmark.getFilePath());
+            intent.putExtra(ReaderActivity.EXTRA_JUMP_TO_POSITION, bookmark.getCharPosition());
+        }
         startActivity(intent);
     }
 

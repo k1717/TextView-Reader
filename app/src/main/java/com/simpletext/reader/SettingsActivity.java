@@ -5,6 +5,7 @@ import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.MenuItem;
@@ -20,20 +21,24 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
 
+import com.simpletext.reader.model.Theme;
 import com.simpletext.reader.util.BookmarkManager;
 import com.simpletext.reader.util.EdgeToEdgeUtil;
 import com.simpletext.reader.util.FileUtils;
 import com.simpletext.reader.util.PrefsManager;
+import com.simpletext.reader.util.ThemeManager;
 
 import com.google.android.material.button.MaterialButton;
 
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 public class SettingsActivity extends AppCompatActivity {
 
     private PrefsManager prefs;
     private BookmarkManager bookmarkManager;
+    private ThemeManager themeManager;
 
     private final ActivityResultLauncher<String> exportLauncher =
             registerForActivityResult(new ActivityResultContracts.CreateDocument("application/json"),
@@ -69,6 +74,7 @@ public class SettingsActivity extends AppCompatActivity {
         tintToolbarNavigation(toolbar);
 
         bookmarkManager = BookmarkManager.getInstance(this);
+        themeManager = ThemeManager.getInstance(this);
 
         setupLanguage();
         setupDarkMode();
@@ -81,6 +87,16 @@ public class SettingsActivity extends AppCompatActivity {
 
         // Force readable colors for every control after Android/Material defaults are applied.
         applySettingsReadableTheme();
+        renderReadingThemeRows();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (prefs != null && themeManager != null) {
+            applySettingsReadableTheme();
+            renderReadingThemeRows();
+        }
     }
 
     private void tintToolbarNavigation(Toolbar toolbar) {
@@ -92,12 +108,12 @@ public class SettingsActivity extends AppCompatActivity {
         RadioGroup group = findViewById(R.id.language_group);
         if (group == null) return;
 
+        group.setOnCheckedChangeListener(null);
+
         int current = prefs.getLanguageMode();
-        if (current == PrefsManager.LANGUAGE_KOREAN) {
-            ((RadioButton) findViewById(R.id.radio_language_korean)).setChecked(true);
-        } else {
-            ((RadioButton) findViewById(R.id.radio_language_english)).setChecked(true);
-        }
+        group.check(current == PrefsManager.LANGUAGE_KOREAN
+                ? R.id.radio_language_korean
+                : R.id.radio_language_english);
 
         group.setOnCheckedChangeListener((g, checkedId) -> {
             int mode = checkedId == R.id.radio_language_korean
@@ -105,8 +121,10 @@ public class SettingsActivity extends AppCompatActivity {
                     : PrefsManager.LANGUAGE_ENGLISH;
 
             if (prefs.getLanguageMode() != mode) {
+                // AppCompatDelegate recreates the visible activities after setApplicationLocales().
+                // Calling recreate() manually here can race with that recreation and produce
+                // the "opposite language" glitch.
                 prefs.setLanguageMode(mode);
-                recreate();
             }
         });
     }
@@ -166,6 +184,89 @@ public class SettingsActivity extends AppCompatActivity {
         });
     }
 
+    private void setupTapZoneRatioControl() {
+        SeekBar leadingSeekBar = findViewById(R.id.tap_zone_leading_seekbar);
+        SeekBar trailingSeekBar = findViewById(R.id.tap_zone_trailing_seekbar);
+        TextView ratioLabel = findViewById(R.id.tap_zone_ratio_label);
+        TextView leadingLabel = findViewById(R.id.tap_zone_leading_label);
+        TextView trailingLabel = findViewById(R.id.tap_zone_trailing_label);
+        if (leadingSeekBar == null || trailingSeekBar == null || ratioLabel == null
+                || leadingLabel == null || trailingLabel == null) return;
+
+        // Two tunable endpoints:
+        // leading = top/left previous-page zone, trailing = bottom/right next-page zone,
+        // middle/menu = 100 - leading - trailing.
+        final boolean[] suppress = new boolean[]{false};
+
+        int leading = clampTapEdgePercent(prefs.getTapLeadingZonePercent());
+        int trailing = clampTapEdgePercent(prefs.getTapTrailingZonePercent());
+        if (leading + trailing > 90) trailing = Math.max(5, 90 - leading);
+
+        leadingSeekBar.setMax(75);    // progress 0..75 => 5..80%
+        trailingSeekBar.setMax(75);   // progress 0..75 => 5..80%
+
+        leadingSeekBar.setProgress(leading - 5);
+        trailingSeekBar.setProgress(trailing - 5);
+        updateTapZoneRatioLabels(ratioLabel, leadingLabel, trailingLabel, leading, trailing);
+
+        leadingSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (suppress[0]) return;
+                int leading = progress + 5;
+                int trailing = trailingSeekBar.getProgress() + 5;
+                if (leading + trailing > 90) {
+                    trailing = Math.max(5, 90 - leading);
+                    suppress[0] = true;
+                    trailingSeekBar.setProgress(trailing - 5);
+                    suppress[0] = false;
+                }
+                updateTapZoneRatioLabels(ratioLabel, leadingLabel, trailingLabel, leading, trailing);
+                if (fromUser) prefs.setTapZonePercents(leading, trailing);
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                prefs.setTapZonePercents(seekBar.getProgress() + 5, trailingSeekBar.getProgress() + 5);
+            }
+        });
+
+        trailingSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (suppress[0]) return;
+                int leading = leadingSeekBar.getProgress() + 5;
+                int trailing = progress + 5;
+                if (leading + trailing > 90) {
+                    leading = Math.max(5, 90 - trailing);
+                    suppress[0] = true;
+                    leadingSeekBar.setProgress(leading - 5);
+                    suppress[0] = false;
+                }
+                updateTapZoneRatioLabels(ratioLabel, leadingLabel, trailingLabel, leading, trailing);
+                if (fromUser) prefs.setTapZonePercents(leading, trailing);
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                prefs.setTapZonePercents(leadingSeekBar.getProgress() + 5, seekBar.getProgress() + 5);
+            }
+        });
+    }
+
+    private int clampTapEdgePercent(int percent) {
+        return Math.max(5, Math.min(80, percent));
+    }
+
+    private void updateTapZoneRatioLabels(TextView ratioLabel, TextView leadingLabel,
+                                          TextView trailingLabel, int leadingPercent,
+                                          int trailingPercent) {
+        int leading = clampTapEdgePercent(leadingPercent);
+        int trailing = clampTapEdgePercent(trailingPercent);
+        if (leading + trailing > 90) trailing = Math.max(5, 90 - leading);
+        int middle = Math.max(10, 100 - leading - trailing);
+
+        ratioLabel.setText(getString(R.string.tap_zone_ratio_format, leading, middle, trailing));
+        leadingLabel.setText(getString(R.string.tap_zone_leading_format, leading));
+        trailingLabel.setText(getString(R.string.tap_zone_trailing_format, trailing));
+    }
+
     private void setupSwitches() {
         Switch switchScreenOn = findViewById(R.id.switch_keep_screen_on);
         switchScreenOn.setChecked(prefs.getKeepScreenOn());
@@ -190,6 +291,39 @@ public class SettingsActivity extends AppCompatActivity {
         Switch switchTapPaging = findViewById(R.id.switch_tap_paging);
         switchTapPaging.setChecked(prefs.getTapPagingEnabled());
         switchTapPaging.setOnCheckedChangeListener((v, c) -> prefs.setTapPagingEnabled(c));
+
+        Spinner tapZoneModeSpinner = findViewById(R.id.spinner_tap_zone_mode);
+        String[] tapZoneChoices = {
+                getString(R.string.tap_zone_vertical),
+                getString(R.string.tap_zone_horizontal)
+        };
+        ArrayAdapter<String> tapZoneAdapter = new ArrayAdapter<String>(this,
+                android.R.layout.simple_spinner_item, tapZoneChoices) {
+            @NonNull @Override
+            public View getView(int position, View convertView, @NonNull ViewGroup parent) {
+                View view = super.getView(position, convertView, parent);
+                styleSpinnerText(view);
+                return view;
+            }
+            @Override
+            public View getDropDownView(int position, View convertView, @NonNull ViewGroup parent) {
+                View view = super.getDropDownView(position, convertView, parent);
+                styleSpinnerText(view);
+                return view;
+            }
+        };
+        tapZoneAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        tapZoneModeSpinner.setAdapter(tapZoneAdapter);
+        tapZoneModeSpinner.setSelection(prefs.getTapZoneMode());
+        tapZoneModeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                styleSpinnerText(view);
+                prefs.setTapZoneMode(position);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        setupTapZoneRatioControl();
 
         Spinner overlapSpinner = findViewById(R.id.spinner_overlap_lines);
         String[] choices = {getString(R.string.no_overlap), getString(R.string.keep_1_line), getString(R.string.keep_2_lines), getString(R.string.keep_3_lines), getString(R.string.keep_4_lines)};
@@ -308,8 +442,11 @@ public class SettingsActivity extends AppCompatActivity {
                 seekTint, seekBgTint, outlineTint, rippleTint);
 
         // Page Overlap spinner: no weird boxed field. Blend into background.
-        Spinner spinner = findViewById(R.id.spinner_overlap_lines);
-        if (spinner != null) {
+        Spinner overlapSpinner = findViewById(R.id.spinner_overlap_lines);
+        Spinner tapZoneSpinner = findViewById(R.id.spinner_tap_zone_mode);
+        Spinner[] spinners = new Spinner[]{overlapSpinner, tapZoneSpinner};
+        for (Spinner spinner : spinners) {
+            if (spinner == null) continue;
             spinner.setBackgroundColor(bg);
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                 spinner.setBackgroundTintList(ColorStateList.valueOf(bg));
@@ -322,6 +459,12 @@ public class SettingsActivity extends AppCompatActivity {
         if (font != null) font.setTextColor(sub);
         TextView spacing = findViewById(R.id.line_spacing_label);
         if (spacing != null) spacing.setTextColor(sub);
+        TextView ratio = findViewById(R.id.tap_zone_ratio_label);
+        if (ratio != null) ratio.setTextColor(sub);
+        TextView leading = findViewById(R.id.tap_zone_leading_label);
+        if (leading != null) leading.setTextColor(sub);
+        TextView trailing = findViewById(R.id.tap_zone_trailing_label);
+        if (trailing != null) trailing.setTextColor(sub);
     }
 
     private void applyReadableColorsRecursive(
@@ -434,7 +577,125 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setupTheme() {
-        findViewById(R.id.btn_manage_themes).setOnClickListener(v -> startActivity(new Intent(this, ThemeEditorActivity.class)));
+        findViewById(R.id.btn_manage_themes).setOnClickListener(v ->
+                startActivity(new Intent(this, ThemeEditorActivity.class)));
+    }
+
+    private void renderReadingThemeRows() {
+        LinearLayout container = findViewById(R.id.reading_theme_list);
+        if (container == null || themeManager == null) return;
+
+        container.removeAllViews();
+
+        List<Theme> themes = themeManager.getAllThemes();
+        Theme activeTheme = themeManager.getActiveTheme();
+        String activeId = activeTheme != null ? activeTheme.getId() : "";
+
+        boolean dark = isDarkUi();
+        int rowBg = dark ? Color.rgb(10, 10, 10) : Color.rgb(255, 255, 255);
+        int text = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
+        int sub = dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
+        int outline = dark ? Color.rgb(70, 70, 70) : Color.rgb(218, 220, 224);
+        int selectedOutline = dark ? Color.rgb(210, 210, 210) : Color.rgb(80, 80, 80);
+
+        for (Theme theme : themes) {
+            boolean selected = theme.getId().equals(activeId);
+            View row = makeReadingThemeRow(theme, selected, rowBg, text, sub,
+                    outline, selectedOutline);
+            row.setOnClickListener(v -> {
+                themeManager.setActiveTheme(theme.getId());
+                renderReadingThemeRows();
+            });
+            if (!theme.isBuiltIn()) {
+                row.setOnLongClickListener(v -> {
+                    Intent edit = new Intent(this, ThemeEditorActivity.class);
+                    edit.putExtra(ThemeEditorActivity.EXTRA_THEME_ID, theme.getId());
+                    startActivity(edit);
+                    return true;
+                });
+            }
+            container.addView(row);
+        }
+    }
+
+    private View makeReadingThemeRow(Theme theme, boolean selected, int rowBg,
+                                     int text, int sub, int outline, int selectedOutline) {
+        int pad12 = dpToPx(12);
+        int pad14 = dpToPx(14);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(pad14, pad12, pad14, pad12);
+
+        GradientDrawable rowDrawable = new GradientDrawable();
+        rowDrawable.setColor(rowBg);
+        rowDrawable.setCornerRadius(dpToPx(12));
+        rowDrawable.setStroke(dpToPx(selected ? 2 : 1), selected ? selectedOutline : outline);
+        row.setBackground(rowDrawable);
+
+        LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        rowLp.setMargins(0, 0, 0, dpToPx(8));
+        row.setLayoutParams(rowLp);
+        row.setClickable(true);
+        row.setFocusable(true);
+
+        View preview = new View(this);
+        GradientDrawable previewDrawable = new GradientDrawable();
+        previewDrawable.setColor(theme.getBackgroundColor());
+        previewDrawable.setCornerRadius(dpToPx(8));
+        previewDrawable.setStroke(dpToPx(1), outline);
+        preview.setBackground(previewDrawable);
+        LinearLayout.LayoutParams previewLp = new LinearLayout.LayoutParams(dpToPx(48), dpToPx(48));
+        previewLp.setMarginEnd(pad12);
+        row.addView(preview, previewLp);
+
+        LinearLayout textBox = new LinearLayout(this);
+        textBox.setOrientation(LinearLayout.VERTICAL);
+        row.addView(textBox, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView name = new TextView(this);
+        name.setText(theme.getName());
+        name.setTextColor(text);
+        name.setTextSize(16f);
+        name.setSingleLine(true);
+        textBox.addView(name, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView sample = new TextView(this);
+        sample.setText("가나다라 ABC abc 123");
+        sample.setTextColor(theme.getTextColor());
+        sample.setTextSize(12f);
+        sample.setSingleLine(true);
+        sample.setPadding(pad12, dpToPx(4), pad12, dpToPx(4));
+        GradientDrawable sampleBg = new GradientDrawable();
+        sampleBg.setColor(theme.getBackgroundColor());
+        sampleBg.setCornerRadius(dpToPx(6));
+        sample.setBackground(sampleBg);
+        LinearLayout.LayoutParams sampleLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        sampleLp.setMargins(0, dpToPx(4), 0, 0);
+        textBox.addView(sample, sampleLp);
+
+        TextView check = new TextView(this);
+        check.setText(selected ? "✓" : "");
+        check.setTextColor(text);
+        check.setTextSize(24f);
+        check.setGravity(android.view.Gravity.CENTER);
+        row.addView(check, new LinearLayout.LayoutParams(dpToPx(36),
+                LinearLayout.LayoutParams.MATCH_PARENT));
+
+
+        return row;
+    }
+
+    private int dpToPx(int dp) {
+        return (int) (dp * getResources().getDisplayMetrics().density + 0.5f);
     }
 
     private void exportBookmarksTo(Uri uri) {

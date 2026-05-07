@@ -7,6 +7,8 @@ import android.graphics.PixelFormat;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.Canvas;
+import android.graphics.RectF;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Drawable;
@@ -110,8 +112,18 @@ public class ReaderActivity extends AppCompatActivity {
     private Toast viewerBackToast;
     private String activeSearchQuery = "";
     private int activeSearchIndex = -1;
+
+    private float appliedFontSize = Float.NaN;
+    private float appliedLineSpacing = Float.NaN;
+    private int appliedTextColor = Integer.MIN_VALUE;
+    private int appliedBackgroundColor = Integer.MIN_VALUE;
+    private int appliedMarginHorizontalPx = Integer.MIN_VALUE;
+    private int appliedMarginVerticalPx = Integer.MIN_VALUE;
+    private Typeface appliedTypeface = null;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private volatile boolean activityDestroyed = false;
+    private int loadGeneration = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -155,7 +167,7 @@ public class ReaderActivity extends AppCompatActivity {
         notificationHelper = new ReadingNotificationHelper(this);
 
         readerView.setReaderListener(new CustomReaderView.ReaderListener() {
-            @Override public void onSingleTap(float x, float y) { handleSingleTap(y); }
+            @Override public void onSingleTap(float x, float y) { handleSingleTap(x, y); }
             @Override public void onReaderScrollChanged() { onScrollChanged(); }
         });
 
@@ -177,7 +189,31 @@ public class ReaderActivity extends AppCompatActivity {
             getWindow().setAttributes(lp);
         }
 
-        loadFileFromIntent();
+        loadFileFromIntent(getIntent());
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (readerView != null && prefs != null && themeManager != null) {
+            applyTheme();
+            updatePositionLabel();
+        }
+    }
+
+    @Override
+    protected void onNewIntent(@NonNull Intent intent) {
+        super.onNewIntent(intent);
+
+        // Single-viewer mode:
+        // when a new TXT file is opened while a viewer already exists in this task,
+        // reuse this ReaderActivity instead of stacking another ReaderActivity.
+        saveReadingState();
+        setIntent(intent);
+        activeSearchQuery = "";
+        activeSearchIndex = -1;
+        applySearchHighlight();
+        loadFileFromIntent(intent);
     }
 
     private void setupSeekBar() {
@@ -222,7 +258,25 @@ public class ReaderActivity extends AppCompatActivity {
 
         if (readerView != null) {
             readerView.setOverlapLines(prefs.getPagingOverlapLines());
-            readerView.setReaderStyle(fontSize, lineSpacing, textColor, bgColor, marginH, marginV, tf);
+
+            boolean styleChanged = Float.compare(appliedFontSize, fontSize) != 0
+                    || Float.compare(appliedLineSpacing, lineSpacing) != 0
+                    || appliedTextColor != textColor
+                    || appliedBackgroundColor != bgColor
+                    || appliedMarginHorizontalPx != marginH
+                    || appliedMarginVerticalPx != marginV
+                    || appliedTypeface != tf;
+
+            if (styleChanged) {
+                readerView.setReaderStyle(fontSize, lineSpacing, textColor, bgColor, marginH, marginV, tf);
+                appliedFontSize = fontSize;
+                appliedLineSpacing = lineSpacing;
+                appliedTextColor = textColor;
+                appliedBackgroundColor = bgColor;
+                appliedMarginHorizontalPx = marginH;
+                appliedMarginVerticalPx = marginV;
+                appliedTypeface = tf;
+            }
         }
 
         // The page-count/status strip and Android status bar follow the active reader theme.
@@ -313,16 +367,18 @@ public class ReaderActivity extends AppCompatActivity {
 
         // Border for the MOST OUTER function dialog only.
         // Mild enough for 더보기, but visible on black/dark and light/sepia themes.
-        return blendColors(bgColor, fg, isLightColor(bgColor) ? 0.44f : 0.62f);
+        return blendColors(bgColor, fg, isLightColor(bgColor) ? 0.58f : 0.78f);
     }
 
     private GradientDrawable pageMoveOuterBackground(int bgColor) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(bgColor);
-        drawable.setCornerRadius(dpToPx(4));
-        drawable.setStroke(dpToPx(1), strongDialogBorderColor(bgColor));
-        return drawable;
-    }
+    GradientDrawable drawable = new GradientDrawable();
+    drawable.setColor(bgColor);
+    drawable.setCornerRadius(dpToPx(16));
+    drawable.setStroke(0, Color.TRANSPARENT);
+    return drawable;
+}
+
+
 
     private TextView makeReaderDialogTitle(String text, int bgColor, int fgColor) {
         TextView title = new TextView(this);
@@ -332,19 +388,19 @@ public class ReaderActivity extends AppCompatActivity {
         title.setGravity(Gravity.CENTER_VERTICAL);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setPadding(dpToPx(22), dpToPx(18), dpToPx(22), dpToPx(8));
-        title.setBackgroundColor(bgColor);
+        title.setBackgroundColor(Color.TRANSPARENT);
         return title;
     }
 
     private GradientDrawable largeFunctionBoxBackground(int bgColor) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(bgColor);
-        drawable.setCornerRadius(dpToPx(4));
+    GradientDrawable drawable = new GradientDrawable();
+    drawable.setColor(bgColor);
+    drawable.setCornerRadius(dpToPx(16));
+    drawable.setStroke(0, Color.TRANSPARENT);
+    return drawable;
+}
 
-        // Only the most outer 더보기 box gets this border.
-        drawable.setStroke(dpToPx(1), strongDialogBorderColor(bgColor));
-        return drawable;
-    }
+
 
     private TextView makeReaderActionRow(String text, int fgColor) {
         TextView row = new TextView(this);
@@ -367,41 +423,127 @@ public class ReaderActivity extends AppCompatActivity {
     private void applyOuterBorderToDialogPanel(AlertDialog dialog, int bgColor, int borderColor) {
         if (dialog == null || dialog.getWindow() == null) return;
 
-        // Transparent window + rounded panel background + rounded overlay border.
-        // This keeps normal dialogs visually consistent with 더보기:
-        // one rounded outer box with a visible border.
         dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
 
         View decor = dialog.getWindow().getDecorView();
+        View panel = decor;
+
+        if (decor instanceof ViewGroup && ((ViewGroup) decor).getChildCount() > 0) {
+            panel = ((ViewGroup) decor).getChildAt(0);
+        }
 
         GradientDrawable panelBg = new GradientDrawable();
         panelBg.setColor(bgColor);
-        panelBg.setCornerRadius(dpToPx(4));
+        panelBg.setCornerRadius(dpToPx(16));
+        panelBg.setStroke(dpToPx(1), borderColor);
 
-        if (decor instanceof ViewGroup && ((ViewGroup) decor).getChildCount() > 0) {
-            View panel = ((ViewGroup) decor).getChildAt(0);
-            panel.setBackground(panelBg);
-            panel.setPadding(dpToPx(1), dpToPx(1), dpToPx(1), dpToPx(1));
+        GradientDrawable foregroundBorder = new GradientDrawable();
+        foregroundBorder.setColor(Color.TRANSPARENT);
+        foregroundBorder.setCornerRadius(dpToPx(16));
+        foregroundBorder.setStroke(dpToPx(2), borderColor);
 
-            if (panel instanceof ViewGroup) {
-                ((ViewGroup) panel).setClipChildren(false);
-                ((ViewGroup) panel).setClipToPadding(false);
-            }
-        } else {
-            decor.setBackground(panelBg);
+        // No inner padding here. The overlay stroke sits exactly on the panel edge,
+        // so any 2dp inset would push the content panel inward and cause a sub-pixel
+        // mismatch where the inner rounded fill no longer aligns with the outer
+        // rounded outline (the chipping seen at 북마크 / 글꼴 corners).
+        panel.setBackground(panelBg);
+        panel.setForeground(foregroundBorder);
+        panel.setPadding(0, 0, 0, 0);
+        panel.setClipToOutline(true);
+
+        if (panel instanceof ViewGroup) {
+            ((ViewGroup) panel).setClipChildren(true);
+            ((ViewGroup) panel).setClipToPadding(true);
+            // Make sure every nested AlertDialog sub-panel (topPanel / contentPanel /
+            // buttonPanel) is also clipped to its parent. Without this, the bottom
+            // action panel's rectangular fill paints past the rounded corner before
+            // the overlay border is drawn, which is visible as a tiny straight
+            // edge poking out from behind the curve.
+            forceClipChildrenRecursive((ViewGroup) panel);
         }
 
-        decor.post(() -> {
-            GradientDrawable overlayBorder = new GradientDrawable();
-            overlayBorder.setColor(Color.TRANSPARENT);
-            overlayBorder.setCornerRadius(dpToPx(4));
-            overlayBorder.setStroke(dpToPx(1), borderColor);
-            overlayBorder.setBounds(0, 0, decor.getWidth(), decor.getHeight());
+        decor.addOnLayoutChangeListener((v, left, top, right, bottom,
+                                          oldLeft, oldTop, oldRight, oldBottom) ->
+                redrawDialogOuterBorder(dialog, borderColor));
 
-            decor.getOverlay().clear();
-            decor.getOverlay().add(overlayBorder);
-        });
+        redrawDialogOuterBorder(dialog, borderColor);
     }
+
+    private void forceClipChildrenRecursive(ViewGroup group) {
+        if (group == null) return;
+        group.setClipChildren(true);
+        group.setClipToPadding(true);
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child instanceof ViewGroup) {
+                forceClipChildrenRecursive((ViewGroup) child);
+            }
+        }
+    }
+
+
+
+    private void redrawDialogOuterBorder(AlertDialog dialog, int borderColor) {
+    if (dialog == null || dialog.getWindow() == null) return;
+
+    View decor = dialog.getWindow().getDecorView();
+    decor.post(() -> {
+        if (decor.getWidth() <= 0 || decor.getHeight() <= 0) return;
+
+        final float density = getResources().getDisplayMetrics().density;
+        final float strokePx = Math.max(1f, 1.5f * density);
+        final float outerRadiusPx = dpToPx(16);
+
+        Drawable overlayBorder = new Drawable() {
+            private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private final RectF rect = new RectF();
+
+            {
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(strokePx);
+                paint.setColor(borderColor);
+            }
+
+            @Override
+            public void draw(Canvas canvas) {
+                float half = strokePx / 2f;
+                Rect bounds = getBounds();
+
+                // Center the stroke half a stroke inside the window bounds.
+                // This makes the OUTER edge of the stroke sit on the dialog/window edge,
+                // instead of being pushed inward.
+                rect.set(
+                        bounds.left + half,
+                        bounds.top + half,
+                        bounds.right - half,
+                        bounds.bottom - half
+                );
+
+                float centerRadius = Math.max(0f, outerRadiusPx - half);
+                canvas.drawRoundRect(rect, centerRadius, centerRadius, paint);
+            }
+
+            @Override public void setAlpha(int alpha) {
+                paint.setAlpha(alpha);
+            }
+
+            @Override public void setColorFilter(ColorFilter colorFilter) {
+                paint.setColorFilter(colorFilter);
+            }
+
+            @Override public int getOpacity() {
+                return PixelFormat.TRANSLUCENT;
+            }
+        };
+
+        overlayBorder.setBounds(0, 0, decor.getWidth(), decor.getHeight());
+
+        decor.getOverlay().clear();
+        decor.getOverlay().add(overlayBorder);
+    });
+}
+
+
 
     private void styleReaderDialogWindow(AlertDialog dialog, int bgColor, int fgColor, int subColor) {
         if (dialog.getWindow() != null) {
@@ -432,25 +574,49 @@ public class ReaderActivity extends AppCompatActivity {
 
     private Drawable actionPanelBackground(int fillColor, int lineColor) {
         return new Drawable() {
+            private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
             {
+                fillPaint.setColor(fillColor);
+                fillPaint.setStyle(Paint.Style.FILL);
                 linePaint.setColor(lineColor);
                 linePaint.setStyle(Paint.Style.FILL);
             }
 
             @Override
             public void draw(Canvas canvas) {
-                canvas.drawColor(fillColor);
+                Rect bounds = getBounds();
+
+                // Flat fill + top divider line only.
+                // The dialog's outer rounded panel clips its children to the rounded
+                // outline (clipToOutline = true), so this rectangle naturally takes
+                // on the rounded-bottom shape from the parent's clip with NO second
+                // rounded path drawing on top of it. This removes the AA "chipping"
+                // that appeared where the panel's own curve met the parent's curve.
+                canvas.drawRect(bounds, fillPaint);
+
                 float h = getResources().getDisplayMetrics().density;
-                canvas.drawRect(0, 0, getBounds().width(), h, linePaint);
+                canvas.drawRect(bounds.left, bounds.top, bounds.right, bounds.top + h, linePaint);
             }
 
-            @Override public void setAlpha(int alpha) {}
-            @Override public void setColorFilter(ColorFilter colorFilter) { linePaint.setColorFilter(colorFilter); }
-            @Override public int getOpacity() { return PixelFormat.OPAQUE; }
+            @Override public void setAlpha(int alpha) {
+                fillPaint.setAlpha(alpha);
+                linePaint.setAlpha(alpha);
+            }
+
+            @Override public void setColorFilter(ColorFilter colorFilter) {
+                fillPaint.setColorFilter(colorFilter);
+                linePaint.setColorFilter(colorFilter);
+            }
+
+            @Override public int getOpacity() {
+                return PixelFormat.TRANSLUCENT;
+            }
         };
     }
+
+
 
     private void forceDialogButtonPanelBackground(AlertDialog dialog, int bgColor) {
         if (dialog == null) return;
@@ -531,7 +697,7 @@ public class ReaderActivity extends AppCompatActivity {
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(bg);
+        box.setBackgroundColor(Color.TRANSPARENT);
         box.setPadding(dpToPx(22), dpToPx(12), dpToPx(22), dpToPx(8));
 
         TextView message = new TextView(this);
@@ -610,16 +776,88 @@ public class ReaderActivity extends AppCompatActivity {
 
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(fill);
-        drawable.setCornerRadius(dpToPx(2));
+        drawable.setCornerRadius(dpToPx(6));
         // Subtle inner boundary only. The strong contrast border belongs to the OUTER dialog box.
         drawable.setStroke(dpToPx(1), stroke);
 
         input.setBackgroundTintList(null);
         input.setBackground(drawable);
+        tintReaderDialogEditHandles(input, bgColor, fgColor);
+    }
+
+    private void tintReaderDialogEditHandles(EditText input, int bgColor, int fgColor) {
+        if (input == null) return;
+
+        boolean lightReaderDialog = isLightColor(bgColor);
+        int accent = lightReaderDialog ? Color.rgb(34, 34, 34) : Color.WHITE;
+
+        input.setHighlightColor(blendColors(bgColor, accent, lightReaderDialog ? 0.24f : 0.42f));
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            GradientDrawable cursor = new GradientDrawable();
+            cursor.setColor(accent);
+            cursor.setSize(Math.max(2, dpToPx(2)), dpToPx(28));
+            input.setTextCursorDrawable(cursor);
+        }
+
+        input.setCustomSelectionActionModeCallback(new android.view.ActionMode.Callback() {
+            @Override
+            public boolean onCreateActionMode(android.view.ActionMode mode, android.view.Menu menu) {
+                tintReaderDialogActionModeMenu(menu, lightReaderDialog);
+                return true;
+            }
+
+            @Override
+            public boolean onPrepareActionMode(android.view.ActionMode mode, android.view.Menu menu) {
+                tintReaderDialogActionModeMenu(menu, lightReaderDialog);
+                return false;
+            }
+
+            @Override
+            public boolean onActionItemClicked(android.view.ActionMode mode, android.view.MenuItem item) {
+                return false;
+            }
+
+            @Override
+            public void onDestroyActionMode(android.view.ActionMode mode) {
+                // Nothing to clean up.
+            }
+        });
+    }
+
+    private void tintReaderDialogActionModeMenu(android.view.Menu menu, boolean lightReaderDialog) {
+        if (menu == null) return;
+
+        int titleColor = lightReaderDialog ? Color.rgb(17, 17, 17) : Color.WHITE;
+        for (int i = 0; i < menu.size(); i++) {
+            android.view.MenuItem item = menu.getItem(i);
+            CharSequence title = item.getTitle();
+            if (title != null) {
+                android.text.SpannableString styled = new android.text.SpannableString(title);
+                styled.setSpan(
+                        new android.text.style.ForegroundColorSpan(titleColor),
+                        0,
+                        styled.length(),
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                item.setTitle(styled);
+            }
+        }
     }
 
     private EditText makeReaderDialogEditText(String hint, int bgColor, int fgColor, int subColor) {
-        EditText input = new EditText(this);
+        // Build the EditText from a ContextThemeWrapper whose theme matches the
+        // READER theme's background brightness, NOT the system night mode. The reader
+        // has its own theme (ThemeManager.getActiveTheme()), so a Cream-on-Dark-system
+        // configuration must still draw a light-mode dialog with a dark caret/handle.
+        // Picking the local theme via ContextThemeWrapper makes the caret bar, the
+        // selection-handle teardrop, and the floating action-mode toolbar (the
+        // "복사 / 번역 / 모두 선택 / 공유" or paste tooltip popup) all inherit a
+        // consistent high-contrast palette regardless of which system mode is active.
+        int overlay = isLightColor(bgColor)
+                ? R.style.ThemeOverlay_SimpleText_ReaderDialogLight
+                : R.style.ThemeOverlay_SimpleText_ReaderDialogDark;
+        android.view.ContextThemeWrapper themed = new android.view.ContextThemeWrapper(this, overlay);
+        EditText input = new EditText(themed);
         input.setHint(hint);
         styleReaderDialogEditBox(input, bgColor, fgColor, subColor);
         return input;
@@ -757,7 +995,7 @@ public class ReaderActivity extends AppCompatActivity {
 
             bottomBar.setPadding(
                     dpToPx(20),
-                    dpToPx(6),
+                    dpToPx(10),
                     dpToPx(20),
                     dpToPx(6));
 
@@ -778,6 +1016,11 @@ public class ReaderActivity extends AppCompatActivity {
     private void openFileBrowserFromViewer() {
         Intent intent = new Intent(this, MainActivity.class);
         intent.putExtra(MainActivity.EXTRA_RETURN_TO_VIEWER, true);
+        File current = filePath != null ? new File(filePath) : null;
+        File parent = current != null ? current.getParentFile() : null;
+        if (parent != null && parent.exists() && parent.isDirectory()) {
+            intent.putExtra(MainActivity.EXTRA_START_DIRECTORY, parent.getAbsolutePath());
+        }
         startActivity(intent);
     }
 
@@ -842,7 +1085,8 @@ public class ReaderActivity extends AppCompatActivity {
         TextView pageHint = new TextView(this);
         pageHint.setText(getString(R.string.exact_page_number));
         pageHint.setTextSize(13f);
-        pageHint.setTextColor(bubbleSub);
+        pageHint.setTextColor(blendColors(bubbleBg, bubbleFg, 0.78f));
+        pageHint.setGravity(Gravity.CENTER);
         // Keep the label close to the slider, but leave enough room above the input box.
         pageHint.setPadding(0, dpToPx(3), 0, 0);
         box.addView(pageHint, new LinearLayout.LayoutParams(
@@ -851,11 +1095,13 @@ public class ReaderActivity extends AppCompatActivity {
 
         EditText pageInput = makeReaderDialogEditText("1 - " + totalPages, bubbleBg, bubbleFg, bubbleSub);
         pageInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        pageInput.setGravity(Gravity.CENTER);
         pageInput.setText(String.valueOf(currentPage));
         pageInput.setSelectAllOnFocus(true);
         LinearLayout.LayoutParams pageInputLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(132),
                 dpToPx(52));
+        pageInputLp.gravity = Gravity.CENTER_HORIZONTAL;
         pageInputLp.setMargins(0, dpToPx(8), 0, 0);
         box.addView(pageInput, pageInputLp);
 
@@ -890,12 +1136,6 @@ public class ReaderActivity extends AppCompatActivity {
 
         dialog.setOnShowListener(d -> {
             styleReaderDialogWindow(dialog, bubbleBg, bubbleFg, bubbleSub);
-            if (dialog.getWindow() != null) {
-                GradientDrawable outer = pageMoveOuterBackground(bubbleBg);
-                dialog.getWindow().setBackgroundDrawable(outer);
-                dialog.getWindow().getDecorView().setBackground(outer);
-            }
-
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                 String raw = pageInput.getText().toString().trim();
                 if (raw.isEmpty()) {
@@ -920,6 +1160,21 @@ public class ReaderActivity extends AppCompatActivity {
         });
 
         dialog.show();
+        positionPageMoveDialogForThumbReach(dialog);
+    }
+
+    private void positionPageMoveDialogForThumbReach(@NonNull AlertDialog dialog) {
+        if (dialog.getWindow() == null) return;
+        android.view.Window window = dialog.getWindow();
+        window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+        lp.copyFrom(window.getAttributes());
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        lp.width = Math.min(screenWidth - dpToPx(14), dpToPx(460));
+        lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        lp.y = dpToPx(74);
+        window.setAttributes(lp);
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
 
     private String formatPageMoveLabel(int page, int totalPages) {
@@ -930,11 +1185,15 @@ public class ReaderActivity extends AppCompatActivity {
         final int bg = readerDialogBgColor();
         final int panel = readerDialogPanelColor();
         final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
 
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
-        outer.setBackground(largeFunctionBoxBackground(bg));
-        outer.setPadding(dpToPx(2), dpToPx(2), dpToPx(2), dpToPx(2));
+        // The rounded background + overlay stroke now come from the shared
+        // styleReaderDialogWindow path, identical to 페이지 이동 / 책갈피 / 본문 검색.
+        // No inline rounded background here, otherwise we'd paint two stacked
+        // rounded fills and lose the outer overlay border.
+        outer.setBackgroundColor(Color.TRANSPARENT);
 
         TextView title = makeReaderDialogTitle(getString(R.string.more), bg, fg);
         outer.addView(title, new LinearLayout.LayoutParams(
@@ -943,13 +1202,12 @@ public class ReaderActivity extends AppCompatActivity {
 
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        list.setBackgroundColor(bg);
+        list.setBackgroundColor(Color.TRANSPARENT);
         int pad = dpToPx(14);
         list.setPadding(pad, dpToPx(10), pad, dpToPx(10));
-        list.setBackgroundColor(bg);
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(bg);
+        scroll.setBackgroundColor(Color.TRANSPARENT);
         scroll.addView(list);
 
         final AlertDialog[] ref = new AlertDialog[1];
@@ -959,7 +1217,6 @@ public class ReaderActivity extends AppCompatActivity {
         // - 위치/줄 이동: already has a bottom 페이지 이동 button
         // - 검색: bottom-left button is now 찾기
         addMoreActionRow(list, getString(R.string.brightness), fg, panel, this::showBrightnessDialog, ref);
-        addMoreActionRow(list, getString(R.string.reading_theme), fg, panel, this::showThemeDialog, ref);
         addMoreActionRow(list, getString(R.string.font), fg, panel, this::showFontDialog, ref);
         addMoreActionRow(list, getString(R.string.increase_font), fg, panel, () -> changeFontSize(2f), ref);
         addMoreActionRow(list, getString(R.string.decrease_font), fg, panel, () -> changeFontSize(-2f), ref);
@@ -1019,20 +1276,23 @@ public class ReaderActivity extends AppCompatActivity {
         });
         close.setOnClickListener(v -> dialog.dismiss());
 
-        dialog.setOnShowListener(d -> {
-            if (dialog.getWindow() != null) {
-                // The custom root carries the visible border. Make the native window transparent
-                // so the root border is not hidden by Android's default AlertDialog frame.
-                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-
-                android.view.WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
-                lp.dimAmount = 0.16f;
-                dialog.getWindow().setAttributes(lp);
-                dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            }
-        });
+        dialog.setOnShowListener(d -> styleReaderDialogWindow(dialog, bg, fg, sub));
 
         dialog.show();
+        positionMoreDialogForThumbReach(dialog);
+    }
+
+    private void positionMoreDialogForThumbReach(@NonNull AlertDialog dialog) {
+        if (dialog.getWindow() == null) return;
+        android.view.Window window = dialog.getWindow();
+        window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+        lp.copyFrom(window.getAttributes());
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        lp.width = Math.min(screenWidth - dpToPx(16), dpToPx(460));
+        lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        lp.y = dpToPx(54);
+        window.setAttributes(lp);
     }
 
     private void addMoreActionRow(
@@ -1051,37 +1311,61 @@ public class ReaderActivity extends AppCompatActivity {
         list.addView(row);
     }
 
-    private void loadFileFromIntent() {
+    private void loadFileFromIntent(@NonNull Intent sourceIntent) {
+        final int generation = ++loadGeneration;
+        activityDestroyed = false;
         progressBar.setVisibility(View.VISIBLE);
         progressText.setVisibility(View.VISIBLE);
         progressText.setText(getString(R.string.loading));
 
-        String path = getIntent().getStringExtra(EXTRA_FILE_PATH);
-        String uriStr = getIntent().getStringExtra(EXTRA_FILE_URI);
+        // Clear old viewer state immediately so opening a different file does not
+        // briefly keep old search/bookmark/page state around.
+        fileContent = "";
+        activeSearchQuery = "";
+        activeSearchIndex = -1;
+        applySearchHighlight();
+        updatePositionLabel();
+
+        String path = sourceIntent.getStringExtra(EXTRA_FILE_PATH);
+        String uriStr = sourceIntent.getStringExtra(EXTRA_FILE_URI);
+        int jumpPosition = sourceIntent.getIntExtra(EXTRA_JUMP_TO_POSITION, -1);
 
         executor.execute(() -> {
+            if (activityDestroyed || generation != loadGeneration) return;
             try {
                 File fileToRead = null;
+                String loadedFilePath = null;
+                String loadedFileName = null;
+
                 if (path != null) {
                     File file = new File(path);
-                    filePath = file.getAbsolutePath();
-                    fileName = file.getName();
+                    loadedFilePath = file.getAbsolutePath();
+                    loadedFileName = file.getName();
                     fileToRead = file;
                 } else if (uriStr != null) {
                     Uri uri = Uri.parse(uriStr);
-                    fileName = FileUtils.getFileNameFromUri(this, uri);
+                    loadedFileName = FileUtils.getFileNameFromUri(this, uri);
                     File localFile = FileUtils.copyUriToLocal(this, uri,
-                            fileName != null ? fileName : "opened_file.txt");
-                    filePath = localFile.getAbsolutePath();
+                            loadedFileName != null ? loadedFileName : "opened_file.txt");
+                    loadedFilePath = localFile.getAbsolutePath();
                     fileToRead = localFile;
                 }
+
                 if (fileToRead == null) throw new IllegalArgumentException("No file selected");
 
-                String content = FileUtils.readTextFile(fileToRead);
+                String content = FileUtils.readReadableFile(this, fileToRead);
                 int lineCount = countLines(content);
-                handler.post(() -> onFileLoaded(content, lineCount));
+
+                final String finalFilePath = loadedFilePath;
+                final String finalFileName = loadedFileName;
+                handler.post(() -> {
+                    if (!activityDestroyed && generation == loadGeneration) {
+                        onFileLoaded(content, lineCount, finalFilePath, finalFileName, jumpPosition);
+                    }
+                });
             } catch (Exception e) {
                 handler.post(() -> {
+                    if (activityDestroyed || generation != loadGeneration) return;
                     progressText.setText(String.format(Locale.getDefault(), "%s%s", getString(R.string.error_prefix), e.getMessage()));
                     Toast.makeText(this, getString(R.string.error_prefix) + e.getMessage(), Toast.LENGTH_LONG).show();
                 });
@@ -1089,20 +1373,27 @@ public class ReaderActivity extends AppCompatActivity {
         });
     }
 
-    private void onFileLoaded(String content, int lineCount) {
+    private void onFileLoaded(String content, int lineCount,
+                              String loadedFilePath,
+                              String loadedFileName,
+                              int jumpPosition) {
         progressBar.setVisibility(View.GONE);
         progressText.setVisibility(View.GONE);
+
+        filePath = loadedFilePath;
+        fileName = loadedFileName != null ? loadedFileName : getString(R.string.app_name);
+
         if (getSupportActionBar() != null) getSupportActionBar().setTitle(fileName);
 
         fileContent = content != null ? content : "";
         totalChars = fileContent.length();
         totalLines = lineCount;
         readerView.setTextContent(fileContent);
+        applySearchHighlight();
 
         readerView.post(() -> {
-            int jumpPos = getIntent().getIntExtra(EXTRA_JUMP_TO_POSITION, -1);
-            if (jumpPos >= 0) {
-                scrollToCharPosition(jumpPos);
+            if (jumpPosition >= 0) {
+                scrollToCharPosition(jumpPosition);
             } else if (prefs.getAutoSavePosition()) {
                 ReaderState state = bookmarkManager.getReadingState(filePath);
                 if (state != null) scrollToCharPosition(state.getCharPosition());
@@ -1165,21 +1456,54 @@ public class ReaderActivity extends AppCompatActivity {
         }
     }
 
-    private void handleSingleTap(float y) {
+    private void applySearchHighlight() {
+        if (readerView != null) {
+            readerView.setSearchHighlight(activeSearchQuery, activeSearchIndex);
+        }
+    }
+
+    private void handleSingleTap(float x, float y) {
         if (fileContent.isEmpty() || !prefs.getTapPagingEnabled()) {
             toggleToolbar();
             return;
         }
 
-        int height = readerView.getHeight();
+        int leadingPercent = Math.max(5, Math.min(80, prefs.getTapLeadingZonePercent()));
+        int trailingPercent = Math.max(5, Math.min(80, prefs.getTapTrailingZonePercent()));
+        if (leadingPercent + trailingPercent > 90) {
+            trailingPercent = Math.max(5, 90 - leadingPercent);
+        }
 
-        // Tap-zone ratio:
-        // top 35%    -> previous page
-        // middle 30% -> show/hide bottom menu
-        // bottom 35% -> next page
-        if (y < height * 0.35f) {
+        float leadingRatio = leadingPercent / 100f;
+        float trailingStartRatio = 1f - (trailingPercent / 100f);
+
+        int tapZoneMode = prefs.getTapZoneMode();
+        if (tapZoneMode == PrefsManager.TAP_ZONE_HORIZONTAL) {
+            int width = readerView.getWidth();
+            float leftBoundary = width * leadingRatio;
+            float rightBoundary = width * trailingStartRatio;
+
+            // Horizontal one-hand mode:
+            // left zone -> previous page, middle zone -> menu, right zone -> next page.
+            if (x < leftBoundary) {
+                pageUp();
+            } else if (x > rightBoundary) {
+                pageDown();
+            } else {
+                toggleToolbar();
+            }
+            return;
+        }
+
+        int height = readerView.getHeight();
+        float topBoundary = height * leadingRatio;
+        float bottomBoundary = height * trailingStartRatio;
+
+        // Vertical default mode:
+        // top zone -> previous page, middle zone -> menu, bottom zone -> next page.
+        if (y < topBoundary) {
             pageUp();
-        } else if (y > height * 0.65f) {
+        } else if (y > bottomBoundary) {
             pageDown();
         } else {
             toggleToolbar();
@@ -1375,7 +1699,7 @@ public class ReaderActivity extends AppCompatActivity {
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(bg);
+        box.setBackgroundColor(Color.TRANSPARENT);
         int pad = dpToPx(12);
         // Keep content slightly inset inside the rounded outer frame.
         box.setPadding(pad, pad, pad, dpToPx(6));
@@ -1417,7 +1741,7 @@ public class ReaderActivity extends AppCompatActivity {
         emptyText.setPadding(0, dpToPx(18), 0, dpToPx(18));
 
         RecyclerView rv = new RecyclerView(this);
-        rv.setBackgroundColor(bg);
+        rv.setBackgroundColor(Color.TRANSPARENT);
         rv.setOverScrollMode(View.OVER_SCROLL_NEVER);
         rv.setLayoutManager(new LinearLayoutManager(this));
 
@@ -1436,6 +1760,8 @@ public class ReaderActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dpToPx(430)));
 
+        final AlertDialog[] dialogRef = new AlertDialog[1];
+
         Runnable refresh = () -> {
             List<Bookmark> allBookmarks = bookmarkManager.getAllBookmarks();
             adapter.setBookmarks(allBookmarks, expandedFolders, filePath);
@@ -1445,6 +1771,15 @@ public class ReaderActivity extends AppCompatActivity {
                     allBookmarks.size(),
                     getCurrentPageNumber(),
                     getTotalPageCount()));
+
+            // When the first bookmark is added, RecyclerView/content height can change.
+            // Redraw the outer rounded overlay after the layout settles so the bottom
+            // rounded border does not disappear until reopening the dialog.
+            box.requestLayout();
+            rv.requestLayout();
+            if (dialogRef[0] != null) {
+                redrawDialogOuterBorder(dialogRef[0], strongDialogBorderColor(bg));
+            }
         };
 
         TextView title = makeReaderDialogTitle(getString(R.string.bookmark), bg, fg);
@@ -1454,6 +1789,7 @@ public class ReaderActivity extends AppCompatActivity {
                 .setView(box)
                 .setNegativeButton(getString(R.string.close), null)
                 .create();
+        dialogRef[0] = dialog;
 
         saveButton.setOnClickListener(v -> saveCurrentBookmarkTekStyle(() -> {
             expandedFolders.add(filePath);
@@ -1487,9 +1823,21 @@ public class ReaderActivity extends AppCompatActivity {
                     return;
                 }
 
-                Intent intent = new Intent(ReaderActivity.this, ReaderActivity.class);
-                intent.putExtra(EXTRA_FILE_PATH, b.getFilePath());
-                intent.putExtra(EXTRA_JUMP_TO_POSITION, b.getCharPosition());
+                Intent intent;
+                if (FileUtils.isPdfFile(targetFile.getName())) {
+                    intent = new Intent(ReaderActivity.this, PdfReaderActivity.class);
+                    intent.putExtra(PdfReaderActivity.EXTRA_FILE_PATH, b.getFilePath());
+                    intent.putExtra(PdfReaderActivity.EXTRA_JUMP_TO_PAGE, b.getCharPosition());
+                } else if (FileUtils.isEpubFile(targetFile.getName()) || FileUtils.isWordFile(targetFile.getName())) {
+                    intent = new Intent(ReaderActivity.this, DocumentPageActivity.class);
+                    intent.putExtra(DocumentPageActivity.EXTRA_FILE_PATH, b.getFilePath());
+                    intent.putExtra(DocumentPageActivity.EXTRA_JUMP_TO_PAGE, b.getCharPosition());
+                } else {
+                    intent = new Intent(ReaderActivity.this, ReaderActivity.class);
+                    intent.putExtra(EXTRA_FILE_PATH, b.getFilePath());
+                    intent.putExtra(EXTRA_JUMP_TO_POSITION, b.getCharPosition());
+                }
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 startActivity(intent);
                 dialog.dismiss();
             }
@@ -1501,27 +1849,7 @@ public class ReaderActivity extends AppCompatActivity {
 
             @Override
             public void onBookmarkEdit(Bookmark b) {
-                EditText input = new EditText(ReaderActivity.this);
-                input.setHint(getString(R.string.optional_memo));
-                input.setText(b.getLabel());
-                input.setSelectAllOnFocus(true);
-
-                new AlertDialog.Builder(ReaderActivity.this)
-                        .setTitle(getString(R.string.edit_bookmark_memo))
-                        .setMessage(b.getFileName() + "\n\n" + b.getExcerpt())
-                        .setView(input)
-                        .setPositiveButton(getString(R.string.save), (d, w) -> {
-                            b.setLabel(input.getText().toString().trim());
-                            bookmarkManager.updateBookmark(b);
-                            refresh.run();
-                        })
-                        .setNeutralButton(getString(R.string.clear), (d, w) -> {
-                            b.setLabel("");
-                            bookmarkManager.updateBookmark(b);
-                            refresh.run();
-                        })
-                        .setNegativeButton(getString(R.string.cancel), null)
-                        .show();
+                showBookmarkMemoEditDialog(b, refresh);
             }
         });
 
@@ -1530,6 +1858,55 @@ public class ReaderActivity extends AppCompatActivity {
             refresh.run();
         });
 
+        dialog.show();
+    }
+
+
+    private void showBookmarkMemoEditDialog(Bookmark bookmark, Runnable afterSave) {
+        final int bg = readerDialogBgColor();
+        final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(Color.TRANSPARENT);
+        box.setPadding(dpToPx(22), dpToPx(12), dpToPx(22), dpToPx(8));
+
+        TextView message = new TextView(this);
+        message.setText(bookmark.getFileName() + "\n\n" + bookmark.getExcerpt());
+        message.setTextColor(sub);
+        message.setTextSize(13f);
+        message.setLineSpacing(0f, 1.15f);
+        message.setPadding(0, 0, 0, dpToPx(10));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        EditText input = makeReaderDialogEditText(getString(R.string.optional_memo), bg, fg, sub);
+        input.setText(bookmark.getLabel());
+        input.setSelectAllOnFocus(true);
+        box.addView(input, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(52)));
+
+        TextView title = makeReaderDialogTitle(getString(R.string.edit_bookmark_memo), bg, fg);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setCustomTitle(title)
+                .setView(box)
+                .setPositiveButton(getString(R.string.save), (d, w) -> {
+                    bookmark.setLabel(input.getText().toString().trim());
+                    bookmarkManager.updateBookmark(bookmark);
+                    if (afterSave != null) afterSave.run();
+                })
+                .setNeutralButton(getString(R.string.clear), (d, w) -> {
+                    bookmark.setLabel("");
+                    bookmarkManager.updateBookmark(bookmark);
+                    if (afterSave != null) afterSave.run();
+                })
+                .setNegativeButton(getString(R.string.cancel), null)
+                .create();
+
+        dialog.setOnShowListener(d -> styleReaderDialogWindow(dialog, bg, fg, sub));
         dialog.show();
     }
 
@@ -1543,7 +1920,7 @@ public class ReaderActivity extends AppCompatActivity {
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(bg);
+        box.setBackgroundColor(Color.TRANSPARENT);
         box.setPadding(dpToPx(24), dpToPx(12), dpToPx(24), dpToPx(10));
 
         TextView label = makeReaderDialogLabel(getString(R.string.screen_brightness), fg, 14f);
@@ -1614,12 +1991,12 @@ public class ReaderActivity extends AppCompatActivity {
 
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        list.setBackgroundColor(bg);
+        list.setBackgroundColor(Color.TRANSPARENT);
         int pad = dpToPx(14);
         list.setPadding(pad, dpToPx(8), pad, dpToPx(8));
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(bg);
+        scroll.setBackgroundColor(Color.TRANSPARENT);
         scroll.addView(list);
 
         final AlertDialog[] ref = new AlertDialog[1];
@@ -1667,12 +2044,12 @@ public class ReaderActivity extends AppCompatActivity {
 
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        list.setBackgroundColor(bg);
+        list.setBackgroundColor(Color.TRANSPARENT);
         int pad = dpToPx(14);
         list.setPadding(pad, dpToPx(8), pad, dpToPx(8));
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(bg);
+        scroll.setBackgroundColor(Color.TRANSPARENT);
         scroll.addView(list);
 
         final AlertDialog[] ref = new AlertDialog[1];
@@ -1709,7 +2086,7 @@ public class ReaderActivity extends AppCompatActivity {
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(bg);
+        box.setBackgroundColor(Color.TRANSPARENT);
         box.setPadding(dpToPx(24), dpToPx(12), dpToPx(24), dpToPx(8));
 
         TextView percentLabel = makeReaderDialogLabel(getString(R.string.go_to_percentage), fg, 14f);
@@ -1769,7 +2146,7 @@ public class ReaderActivity extends AppCompatActivity {
         titleBox.setOrientation(LinearLayout.HORIZONTAL);
         titleBox.setGravity(Gravity.CENTER_VERTICAL);
         titleBox.setPadding(dpToPx(22), dpToPx(18), dpToPx(22), dpToPx(8));
-        titleBox.setBackgroundColor(bg);
+        titleBox.setBackgroundColor(Color.TRANSPARENT);
 
         TextView title = new TextView(this);
         title.setText(getString(R.string.find_in_text));
@@ -1792,10 +2169,22 @@ public class ReaderActivity extends AppCompatActivity {
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(bg);
+        box.setBackgroundColor(Color.TRANSPARENT);
         box.setPadding(dpToPx(24), dpToPx(12), dpToPx(24), dpToPx(8));
 
         EditText input = makeReaderDialogEditText(getString(R.string.search_text_hint), bg, fg, sub);
+        String rememberedQuery = activeSearchQuery;
+        if ((rememberedQuery == null || rememberedQuery.isEmpty()) && prefs != null) {
+            rememberedQuery = prefs.getLastReaderSearchQuery();
+        }
+        if (rememberedQuery == null) rememberedQuery = "";
+        input.setText(rememberedQuery);
+        if (!rememberedQuery.isEmpty()) {
+            input.setSelection(input.getText().length());
+            int total = countTextMatches(rememberedQuery);
+            int ordinal = activeSearchIndex >= 0 ? matchIndexForPosition(rememberedQuery, activeSearchIndex) : 0;
+            matchStatus.setText(String.format(Locale.getDefault(), "%d / %d", ordinal, total));
+        }
         box.addView(input, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dpToPx(52)));
@@ -1839,6 +2228,14 @@ public class ReaderActivity extends AppCompatActivity {
         });
 
         dialog.setOnShowListener(d -> styleReaderDialogWindow(dialog, bg, fg, sub));
+        dialog.setOnDismissListener(d -> {
+            if (prefs != null) {
+                prefs.setLastReaderSearchQuery(input.getText() != null ? input.getText().toString() : "");
+            }
+            activeSearchQuery = "";
+            activeSearchIndex = -1;
+            applySearchHighlight();
+        });
         dialog.show();
     }
 
@@ -1864,8 +2261,10 @@ public class ReaderActivity extends AppCompatActivity {
         String query = rawQuery == null ? "" : rawQuery.trim();
 
         if (query.isEmpty()) {
+            if (prefs != null) prefs.setLastReaderSearchQuery("");
             activeSearchQuery = "";
             activeSearchIndex = -1;
+            applySearchHighlight();
             if (matchStatus != null) matchStatus.setText("0 / 0");
             Toast.makeText(this, getString(R.string.enter_search_text), Toast.LENGTH_SHORT).show();
             return;
@@ -1875,8 +2274,10 @@ public class ReaderActivity extends AppCompatActivity {
 
         int total = countTextMatches(query);
         if (total <= 0) {
+            if (prefs != null) prefs.setLastReaderSearchQuery(query);
             activeSearchQuery = query;
             activeSearchIndex = -1;
+            applySearchHighlight();
             if (matchStatus != null) matchStatus.setText("0 / 0");
             Toast.makeText(this, getString(R.string.not_found), Toast.LENGTH_SHORT).show();
             return;
@@ -1885,7 +2286,9 @@ public class ReaderActivity extends AppCompatActivity {
         if (!query.equals(activeSearchQuery)) {
             activeSearchQuery = query;
             activeSearchIndex = -1;
+            applySearchHighlight();
         }
+        if (prefs != null) prefs.setLastReaderSearchQuery(query);
 
         int idx;
         if (activeSearchIndex >= 0) {
@@ -1905,6 +2308,7 @@ public class ReaderActivity extends AppCompatActivity {
 
         if (idx >= 0) {
             activeSearchIndex = idx;
+            applySearchHighlight();
 
             // Search movement should land on the actual match line, not keep reusing the
             // current top line as the next search base.
@@ -1916,10 +2320,9 @@ public class ReaderActivity extends AppCompatActivity {
                 matchStatus.setText(String.format(Locale.getDefault(), "%d / %d", ordinal, total));
             }
 
-            Toast.makeText(this,
-                    getString(R.string.found_match_status, ordinal, total, idx),
-                    Toast.LENGTH_SHORT).show();
         } else {
+            activeSearchIndex = -1;
+            applySearchHighlight();
             if (matchStatus != null) matchStatus.setText(String.format(Locale.getDefault(), "0 / %d", total));
             Toast.makeText(this, getString(R.string.not_found), Toast.LENGTH_SHORT).show();
         }
@@ -1933,12 +2336,14 @@ public class ReaderActivity extends AppCompatActivity {
         final int sub = readerDialogSubTextColor(bg);
 
         File file = new File(filePath);
-        String encoding = FileUtils.detectEncoding(file);
         String info = getString(R.string.file_label) + ": " + fileName
                 + "\n" + getString(R.string.file_info_path) + ": " + filePath
                 + "\n" + getString(R.string.file_info_size) + ": " + FileUtils.formatFileSize(file.length())
-                + "\n" + getString(R.string.file_info_encoding) + ": " + encoding
-                + "\n" + getString(R.string.characters) + ": " + totalChars
+                + "\n" + getString(R.string.file_info_type) + ": " + FileUtils.getReadableFileType(fileName);
+        if (FileUtils.isTextFile(fileName)) {
+            info += "\n" + getString(R.string.file_info_encoding) + ": " + FileUtils.detectEncoding(file);
+        }
+        info += "\n" + getString(R.string.characters) + ": " + totalChars
                 + "\n" + getString(R.string.lines) + ": " + totalLines
                 + "\n" + getString(R.string.pages) + ": " + getTotalPageCount();
 
@@ -1948,7 +2353,7 @@ public class ReaderActivity extends AppCompatActivity {
         message.setTextSize(14f);
         message.setLineSpacing(0f, 1.15f);
         message.setPadding(dpToPx(24), dpToPx(12), dpToPx(24), dpToPx(12));
-        message.setBackgroundColor(bg);
+        message.setBackgroundColor(Color.TRANSPARENT);
 
         TextView title = makeReaderDialogTitle(getString(R.string.file_info), bg, fg);
         AlertDialog dialog = new AlertDialog.Builder(this)
@@ -2000,14 +2405,17 @@ public class ReaderActivity extends AppCompatActivity {
 
     @Override protected void onPause() { super.onPause(); saveReadingState(); }
     @Override protected void onDestroy() {
+        activityDestroyed = true;
+        loadGeneration++;
+        handler.removeCallbacksAndMessages(null);
         if (viewerBackToast != null) {
             viewerBackToast.cancel();
             viewerBackToast = null;
         }
-        super.onDestroy();
         saveReadingState();
-        notificationHelper.dismiss();
-        executor.shutdown();
+        if (notificationHelper != null) notificationHelper.dismiss();
+        executor.shutdownNow();
+        super.onDestroy();
     }
 
     private void saveReadingState() {
@@ -2034,7 +2442,6 @@ public class ReaderActivity extends AppCompatActivity {
         else if (id == R.id.action_go_to) { showGoToDialog(); return true; }
         else if (id == R.id.action_search) { showTextSearch(); return true; }
         else if (id == R.id.action_brightness) { showBrightnessDialog(); return true; }
-        else if (id == R.id.action_theme) { showThemeDialog(); return true; }
         else if (id == R.id.action_font) { showFontDialog(); return true; }
         else if (id == R.id.action_font_increase) { changeFontSize(2f); return true; }
         else if (id == R.id.action_font_decrease) { changeFontSize(-2f); return true; }
@@ -2047,6 +2454,13 @@ public class ReaderActivity extends AppCompatActivity {
         prefs.setFontSize(newSize);
         applyPreferences();
         updatePositionLabel();
+    }
+
+    private int dpToPx(float dp) {
+        return Math.round(TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                dp,
+                getResources().getDisplayMetrics()));
     }
 
     private int dpToPx(int dp) {
