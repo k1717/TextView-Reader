@@ -1,46 +1,54 @@
-# TextView - Android Studio Beginner Setup
+# TextView Reader - Android Studio Setup
 
-This project is a Java Android TXT reader prototype inspired by TekView.
-It uses continuous scrolling plus TekView-style tap paging:
-
-- Tap top area: page up
-- Tap bottom area: page down
-- Tap middle area: show/hide controls
-- Volume up/down: page up/down if enabled in settings
+This project is a Java Android reader app. It supports TXT, PDF, EPUB, and OOXML Word files.
 
 ## 1. Open the project
 
-1. Unzip this folder.
+1. Unzip the package.
 2. Open Android Studio.
 3. Click **Open**.
-4. Select the unzipped project folder, not the `app` folder.
-   - Correct: `tekview-reader-v4-android-studio-ready`
-   - Wrong: `tekview-reader-v4-android-studio-ready/app`
+4. Select the unzipped project root folder, not the `app` folder.
+   - Correct: the folder that contains `settings.gradle`, `build.gradle`, `gradlew`, and `app/`.
+   - Wrong: selecting only `app/`.
 5. Wait for **Gradle Sync**.
 
 ## 2. Install missing SDK if Android Studio asks
 
 The project uses:
 
-- compileSdk 35
-- targetSdk 35
-- minSdk 24
+- `compileSdk 35`
+- `targetSdk 35`
+- `minSdk 24`
+- Java 17
 
-If Android Studio says SDK Platform 35 is missing, click the install/fix link.
+If Android Studio says SDK Platform 35 is missing, use the install/fix link.
 
 ## 3. Build a debug APK
 
-Use:
+Android Studio menu path:
 
-- **Build > Make Project**
+1. **Build > Make Project**
+2. **Build > Build Bundle(s) / APK(s) > Build APK(s)**
 
-Then:
+Command line:
 
-- **Build > Build Bundle(s) / APK(s) > Build APK(s)**
+```bash
+./gradlew assembleDebug
+```
 
-The debug APK should appear under:
+Windows:
 
-`app/build/outputs/apk/debug/app-debug.apk`
+```powershell
+.\gradlew.bat assembleDebug
+```
+
+The locally generated debug APK appears under:
+
+```text
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+That APK is build output. Do not upload it to GitHub.
 
 ## 4. Run on your phone
 
@@ -54,33 +62,34 @@ The debug APK should appear under:
 
 After the app installs:
 
-1. Give storage/all-files permission if prompted.
-2. Open a `.txt` file.
-3. Drag-scroll normally.
-4. Tap bottom area: text should jump one screen down.
-5. Tap top area: text should jump one screen up.
-6. Tap middle area: toolbar/bottom controls should hide/show.
-7. Add a bookmark.
-8. Close and reopen the file; position should restore.
-9. Try dark mode in Settings.
+1. Give storage permission/all-files permission if prompted.
+2. Open the app. The home page should show **Recently Read** files.
+3. Open a `.txt`, `.pdf`, `.epub`, or `.docx` file.
+4. Return to the main screen and confirm the file appears at the top of Recently Read.
+5. Tap the small sort icon beside file search and verify sort modes work on the home page.
+6. Open a folder from the drawer and verify the same sort icon works in folder browsing.
+7. Type in the file search bar and test the All / General / PDF / EPUB / Word filters.
+8. Open the left drawer and confirm fixed shortcuts stay separate from the scrollable recent-folder list.
+9. In the TXT reader, test tap-zone page movement, volume-key paging, search, and bookmark creation.
+10. In PDF/Word/EPUB viewers, test page movement, bookmarks, and returning to the file browser.
+11. Close and reopen a file; position should restore.
+12. Try dark mode and reading themes in Settings.
 
-## 6. Known prototype limitations
+## 6. Current known limitations
 
-This version is usable for testing, but not final:
-
-- Large TXT files are loaded into one TextView, so very large files may lag.
-- SAF opened files are copied to cache; the final app should bookmark original Uri values.
-- All-files storage permission is okay for sideload testing, but SAF-first design is better for public release.
-- Background image theme data exists but full rendering support is not final.
-- PIN lock is basic and not cryptographically secure.
+- This is still a source package for development/testing, not a polished store release.
+- Large TXT files are rendered through a custom view; extremely large files may still need optimization.
+- SAF-opened files may be copied/cached for local reading behavior.
+- All-files storage permission is convenient for sideload testing, but a stricter SAF-first model is better for public store distribution.
+- PIN lock is an app-level convenience lock, not cryptographic file encryption.
 
 ## 7. If Gradle fails
 
-Copy the exact first red error line and send it back. The common first failures are:
+Capture the first red error line before changing files. Common first failures are:
 
 - Missing SDK Platform 35
-- Gradle plugin update prompt
-- Missing Java/JDK setting
-- Resource compile issue
+- Wrong JDK selection; use JDK 17
+- Gradle sync interrupted before wrapper download finished
+- Resource compile issue after manually editing XML
 
-Do not randomly change files before capturing the error.
+Do not randomly delete or regenerate source files before recording the exact error.
