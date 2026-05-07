@@ -4,24 +4,24 @@ This project is a Java Android reader app. It supports TXT, PDF, EPUB, and OOXML
 
 ## 1. Open the project
 
-1. Unzip the package.
+1. Unzip the package or clone the repository.
 2. Open Android Studio.
 3. Click **Open**.
-4. Select the unzipped project root folder, not the `app` folder.
+4. Select the project root folder, not the `app` folder.
    - Correct: the folder that contains `settings.gradle`, `build.gradle`, `gradlew`, and `app/`.
    - Wrong: selecting only `app/`.
-5. Wait for **Gradle Sync**.
+5. Wait for **Gradle Sync** to finish.
 
 ## 2. Install missing SDK if Android Studio asks
 
 The project uses:
 
-- `compileSdk 35`
-- `targetSdk 35`
-- `minSdk 24`
-- Java 17
+- `compileSdk 35`;
+- `targetSdk 35`;
+- `minSdk 24`;
+- Java 17.
 
-If Android Studio says SDK Platform 35 is missing, use the install/fix link.
+If Android Studio says SDK Platform 35 is missing, use the install/fix link shown by Android Studio.
 
 ## 3. Build a debug APK
 
@@ -54,7 +54,7 @@ That APK is build output. Do not upload it to GitHub.
 
 1. Enable Developer Options on the phone.
 2. Enable USB Debugging.
-3. Connect by USB.
+3. Connect the phone by USB.
 4. In Android Studio, choose your phone from the device dropdown.
 5. Press the green Run button.
 
@@ -70,10 +70,12 @@ After the app installs:
 6. Open a folder from the drawer and verify the same sort icon works in folder browsing.
 7. Type in the file search bar and test the All / General / PDF / EPUB / Word filters.
 8. Open the left drawer and confirm fixed shortcuts stay separate from the scrollable recent-folder list.
-9. In the TXT reader, test tap-zone page movement, volume-key paging, search, and bookmark creation.
-10. In PDF/Word/EPUB viewers, test page movement, bookmarks, and returning to the file browser.
-11. Close and reopen a file; position should restore.
-12. Try dark mode and reading themes in Settings.
+9. Use the drawer bottom actions to open file picker, bookmarks, and settings.
+10. In the TXT reader, test tap-zone page movement, volume-key paging, search, and bookmark creation.
+11. In PDF/Word/EPUB viewers, test page movement, bookmarks, and returning to the file browser.
+12. Open a different file while a viewer was recently used; the app should reuse the matching viewer path instead of stacking repeated viewer loops.
+13. Close and reopen a file; position should restore.
+14. Try dark mode and reading themes in Settings.
 
 ## 6. Current known limitations
 
@@ -85,11 +87,14 @@ After the app installs:
 
 ## 7. If Gradle fails
 
-Capture the first red error line before changing files. Common first failures are:
+Capture the first red error line before changing files.
 
-- Missing SDK Platform 35
-- Wrong JDK selection; use JDK 17
-- Gradle sync interrupted before wrapper download finished
-- Resource compile issue after manually editing XML
+Common first failures are:
+
+- Missing SDK Platform 35.
+- Wrong JDK selection; use JDK 17.
+- Gradle sync interrupted before wrapper download finished.
+- Resource compile issue after manually editing XML.
+- Opening only the `app/` folder instead of the repository root.
 
 Do not randomly delete or regenerate source files before recording the exact error.

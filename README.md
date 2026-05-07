@@ -1,50 +1,104 @@
 # TextView Reader
 
-TextView Reader is a local Android reader for TXT files and common document formats. It focuses on fast local browsing, comfortable reading controls, recent-file recovery, bookmarks, Korean/Unicode-friendly text decoding, and a clean reader UI.
+TextView Reader is a local-first Android reader app for TXT, PDF, EPUB, and OOXML Word files. The app label is **TextView** and the public repository is **TextView-Reader**.
 
-The app label is **TextView**. The repository name is **TextView-Reader**.
+The project focuses on comfortable offline reading, fast local file browsing, recent-file recovery, bookmarks, Korean/Unicode-friendly text decoding, and a clean reader UI.
 
 ## Current update highlights
 
-- Recent files open on the home screen and default to **recently read first**, not alphabetical or numeric order.
-- The sort control is a compact icon beside the file search field and works on both the home recent-files page and normal folder browsing.
-- The left drawer keeps storage shortcuts fixed while recent folders remain scrollable.
-- Viewer activities use `singleTop`/`onNewIntent` handling so opening another file reuses the matching viewer instead of stacking repeated viewer loops.
-- Reader, PDF, and document viewers clean up callbacks, background workers, bitmaps/WebViews, and selection state during lifecycle teardown.
+- Home opens to **Recently Read** files.
+- Recent files default to **recently read first**, not alphabetical or numeric order.
+- The sort control is now a small icon beside the file search field.
+- Sorting works on both the Recently Read page and normal folder browsing.
+- Folder browsing supports sorting by name, date, size, and type.
+- The left drawer keeps storage shortcuts fixed while only the recent-folder list scrolls.
+- Viewer activities use `singleTop` / `onNewIntent` behavior so opening a new file reuses the matching viewer instead of creating repeated viewer stacks.
+- TXT, PDF, and document viewers include additional lifecycle cleanup for callbacks, background work, bitmaps/renderers, WebViews, and selection state.
+- DOCX/Word rendering stays WebView-based to preserve document layout and selectable text behavior.
+- Dialogs, file actions, and document/PDF controls were polished to better match the app theme.
+
+## Quick UI map
+
+| Area | What it does |
+| --- | --- |
+| Home / Recently Read | Shows files ordered by most recently read first. |
+| Search field | Filters files by name. |
+| File-type chips | Filter by All, General, PDF, EPUB, or Word. |
+| Small sort icon beside search | Changes recent-page or folder-page sorting. |
+| Left drawer | Opens Recent, Internal Storage, External Storage, Downloads, `/storage`, and recent folders. |
+| Drawer bottom actions | Opens file picker, bookmarks, and settings. |
+| File long press | Opens file actions such as info, rename, and delete. |
+| TXT reader bottom bar | Page movement, search, bookmarks, and reader options. |
+| PDF / document bottom bar | Page movement, page jump, bookmark, and viewer options. |
+| Settings | Reading themes, language, behavior, backup/import, and lock options. |
 
 ## Features
 
 ### Reader modes
 
-- **TXT reader** with custom rendered scrolling, tap-zone page movement, hardware volume-key paging, search, page/position jump, and auto-resume.
-- **PDF reader** using Android `PdfRenderer`, with page navigation, zoom controls, bookmarks, and recent-position restore.
-- **Document viewer** for EPUB and OOXML Word files (`.docx`, `.docm`, `.dotx`, `.dotm`) using page-style WebView rendering.
-- Word/document pages support per-page vertical scrolling, left/right swipe page movement, selectable text, and cleanup of stale native selection handles after scrolling.
+- **TXT reader**
+  - Custom rendered scrolling.
+  - Tap-zone page movement.
+  - Hardware volume-key paging.
+  - Text search with next/previous match movement.
+  - Page, percentage, and line/position jump.
+  - Auto-resume reading position.
+
+- **PDF reader**
+  - Android `PdfRenderer`-based page rendering.
+  - Page navigation.
+  - Zoom controls.
+  - Bookmark and recent-position restore.
+
+- **Document viewer**
+  - EPUB and OOXML Word support.
+  - Supported Word extensions: `.docx`, `.docm`, `.dotx`, `.dotm`.
+  - Page-style WebView rendering.
+  - Per-page vertical scrolling.
+  - Left/right swipe page movement.
+  - Selectable text.
+  - Cleanup of stale native text-selection handles after scrolling.
 
 ### File browser
 
 - Home page shows **Recently Read** files.
-- Recent-files page defaults to **Recently read** ordering. Optional sort modes are available from the small sort icon beside file search.
-- Folder browser supports sorting by name, date, size, and type.
-- File search bar with type filters: All, General, PDF, EPUB, and Word.
-- Left drawer shortcuts for Recent, internal storage, external storage when available, Downloads, and `/storage`.
+- Recent-files page keeps a separate **Recently read** ordering preference.
+- Folder browser supports sorting by:
+  - name A to Z / Z to A;
+  - date newest / oldest;
+  - size largest / smallest;
+  - file type.
+- File search supports these filters:
+  - All;
+  - General;
+  - PDF;
+  - EPUB;
+  - Word.
+- Left drawer shortcuts:
+  - Recent;
+  - Internal Storage;
+  - External Storage when available;
+  - Downloads;
+  - `/storage`.
 - Recent-folder drawer section keeps up to 10 recent folder entries.
-- File operations: rename, delete, new folder, and file information.
-- Android Storage Access Framework support for opening files from other apps.
+- File actions include open, file information, rename, delete, and new folder.
+- Android Storage Access Framework support for files opened from other apps.
 
 ### Encoding support
 
-TextView Reader tries multiple common encodings before falling back safely. Supported candidates include:
+TextView Reader tries multiple common encodings before falling back safely.
 
-- UTF-8
-- UTF-16LE / UTF-16BE
-- MS949 / Windows-949 / CP949
-- EUC-KR
-- Shift_JIS / Windows-31J
-- EUC-JP
-- ISO-2022-JP
-- GB18030 / GBK
-- Big5
+Supported candidates include:
+
+- UTF-8;
+- UTF-16LE / UTF-16BE;
+- MS949 / Windows-949 / CP949;
+- EUC-KR;
+- Shift_JIS / Windows-31J;
+- EUC-JP;
+- ISO-2022-JP;
+- GB18030 / GBK;
+- Big5.
 
 Invalid or unmappable bytes are replaced safely instead of crashing the reader.
 
@@ -58,20 +112,24 @@ Invalid or unmappable bytes are replaced safely instead of crashing the reader.
 
 ### Appearance and controls
 
-- Built-in reading themes: Light, Dark, Sepia, Night Blue, Eye Care, and Cream.
+- Built-in reading themes:
+  - Light;
+  - Dark;
+  - Sepia;
+  - Night Blue;
+  - Eye Care;
+  - Cream.
 - Custom theme editor with RGB color selection.
 - Custom font import and device font scanning.
-- App dark mode: Follow System / Light / Dark.
+- App dark mode:
+  - Follow System;
+  - Light;
+  - Dark.
 - Reader brightness override.
+- Optional keep-screen-on behavior.
+- Optional reading progress notification.
 - Edge-to-edge safe toolbar and bottom-bar insets for newer Android targets.
-- Custom rounded dialogs/menus and reader/document selection handle styling.
-
-### Privacy
-
-- No analytics SDK.
-- No advertising SDK.
-- No account system.
-- Reading history, bookmarks, settings, and imported fonts stay local on the device unless the user manually exports or shares files.
+- Custom rounded dialogs/menus and reader/document selection-handle styling.
 
 ## Supported file types
 
@@ -95,7 +153,9 @@ Invalid or unmappable bytes are replaced safely instead of crashing the reader.
 ## Build from source
 
 1. Clone or download the repository.
-2. Open the repository root folder in Android Studio. Do not open only the `app/` folder.
+2. Open the repository root folder in Android Studio.
+   - Correct: the folder containing `settings.gradle`, `build.gradle`, `gradlew`, and `app/`.
+   - Wrong: opening only the `app/` folder.
 3. Let Android Studio sync Gradle.
 4. Install SDK Platform 35 if Android Studio asks for it.
 5. Build with **Build > Make Project** or generate an APK with **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
@@ -118,32 +178,76 @@ Debug APK output after building locally:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Do not commit that generated APK to GitHub.
+Do not commit generated APKs to GitHub.
 
 ## Project structure
 
 ```text
 app/src/main/java/com/simpletext/reader/
-├── MainActivity.java             # Home recent files, folder browser, drawer, search, sort, file actions
-├── ReaderActivity.java           # TXT reader, themes, bookmarks, search, position jump
-├── PdfReaderActivity.java        # PDF page viewer
-├── DocumentPageActivity.java     # EPUB/Word document viewer
-├── SettingsActivity.java         # App settings
-├── BookmarkListActivity.java     # Bookmark list UI
-├── LockActivity.java             # PIN lock screen
-├── ThemeEditorActivity.java      # Custom theme editor
-├── adapter/                      # RecyclerView adapters
-├── model/                        # Data models
-├── util/                         # Preferences, bookmarks, files, fonts, themes
-├── view/                         # Custom reader view
-└── widget/                       # WebView and selection helpers
+├── MainActivity.java              # Home recent files, folder browser, drawer, search, sort, file actions
+├── ReaderActivity.java            # TXT reader, themes, bookmarks, search, position jump
+├── PdfReaderActivity.java         # PDF page viewer
+├── DocumentPageActivity.java      # EPUB/Word document viewer
+├── SettingsActivity.java          # App settings
+├── BookmarkListActivity.java      # Bookmark list UI
+├── LockActivity.java              # PIN lock screen
+├── ThemeEditorActivity.java       # Custom theme editor
+├── adapter/                       # RecyclerView adapters
+├── model/                         # Data models
+├── util/                          # Preferences, bookmarks, files, fonts, themes
+├── view/                          # Custom reader view
+└── widget/                        # WebView and selection helpers
 ```
+
+Correct Android source/resource locations:
+
+```text
+app/src/main/AndroidManifest.xml
+app/src/main/java/
+app/src/main/res/
+app/src/main/ic_launcher-playstore.png
+```
+
+The repository root should **not** contain duplicate Android source folders such as root-level `java/`, `res/`, `AndroidManifest.xml`, or `ic_launcher-playstore.png`.
+
+## Privacy
+
+TextView Reader is designed as an offline local reader.
+
+- No analytics SDK.
+- No advertising SDK.
+- No account system.
+- Reading history, bookmarks, settings, and imported fonts stay local on the device unless the user manually exports, backs up, shares, or deletes them.
+
+See `PRIVACY.md` for details.
 
 ## Repository hygiene
 
-The repository should contain source files only. Do not commit local IDE files, Gradle caches, build outputs, APKs/AABs, signing keys, or machine-specific paths such as `local.properties`.
+The repository should contain source files and public documentation only.
 
-See `.gitignore` and `GITHUB_UPLOAD_NOTES.md` before pushing a new package.
+Do not commit:
+
+```text
+.gradle/
+.idea/
+build/
+app/build/
+local.properties
+*.iml
+*.apk
+*.aab
+*.jks
+*.keystore
+*.pem
+*.p12
+.env
+secrets.properties
+google-services.json
+captures/
+*.hprof
+```
+
+See `.gitignore` and `GITHUB_UPLOAD_NOTES.md` before pushing or uploading a new package.
 
 ## License
 
