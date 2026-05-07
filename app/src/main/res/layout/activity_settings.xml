@@ -112,6 +112,22 @@
                     android:textSize="16sp" />
             </RadioGroup>
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/reading_theme"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:id="@+id/reading_theme_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:orientation="vertical" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_manage_themes"
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
@@ -164,6 +180,60 @@
             <Switch android:id="@+id/switch_notification" android:layout_width="match_parent" android:layout_height="56dp" android:text="@string/show_reading_notification" android:textColor="?attr/colorOnSurface" android:textSize="16sp" />
             <Switch android:id="@+id/switch_volume_scroll" android:layout_width="match_parent" android:layout_height="56dp" android:text="@string/volume_keys_page" android:textColor="?attr/colorOnSurface" android:textSize="16sp" />
             <Switch android:id="@+id/switch_tap_paging" android:layout_width="match_parent" android:layout_height="56dp" android:text="@string/tap_top_bottom_page" android:textColor="?attr/colorOnSurface" android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/tap_zone_mode"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="14sp" />
+
+            <Spinner
+                android:id="@+id/spinner_tap_zone_mode"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:background="@android:color/transparent"
+                android:popupBackground="?attr/colorSurface" />
+
+            <TextView
+                android:id="@+id/tap_zone_ratio_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/tap_zone_ratio_default"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tap_zone_leading_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/tap_zone_leading_default"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="13sp" />
+
+            <SeekBar
+                android:id="@+id/tap_zone_leading_seekbar"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:max="75" />
+
+            <TextView
+                android:id="@+id/tap_zone_trailing_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/tap_zone_trailing_default"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="13sp" />
+
+            <SeekBar
+                android:id="@+id/tap_zone_trailing_seekbar"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:max="75" />
 
             <TextView
                 android:layout_width="match_parent"

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Word/WebView selection styling.
+         Keep the floating toolbar dark by explicit background drawables, but do
+         NOT mark the whole activity as a dark theme. On Samsung/Chromium WebView,
+         android:isLightTheme=false makes WebView wrap custom handles inside the
+         native dark pill/capsule handle. Leaving the selection context light lets
+         the explicit textSelectHandle drawables be used without that dark capsule. -->
+    <style name="Theme.SimpleTextReader.DocumentSelectionContrast" parent="Theme.SimpleTextReader">
+        <item name="android:isLightTheme">true</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="colorAccent">#262626</item>
+        <item name="colorControlActivated">#262626</item>
+        <item name="android:colorAccent">#262626</item>
+        <item name="android:actionModeBackground">@drawable/bg_selection_popup_contrast</item>
+        <item name="actionModeBackground">@drawable/bg_selection_popup_contrast</item>
+        <item name="android:popupBackground">@drawable/bg_selection_popup_contrast</item>
+        <item name="android:textSelectHandle">@drawable/doc_text_select_handle_middle_dark</item>
+        <item name="android:textSelectHandleLeft">@drawable/doc_text_select_handle_left_dark</item>
+        <item name="android:textSelectHandleRight">@drawable/doc_text_select_handle_right_dark</item>
+        <item name="android:actionModeStyle">@style/Widget.SimpleTextReader.DocumentSelectionActionMode</item>
+        <item name="actionModeStyle">@style/Widget.SimpleTextReader.DocumentSelectionActionMode</item>
+        <item name="android:textColorPrimary">#1C1D1F</item>
+        <item name="android:textColorSecondary">#5A5E63</item>
+    </style>
+
+    <style name="Widget.SimpleTextReader.DocumentSelectionActionMode" parent="@style/Widget.AppCompat.ActionMode">
+        <item name="android:background">@drawable/bg_selection_popup_contrast</item>
+        <item name="background">@drawable/bg_selection_popup_contrast</item>
+        <item name="android:titleTextStyle">@style/TextAppearance.SimpleTextReader.DocumentSelectionActionMode</item>
+        <item name="titleTextStyle">@style/TextAppearance.SimpleTextReader.DocumentSelectionActionMode</item>
+        <item name="android:subtitleTextStyle">@style/TextAppearance.SimpleTextReader.DocumentSelectionActionMode</item>
+        <item name="subtitleTextStyle">@style/TextAppearance.SimpleTextReader.DocumentSelectionActionMode</item>
+    </style>
+
+    <style name="TextAppearance.SimpleTextReader.DocumentSelectionActionMode" parent="@style/TextAppearance.AppCompat.Widget.ActionMode.Title">
+        <item name="android:textColor">#F5F5F5</item>
+    </style>
+</resources>
