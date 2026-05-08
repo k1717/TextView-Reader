@@ -12,7 +12,6 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
-import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -120,12 +119,9 @@ public class DocumentPageActivity extends AppCompatActivity {
     private float wordSwipeStartX = 0f;
     private float wordSwipeStartY = 0f;
     private boolean wordSwipeTriggered = false;
-    private boolean wordSwipeMovedEnoughForParentDisallow = false;
     private boolean pageTurnInFlight = false;
-    private volatile boolean wordSelectionActive = false;
     private volatile boolean activityDestroyed = false;
     private int loadGeneration = 0;
-    private final Runnable checkWordSelectionAfterScrollRunnable = this::checkWordSelectionAfterScroll;
     private final Runnable releasePageTurnRunnable = () -> pageTurnInFlight = false;
     private final Map<String, String> wordRelationships = new LinkedHashMap<>();
 
@@ -209,7 +205,6 @@ public class DocumentPageActivity extends AppCompatActivity {
     protected void onPause() {
         saveReadingState();
         if (webView != null) {
-            webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
             webView.removeCallbacks(releasePageTurnRunnable);
             webView.onPause();
             webView.pauseTimers();
@@ -316,13 +311,11 @@ public class DocumentPageActivity extends AppCompatActivity {
     private void destroyDocumentWebView() {
         if (webView == null) return;
         try {
-            webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
             webView.removeCallbacks(releasePageTurnRunnable);
             webView.animate().cancel();
             webView.setOnTouchListener(null);
             webView.setOnScrollChangeListener(null);
             webView.setWebViewClient(null);
-            webView.removeJavascriptInterface("TekviewSelectionBridge");
             webView.stopLoading();
             webView.loadUrl("about:blank");
             webView.clearHistory();
@@ -372,13 +365,6 @@ public class DocumentPageActivity extends AppCompatActivity {
         webView.setLongClickable(true);
         webView.setHapticFeedbackEnabled(true);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        webView.addJavascriptInterface(new WordSelectionBridge(), "TekviewSelectionBridge");
-        webView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
-            if ("Word".equals(docType) && Math.abs(scrollY - oldScrollY) > dpToPx(1)) {
-                webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
-                webView.postDelayed(checkWordSelectionAfterScrollRunnable, 90);
-            }
-        });
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -390,7 +376,6 @@ public class DocumentPageActivity extends AppCompatActivity {
             public void onPageFinished(@NonNull WebView view, @NonNull String url) {
                 super.onPageFinished(view, url);
                 if (progressBar != null) progressBar.setVisibility(View.GONE);
-                installWordSelectionCleanupScript();
                 runDocumentSlideInAnimation();
             }
         });
@@ -421,26 +406,13 @@ public class DocumentPageActivity extends AppCompatActivity {
                     wordSwipeStartX = event.getX();
                     wordSwipeStartY = event.getY();
                     wordSwipeTriggered = false;
-                    wordSwipeMovedEnoughForParentDisallow = false;
-                    webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
                     webView.removeCallbacks(releasePageTurnRunnable);
                     return false;
 
                 case MotionEvent.ACTION_MOVE:
-                    if (wordSelectionActive) return false;
-                    float dx = event.getX() - wordSwipeStartX;
-                    float dy = event.getY() - wordSwipeStartY;
-                    if (!wordSwipeMovedEnoughForParentDisallow
-                            && Math.abs(dx) > wordSwipeTouchSlop
-                            && Math.abs(dx) > Math.abs(dy) * 1.35f) {
-                        wordSwipeMovedEnoughForParentDisallow = true;
-                        v.getParent().requestDisallowInterceptTouchEvent(true);
-                    }
-                    if (!wordSwipeTriggered && shouldTurnWordPageBySwipe(event)) {
-                        wordSwipeTriggered = true;
-                        turnDocumentPageBySwipe(event.getX() < wordSwipeStartX ? 1 : -1);
-                        return true;
-                    }
+                    // Do not intercept movement. WebView must receive the full MOVE
+                    // stream for native Android/Samsung text selection and handle
+                    // dragging to work correctly.
                     return false;
 
                 case MotionEvent.ACTION_UP:
@@ -451,15 +423,14 @@ public class DocumentPageActivity extends AppCompatActivity {
                     if (!wordSwipeTriggered && shouldTurnWordPageBySwipe(event)) {
                         wordSwipeTriggered = true;
                         turnDocumentPageBySwipe(event.getX() < wordSwipeStartX ? 1 : -1);
+                        resetWordSwipeTracking();
                         return true;
                     }
                     resetWordSwipeTracking();
-                    webView.postDelayed(checkWordSelectionAfterScrollRunnable, 120);
                     return false;
 
                 case MotionEvent.ACTION_CANCEL:
                     resetWordSwipeTracking();
-                    webView.postDelayed(checkWordSelectionAfterScrollRunnable, 120);
                     return false;
 
                 default:
@@ -470,12 +441,10 @@ public class DocumentPageActivity extends AppCompatActivity {
 
     private void resetWordSwipeTracking() {
         wordSwipeTriggered = false;
-        wordSwipeMovedEnoughForParentDisallow = false;
-        if (webView != null) webView.getParent().requestDisallowInterceptTouchEvent(false);
     }
 
     private boolean shouldTurnWordPageBySwipe(@NonNull MotionEvent event) {
-        if (activityDestroyed || wordSelectionActive || webView == null || pages.size() <= 1 || pageTurnInFlight) return false;
+        if (activityDestroyed || webView == null || pages.size() <= 1 || pageTurnInFlight) return false;
 
         float dx = event.getX() - wordSwipeStartX;
         float dy = event.getY() - wordSwipeStartY;
@@ -501,47 +470,6 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
     }
 
-    private void checkWordSelectionAfterScroll() {
-        if (activityDestroyed || !"Word".equals(docType) || webView == null) return;
-        webView.evaluateJavascript(
-                "(function(){try{return !!(window.__tekviewClearSelectionIfOffscreen&&window.__tekviewClearSelectionIfOffscreen());}catch(e){return false;}})()",
-                value -> {
-                    if ("true".equals(value)) {
-                        wordSelectionActive = false;
-                    }
-                });
-    }
-
-    private void installWordSelectionCleanupScript() {
-        if (activityDestroyed || !"Word".equals(docType) || webView == null) return;
-        webView.evaluateJavascript(
-                "(function(){try{"
-                        + "if(window.__tekviewSelectionCleanupInstalled){return true;}"
-                        + "window.__tekviewSelectionCleanupInstalled=true;"
-                        + "function sel(){return window.getSelection?window.getSelection():null;}"
-                        + "function active(){var s=sel();return !!(s&&!s.isCollapsed&&s.rangeCount>0&&String(s).length>0);}"
-                        + "function notify(){try{if(window.TekviewSelectionBridge){window.TekviewSelectionBridge.onSelectionChanged(active());}}catch(e){}}"
-                        + "window.__tekviewClearSelectionIfOffscreen=function(){"
-                        + "try{var s=sel();if(!s||s.isCollapsed||s.rangeCount===0||String(s).length===0){notify();return false;}"
-                        + "var r=s.getRangeAt(0);var rects=Array.prototype.slice.call(r.getClientRects()).filter(function(x){return x&&x.width>0&&x.height>0;});"
-                        + "if(!rects.length){s.removeAllRanges();notify();return true;}"
-                        + "var w=window.innerWidth||document.documentElement.clientWidth||0;var h=window.innerHeight||document.documentElement.clientHeight||0;var m=8;"
-                        + "var visible=rects.some(function(x){return x.bottom>=m&&x.top<=h-m&&x.right>=m&&x.left<=w-m;});"
-                        + "if(!visible){s.removeAllRanges();notify();return true;}notify();return false;}catch(e){return false;}};"
-                        + "document.addEventListener('selectionchange',function(){setTimeout(notify,0);},true);"
-                        + "document.addEventListener('touchend',function(){setTimeout(notify,70);},true);"
-                        + "document.addEventListener('mouseup',function(){setTimeout(notify,70);},true);"
-                        + "window.addEventListener('scroll',function(){clearTimeout(window.__tekviewScrollCleanupTimer);window.__tekviewScrollCleanupTimer=setTimeout(window.__tekviewClearSelectionIfOffscreen,80);},{passive:true});"
-                        + "setTimeout(notify,120);return true;}catch(e){return false;}})()",
-                null);
-    }
-
-    private class WordSelectionBridge {
-        @JavascriptInterface
-        public void onSelectionChanged(boolean active) {
-            wordSelectionActive = active;
-        }
-    }
 
     private void showMoreDialog() {
         LinearLayout box = makeDialogBox();
@@ -942,8 +870,6 @@ public class DocumentPageActivity extends AppCompatActivity {
             if (!baseUrl.endsWith("/")) baseUrl += "/";
         }
         prepareDocumentSlide(direction);
-        wordSelectionActive = false;
-        webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
         webView.getSettings().setJavaScriptEnabled("Word".equals(docType));
         webView.loadDataWithBaseURL(baseUrl, applyReaderThemeCss(p.html), "text/html", "UTF-8", null);
         updateStatus();

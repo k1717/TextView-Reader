@@ -28,6 +28,8 @@ public class Bookmark {
     private int charPosition;  // character offset in file
     private int endPosition;   // end offset of excerpt/context, TekView-style start/end range
     private int lineNumber;    // approximate line number
+    private int pageNumber;    // cached displayed page number for fast large-file restore
+    private int totalPages;    // cached displayed total page count when bookmark was saved
     private String excerpt;    // text excerpt for quick reference
     private String label;      // optional user-defined label
     private long createdAt;
@@ -59,6 +61,8 @@ public class Bookmark {
         obj.put("charPosition", charPosition);
         obj.put("endPosition", endPosition);
         obj.put("lineNumber", lineNumber);
+        obj.put("pageNumber", pageNumber);
+        obj.put("totalPages", totalPages);
         obj.put("excerpt", excerpt != null ? excerpt : "");
         obj.put("label", label != null ? label : "");
         obj.put("createdAt", createdAt);
@@ -74,6 +78,8 @@ public class Bookmark {
         b.charPosition = obj.optInt("charPosition", 0);
         b.endPosition = obj.optInt("endPosition", b.charPosition);
         b.lineNumber = obj.optInt("lineNumber", 0);
+        b.pageNumber = obj.optInt("pageNumber", 0);
+        b.totalPages = obj.optInt("totalPages", 0);
         b.excerpt = obj.optString("excerpt", "");
         b.label = obj.optString("label", "");
         b.createdAt = obj.optLong("createdAt", System.currentTimeMillis());
@@ -100,6 +106,12 @@ public class Bookmark {
 
     public int getLineNumber() { return lineNumber; }
     public void setLineNumber(int lineNumber) { this.lineNumber = lineNumber; }
+
+    public int getPageNumber() { return pageNumber; }
+    public void setPageNumber(int pageNumber) { this.pageNumber = pageNumber; }
+
+    public int getTotalPages() { return totalPages; }
+    public void setTotalPages(int totalPages) { this.totalPages = totalPages; }
 
     public String getExcerpt() { return excerpt; }
     public void setExcerpt(String excerpt) { this.excerpt = excerpt; }

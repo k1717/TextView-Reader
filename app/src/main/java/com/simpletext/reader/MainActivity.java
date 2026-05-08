@@ -1781,35 +1781,77 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     }
 
     private void showSortDialog() {
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_sort, null);
-        RadioGroup group = dialogView.findViewById(R.id.sort_group);
+        final boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
+        final int bg = dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255);
+        final int panel = dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245);
+        final int fg = dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36);
+        final int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104);
+        final int line = dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dpToPx(18), dpToPx(16), dpToPx(18), dpToPx(10));
+        GradientDrawable bgShape = new GradientDrawable();
+        bgShape.setColor(bg);
+        bgShape.setCornerRadius(dpToPx(18));
+        bgShape.setStroke(Math.max(1, dpToPx(1)), line);
+        box.setBackground(bgShape);
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.sort_by));
+        title.setTextColor(fg);
+        title.setTextSize(21f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setPadding(dpToPx(6), 0, dpToPx(6), dpToPx(12));
+        box.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        RadioGroup group = new RadioGroup(this);
+        group.setOrientation(RadioGroup.VERTICAL);
+        group.setPadding(0, 0, 0, dpToPx(2));
+        box.addView(group, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
         boolean sortingRecentHome = homeMode && !searchMode;
         final int recentReadId = View.generateViewId();
+
         if (sortingRecentHome) {
-            RadioButton recentRead = new RadioButton(this);
-            recentRead.setId(recentReadId);
-            recentRead.setText(R.string.sort_recent_read);
-            group.addView(recentRead, 0, new RadioGroup.LayoutParams(
-                    RadioGroup.LayoutParams.MATCH_PARENT, dpToPx(48)));
+            group.addView(makeSortRadioButton(recentReadId, getString(R.string.sort_recent_read), fg, panel, line));
         }
 
-        int[] ids = {R.id.sort_name_asc, R.id.sort_name_desc, R.id.sort_date_new,
-                R.id.sort_date_old, R.id.sort_size_large, R.id.sort_size_small, R.id.sort_type};
+        int[] ids = new int[7];
+        for (int i = 0; i < ids.length; i++) ids[i] = View.generateViewId();
+
+        CharSequence[] labels = new CharSequence[] {
+                getString(R.string.sort_name_asc),
+                getString(R.string.sort_name_desc),
+                getString(R.string.sort_date_new),
+                getString(R.string.sort_date_old),
+                getString(R.string.sort_size_large),
+                getString(R.string.sort_size_small),
+                getString(R.string.sort_type)
+        };
+
+        for (int i = 0; i < labels.length; i++) {
+            group.addView(makeSortRadioButton(ids[i], labels[i], fg, panel, line));
+        }
+
         int current = sortingRecentHome
                 ? (prefs != null ? prefs.getRecentSortMode() : PrefsManager.SORT_RECENT_READ)
                 : (prefs != null ? prefs.getSortMode() : PrefsManager.SORT_NAME_ASC);
         if (sortingRecentHome && current == PrefsManager.SORT_RECENT_READ) {
             group.check(recentReadId);
         } else if (current >= 0 && current < ids.length) {
-            ((RadioButton) dialogView.findViewById(ids[current])).setChecked(true);
+            group.check(ids[current]);
+        } else {
+            group.check(ids[PrefsManager.SORT_NAME_ASC]);
         }
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(getString(R.string.sort_by))
-                .setView(dialogView)
-                .setNegativeButton(getString(R.string.cancel), null)
-                .create();
+        AlertDialog dialog = new AlertDialog.Builder(this).create();
+        dialog.setView(box);
+        dialog.setOnShowListener(d -> applyRoundedDialogWindow(dialog));
 
         group.setOnCheckedChangeListener((g, checkedId) -> {
             if (sortingRecentHome && checkedId == recentReadId) {
@@ -1834,7 +1876,59 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             }
         });
 
+        TextView cancel = new TextView(this);
+        cancel.setText(getString(R.string.cancel));
+        cancel.setTextColor(sub);
+        cancel.setTextSize(16f);
+        cancel.setGravity(Gravity.CENTER);
+        cancel.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        box.addView(cancel, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(48)));
+        cancel.setOnClickListener(v -> dialog.dismiss());
+
         dialog.show();
+    }
+
+    private RadioButton makeSortRadioButton(int id, CharSequence label, int fg, int panel, int line) {
+        RadioButton radio = new RadioButton(this);
+        radio.setId(id);
+        radio.setText(label);
+        radio.setTextColor(fg);
+        radio.setTextSize(16f);
+        radio.setGravity(Gravity.CENTER_VERTICAL);
+        radio.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+
+        GradientDrawable rowBg = new GradientDrawable();
+        rowBg.setColor(panel);
+        rowBg.setCornerRadius(dpToPx(12));
+        rowBg.setStroke(Math.max(1, dpToPx(1)), line);
+        radio.setBackground(rowBg);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            int[][] states = new int[][] {
+                    new int[] { android.R.attr.state_checked },
+                    new int[] {}
+            };
+            int[] colors = new int[] { fg, fg };
+            radio.setButtonTintList(new android.content.res.ColorStateList(states, colors));
+        }
+
+        RadioGroup.LayoutParams lp = new RadioGroup.LayoutParams(
+                RadioGroup.LayoutParams.MATCH_PARENT,
+                dpToPx(48));
+        lp.setMargins(0, 0, 0, dpToPx(8));
+        radio.setLayoutParams(lp);
+        return radio;
+    }
+
+    private void applyRoundedDialogWindow(@NonNull AlertDialog dialog) {
+        if (dialog.getWindow() == null) return;
+        dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        android.view.WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
+        lp.dimAmount = 0.22f;
+        dialog.getWindow().setAttributes(lp);
+        dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
     }
 
     // -------------------------------------------------------------------------

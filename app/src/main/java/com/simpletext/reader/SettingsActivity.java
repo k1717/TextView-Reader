@@ -80,6 +80,7 @@ public class SettingsActivity extends AppCompatActivity {
         setupDarkMode();
         setupFontSize();
         setupLineSpacing();
+        setupTextZoneTuning();
         setupSwitches();
         setupLock();
         setupExportImport();
@@ -265,6 +266,97 @@ public class SettingsActivity extends AppCompatActivity {
         ratioLabel.setText(getString(R.string.tap_zone_ratio_format, leading, middle, trailing));
         leadingLabel.setText(getString(R.string.tap_zone_leading_format, leading));
         trailingLabel.setText(getString(R.string.tap_zone_trailing_format, trailing));
+    }
+
+
+    private void setupTextZoneTuning() {
+        SeekBar topSeekBar = findViewById(R.id.txt_top_offset_seekbar);
+        TextView topLabel = findViewById(R.id.txt_top_offset_label);
+        SeekBar bottomSeekBar = findViewById(R.id.txt_bottom_offset_seekbar);
+        TextView bottomLabel = findViewById(R.id.txt_bottom_offset_label);
+        SeekBar leftSeekBar = findViewById(R.id.txt_left_inset_seekbar);
+        TextView leftLabel = findViewById(R.id.txt_left_inset_label);
+        SeekBar rightSeekBar = findViewById(R.id.txt_right_inset_seekbar);
+        TextView rightLabel = findViewById(R.id.txt_right_inset_label);
+        if (topSeekBar == null || topLabel == null
+                || bottomSeekBar == null || bottomLabel == null
+                || leftSeekBar == null || leftLabel == null
+                || rightSeekBar == null || rightLabel == null) {
+            return;
+        }
+
+        final int textZoneStepPx = 5;
+        final int textZoneMaxPx = 240;
+        final int textZoneMaxProgress = textZoneMaxPx / textZoneStepPx;
+
+        int topOffset = roundToTextZoneStep(prefs.getReaderTextTopOffsetPx(), textZoneStepPx);
+        topSeekBar.setMax(textZoneMaxProgress); // 0px .. 240px, 5px steps
+        topSeekBar.setProgress(topOffset / textZoneStepPx);
+        topLabel.setText(getString(R.string.txt_top_offset_format, topOffset));
+        topSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int value = progress * textZoneStepPx;
+                topLabel.setText(getString(R.string.txt_top_offset_format, value));
+                if (fromUser) prefs.setReaderTextTopOffsetPx(value);
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                prefs.setReaderTextTopOffsetPx(seekBar.getProgress() * textZoneStepPx);
+            }
+        });
+
+        int bottomOffset = roundToTextZoneStep(prefs.getReaderTextBottomOffsetPx(), textZoneStepPx);
+        bottomSeekBar.setMax(textZoneMaxProgress); // 0px .. 240px, 5px steps
+        bottomSeekBar.setProgress(bottomOffset / textZoneStepPx);
+        bottomLabel.setText(getString(R.string.txt_bottom_offset_format, bottomOffset));
+        bottomSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int value = progress * textZoneStepPx;
+                bottomLabel.setText(getString(R.string.txt_bottom_offset_format, value));
+                if (fromUser) prefs.setReaderTextBottomOffsetPx(value);
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                prefs.setReaderTextBottomOffsetPx(seekBar.getProgress() * textZoneStepPx);
+            }
+        });
+
+        int leftInset = roundToTextZoneStep(prefs.getReaderTextLeftInsetPx(), textZoneStepPx);
+        leftSeekBar.setMax(textZoneMaxProgress); // 0px .. 240px, 5px steps
+        leftSeekBar.setProgress(leftInset / textZoneStepPx);
+        leftLabel.setText(getString(R.string.txt_left_inset_format, leftInset));
+        leftSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int value = progress * textZoneStepPx;
+                leftLabel.setText(getString(R.string.txt_left_inset_format, value));
+                if (fromUser) prefs.setReaderTextLeftInsetPx(value);
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                prefs.setReaderTextLeftInsetPx(seekBar.getProgress() * textZoneStepPx);
+            }
+        });
+
+        int rightInset = roundToTextZoneStep(prefs.getReaderTextRightInsetPx(), textZoneStepPx);
+        rightSeekBar.setMax(textZoneMaxProgress); // 0px .. 240px, 5px steps
+        rightSeekBar.setProgress(rightInset / textZoneStepPx);
+        rightLabel.setText(getString(R.string.txt_right_inset_format, rightInset));
+        rightSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int value = progress * textZoneStepPx;
+                rightLabel.setText(getString(R.string.txt_right_inset_format, value));
+                if (fromUser) prefs.setReaderTextRightInsetPx(value);
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                prefs.setReaderTextRightInsetPx(seekBar.getProgress() * textZoneStepPx);
+            }
+        });
+    }
+
+    private int roundToTextZoneStep(int px, int stepPx) {
+        int clamped = Math.max(0, Math.min(240, px));
+        return Math.round(clamped / (float) stepPx) * stepPx;
     }
 
     private void setupSwitches() {
@@ -459,6 +551,14 @@ public class SettingsActivity extends AppCompatActivity {
         if (font != null) font.setTextColor(sub);
         TextView spacing = findViewById(R.id.line_spacing_label);
         if (spacing != null) spacing.setTextColor(sub);
+        TextView topOffset = findViewById(R.id.txt_top_offset_label);
+        if (topOffset != null) topOffset.setTextColor(sub);
+        TextView bottomOffset = findViewById(R.id.txt_bottom_offset_label);
+        if (bottomOffset != null) bottomOffset.setTextColor(sub);
+        TextView leftInset = findViewById(R.id.txt_left_inset_label);
+        if (leftInset != null) leftInset.setTextColor(sub);
+        TextView rightInset = findViewById(R.id.txt_right_inset_label);
+        if (rightInset != null) rightInset.setTextColor(sub);
         TextView ratio = findViewById(R.id.tap_zone_ratio_label);
         if (ratio != null) ratio.setTextColor(sub);
         TextView leading = findViewById(R.id.tap_zone_leading_label);

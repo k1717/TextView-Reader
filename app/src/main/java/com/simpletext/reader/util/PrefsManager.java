@@ -8,6 +8,7 @@ import androidx.core.os.LocaleListCompat;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 
 public class PrefsManager {
     private static final String PREFS_NAME = "simple_text_reader_prefs";
@@ -69,7 +70,12 @@ public class PrefsManager {
 
 
     // Language
-    public int getLanguageMode() { return normalizeLanguageMode(prefs.getInt("language_mode", LANGUAGE_ENGLISH)); }
+    public int getLanguageMode() {
+        if (!prefs.contains("language_mode")) {
+            return detectSystemLanguageMode();
+        }
+        return normalizeLanguageMode(prefs.getInt("language_mode", detectSystemLanguageMode()));
+    }
 
     public void setLanguageMode(int mode) {
         int normalized = normalizeLanguageMode(mode);
@@ -82,8 +88,16 @@ public class PrefsManager {
     }
 
     public void applyLanguage(int mode) {
-        String tag = languageTagForMode(normalizeLanguageMode(mode));
-        LocaleListCompat target = LocaleListCompat.forLanguageTags(tag);
+        LocaleListCompat target;
+        if (!prefs.contains("language_mode")) {
+            // First install / untouched language setting: let Android/AppCompat follow
+            // the system locale instead of forcing English.
+            target = LocaleListCompat.getEmptyLocaleList();
+        } else {
+            String tag = languageTagForMode(normalizeLanguageMode(mode));
+            target = LocaleListCompat.forLanguageTags(tag);
+        }
+
         LocaleListCompat current = AppCompatDelegate.getApplicationLocales();
 
         // Avoid redundant locale sets. Re-setting the same locale can cause unnecessary
@@ -95,6 +109,12 @@ public class PrefsManager {
 
     private int normalizeLanguageMode(int mode) {
         return mode == LANGUAGE_KOREAN ? LANGUAGE_KOREAN : LANGUAGE_ENGLISH;
+    }
+
+    private int detectSystemLanguageMode() {
+        Locale locale = Locale.getDefault();
+        String language = locale != null ? locale.getLanguage() : "";
+        return "ko".equalsIgnoreCase(language) ? LANGUAGE_KOREAN : LANGUAGE_ENGLISH;
     }
 
     private String languageTagForMode(int mode) {
@@ -155,6 +175,26 @@ public class PrefsManager {
     public void setMarginHorizontal(int dp) { prefs.edit().putInt("page_margin_h", dp).apply(); }
     public int getMarginVertical() { return prefs.getInt("page_margin_v", 16); }
     public void setMarginVertical(int dp) { prefs.edit().putInt("page_margin_v", dp).apply(); }
+
+    // TXT reader layout tuning. Offsets/insets are raw pixels.
+    // Top: positive moves the top boundary down. Bottom: negative moves the bottom boundary up.
+    // Left/right: positive shrinks the readable width from that side.
+    public int getReaderTextTopOffsetPx() { return prefs.getInt("reader_text_top_offset_px", 0); }
+    public void setReaderTextTopOffsetPx(int px) {
+        prefs.edit().putInt("reader_text_top_offset_px", Math.max(0, Math.min(240, px))).apply();
+    }
+    public int getReaderTextBottomOffsetPx() { return prefs.getInt("reader_text_bottom_offset_px", 0); }
+    public void setReaderTextBottomOffsetPx(int px) {
+        prefs.edit().putInt("reader_text_bottom_offset_px", Math.max(0, Math.min(240, px))).apply();
+    }
+    public int getReaderTextLeftInsetPx() { return prefs.getInt("reader_text_left_inset_px", 0); }
+    public void setReaderTextLeftInsetPx(int px) {
+        prefs.edit().putInt("reader_text_left_inset_px", Math.max(0, Math.min(240, px))).apply();
+    }
+    public int getReaderTextRightInsetPx() { return prefs.getInt("reader_text_right_inset_px", 0); }
+    public void setReaderTextRightInsetPx(int px) {
+        prefs.edit().putInt("reader_text_right_inset_px", Math.max(0, Math.min(240, px))).apply();
+    }
 
     // Lock
     public boolean isLockEnabled() { return prefs.getBoolean("lock_enabled", false); }

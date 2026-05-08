@@ -60,6 +60,10 @@ public class CustomReaderView extends View {
     private int marginHorizontalPx = 24;
     private int marginVerticalPx = 16;
     private int overlapLines = 0;
+    private int topTextZoneOffsetPx = 0;
+    private int bottomTextZoneOffsetPx = 0;
+    private int leftTextInsetPx = 0;
+    private int rightTextInsetPx = 0;
     private Typeface typeface = Typeface.DEFAULT;
     private String searchQuery = "";
     private int activeSearchIndex = -1;
@@ -154,6 +158,33 @@ public class CustomReaderView extends View {
         this.overlapLines = Math.max(0, Math.min(8, overlapLines));
     }
 
+    public void setTextZoneAdjustments(int topOffsetPx, int bottomOffsetPx, int leftInsetPx, int rightInsetPx) {
+        int nextTopOffset = Math.max(0, Math.min(240, topOffsetPx));
+        int nextBottomOffset = Math.max(0, Math.min(240, bottomOffsetPx));
+        int nextLeftInset = Math.max(0, Math.min(240, leftInsetPx));
+        int nextRightInset = Math.max(0, Math.min(240, rightInsetPx));
+
+        boolean widthChanged = this.leftTextInsetPx != nextLeftInset
+                || this.rightTextInsetPx != nextRightInset;
+        boolean viewportChanged = this.topTextZoneOffsetPx != nextTopOffset
+                || this.bottomTextZoneOffsetPx != nextBottomOffset;
+
+        if (!widthChanged && !viewportChanged) return;
+
+        this.topTextZoneOffsetPx = nextTopOffset;
+        this.bottomTextZoneOffsetPx = nextBottomOffset;
+        this.leftTextInsetPx = nextLeftInset;
+        this.rightTextInsetPx = nextRightInset;
+
+        if (widthChanged) {
+            rebuildLayout();
+        } else {
+            recalcMaxScroll();
+        }
+
+        invalidate();
+        notifyScrollChanged();
+    }
 
     public void setSearchHighlight(String query, int activeSearchIndex) {
         this.searchQuery = query != null ? query : "";
@@ -181,7 +212,8 @@ public class CustomReaderView extends View {
     }
 
     private void rebuildLayout() {
-        int width = getWidth() - getPaddingLeft() - getPaddingRight() - marginHorizontalPx * 2;
+        int width = getWidth() - getPaddingLeft() - getPaddingRight()
+                - marginHorizontalPx * 2 - leftTextInsetPx - rightTextInsetPx;
         if (width <= 0) return;
 
         layout = StaticLayout.Builder
@@ -209,7 +241,23 @@ public class CustomReaderView extends View {
     }
 
     public int getViewportHeight() {
-        return Math.max(1, getHeight() - getPaddingTop() - getPaddingBottom());
+        int top = getTextViewportTopY();
+        int bottom = getTextViewportBottomY();
+        return Math.max(1, bottom - top);
+    }
+
+    private int getTextViewportTopY() {
+        int physicalTop = getPaddingTop();
+        int physicalBottom = getHeight() - getPaddingBottom();
+        int shiftedTop = physicalTop + topTextZoneOffsetPx;
+        return Math.max(physicalTop, Math.min(physicalBottom - 1, shiftedTop));
+    }
+
+    private int getTextViewportBottomY() {
+        int physicalTop = getTextViewportTopY();
+        int physicalBottom = getHeight() - getPaddingBottom();
+        int shiftedBottom = physicalBottom - bottomTextZoneOffsetPx;
+        return Math.max(physicalTop + 1, Math.min(physicalBottom, shiftedBottom));
     }
 
     @Override
@@ -225,12 +273,13 @@ public class CustomReaderView extends View {
         if (layout == null) return;
 
         canvas.save();
-        canvas.clipRect(getPaddingLeft(),
-                getPaddingTop(),
-                getWidth() - getPaddingRight(),
+        int viewportTop = getTextViewportTopY();
+        canvas.clipRect(getPaddingLeft() + marginHorizontalPx + leftTextInsetPx,
+                viewportTop,
+                getWidth() - getPaddingRight() - marginHorizontalPx - rightTextInsetPx,
                 getFullLineClipBottom());
-        canvas.translate(getPaddingLeft() + marginHorizontalPx,
-                getPaddingTop() + marginVerticalPx - readerScrollY);
+        canvas.translate(getPaddingLeft() + marginHorizontalPx + leftTextInsetPx,
+                viewportTop + marginVerticalPx - readerScrollY);
         drawSearchHighlights(canvas);
         layout.draw(canvas);
         canvas.restore();
@@ -365,10 +414,12 @@ public class CustomReaderView extends View {
     }
 
     private int getFullLineClipBottom() {
-        if (layout == null) return getHeight() - getPaddingBottom();
+        if (layout == null) {
+            return getTextViewportBottomY();
+        }
 
-        int viewTop = getPaddingTop();
-        int viewBottom = getHeight() - getPaddingBottom();
+        int viewTop = getTextViewportTopY();
+        int viewBottom = getTextViewportBottomY();
         int viewportHeight = Math.max(1, viewBottom - viewTop);
 
         int layoutTopY = Math.max(0, readerScrollY - marginVerticalPx);
@@ -379,7 +430,7 @@ public class CustomReaderView extends View {
 
         if (lineBottom > visibleBottomInLayout) {
             int fullBottomInLayout = Math.max(0, layout.getLineTop(line));
-            int screenBottom = getPaddingTop() + marginVerticalPx - readerScrollY + fullBottomInLayout;
+            int screenBottom = viewTop + marginVerticalPx - readerScrollY + fullBottomInLayout;
             return Math.max(viewTop, Math.min(viewBottom, screenBottom));
         }
 
@@ -411,18 +462,24 @@ public class CustomReaderView extends View {
 
     public int getCurrentPageNumber() {
         int step = getPageStepPx();
-        int page = (readerScrollY / step) + 1;
-        return Math.max(1, Math.min(getTotalPageCount(), page));
+        int total = getTotalPageCount();
+        int page = Math.round(readerScrollY / (float) step) + 1;
+        return Math.max(1, Math.min(total, page));
+    }
+
+    private int getPageAnchorScrollY(int page) {
+        int total = getTotalPageCount();
+        int clampedPage = Math.max(1, Math.min(total, page));
+        return snapScrollYToLineTop((clampedPage - 1) * getPageStepPx());
     }
 
     public void scrollToPage(int page) {
-        int total = getTotalPageCount();
-        page = Math.max(1, Math.min(total, page));
-        setReaderScrollY(snapScrollYToLineTop((page - 1) * getPageStepPx()));
+        setReaderScrollY(getPageAnchorScrollY(page));
     }
 
     public void pageBy(int direction) {
-        setReaderScrollY(snapScrollYToLineTop(readerScrollY + direction * getPageStepPx()));
+        if (direction == 0) return;
+        scrollToPage(getCurrentPageNumber() + direction);
     }
 
     public void scrollToPercent(float percent) {

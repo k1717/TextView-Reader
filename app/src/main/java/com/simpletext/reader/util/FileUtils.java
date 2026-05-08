@@ -497,12 +497,69 @@ public class FileUtils {
                 continue;
             }
 
+            // U+2728 SPARKLES is emoji-default on many Samsung/Android builds.
+            // Even with U+FE0E, some devices still route it through the color emoji font.
+            // Use the closest monochrome text-star fallback instead.
+            if (ch == '\u2728') {
+                out.append('\u2727'); // ✧
+                if (i + 1 < text.length()) {
+                    char next = text.charAt(i + 1);
+                    if (next == '\uFE0E' || next == '\uFE0F') {
+                        i++;
+                    }
+                }
+                continue;
+            }
+
+            if (needsTextPresentationSelector(ch)) {
+                out.append(ch);
+                if (i + 1 < text.length()) {
+                    char next = text.charAt(i + 1);
+                    if (next == '\uFE0E') {
+                        out.append(next);
+                        i++;
+                    } else if (next == '\uFE0F') {
+                        out.append('\uFE0E');
+                        i++;
+                    } else {
+                        out.append('\uFE0E');
+                    }
+                } else {
+                    out.append('\uFE0E');
+                }
+                continue;
+            }
+
             out.append(ch);
         }
 
         return out.toString()
                 .replace("\r\n", "\n")
                 .replace('\r', '\n');
+    }
+
+    public static String enforceTextPresentationSelectors(String text) {
+        return sanitizeDecodedText(text);
+    }
+
+    private static boolean needsTextPresentationSelector(char ch) {
+        switch (ch) {
+            case '\u2605': // ★
+            case '\u2606': // ☆
+            case '\u2665': // ♥
+            case '\u2661': // ♡
+            case '\u2660': // ♠
+            case '\u2663': // ♣
+            case '\u2666': // ♦
+            case '\u263A': // ☺
+            case '\u2639': // ☹
+            case '\u2764': // ❤
+            case '\u2714': // ✔
+            case '\u2716': // ✖
+                return true;
+            default:
+                return false;
+        }
     }
 
     /**
