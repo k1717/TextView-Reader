@@ -151,6 +151,14 @@
     <string name="tap_zone_trailing_default">Next zone: 35%%</string>
     <string name="tap_zone_leading_format">Previous zone: %1$d%%</string>
     <string name="tap_zone_trailing_format">Next zone: %1$d%%</string>
+    <string name="txt_top_offset_default">TXT top boundary: 0px</string>
+    <string name="txt_top_offset_format">TXT top boundary: %1$dpx</string>
+    <string name="txt_bottom_offset_default">TXT bottom boundary: 0px</string>
+    <string name="txt_bottom_offset_format">TXT bottom boundary: %1$dpx</string>
+    <string name="txt_left_inset_default">TXT left boundary: 0px</string>
+    <string name="txt_left_inset_format">TXT left boundary: %1$dpx</string>
+    <string name="txt_right_inset_default">TXT right boundary: 0px</string>
+    <string name="txt_right_inset_format">TXT right boundary: %1$dpx</string>
     <string name="title_bookmarks">Bookmarks</string>
     <string name="title_lock">Lock</string>
     <string name="title_reader">Reader</string>

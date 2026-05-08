@@ -151,6 +151,14 @@
     <string name="tap_zone_trailing_default">다음 영역: 35%%</string>
     <string name="tap_zone_leading_format">이전 영역: %1$d%%</string>
     <string name="tap_zone_trailing_format">다음 영역: %1$d%%</string>
+    <string name="txt_top_offset_default">TXT 상단 경계: 0px</string>
+    <string name="txt_top_offset_format">TXT 상단 경계: %1$dpx</string>
+    <string name="txt_bottom_offset_default">TXT 하단 경계: 0px</string>
+    <string name="txt_bottom_offset_format">TXT 하단 경계: %1$dpx</string>
+    <string name="txt_left_inset_default">TXT 좌측 경계: 0px</string>
+    <string name="txt_left_inset_format">TXT 좌측 경계: %1$dpx</string>
+    <string name="txt_right_inset_default">TXT 우측 경계: 0px</string>
+    <string name="txt_right_inset_format">TXT 우측 경계: %1$dpx</string>
     <string name="title_bookmarks">북마크</string>
     <string name="title_lock">잠금</string>
     <string name="title_reader">리더</string>
