@@ -1,100 +1,113 @@
-# TextView Reader - Android Studio Setup
+# Android Studio Setup for Beginners
 
-This project is a Java Android reader app. It supports TXT, PDF, EPUB, and OOXML Word files.
+This guide explains how to open and build TextView Reader from source.
 
-## 1. Open the project
+## 1. Open the correct folder
 
-1. Unzip the package or clone the repository.
+1. Unzip the source package.
 2. Open Android Studio.
 3. Click **Open**.
-4. Select the project root folder, not the `app` folder.
-   - Correct: the folder that contains `settings.gradle`, `build.gradle`, `gradlew`, and `app/`.
-   - Wrong: selecting only `app/`.
-5. Wait for **Gradle Sync** to finish.
+4. Select the project root folder.
 
-## 2. Install missing SDK if Android Studio asks
+Correct folder contents should include:
+
+```text
+app/
+gradle/
+settings.gradle
+build.gradle
+gradlew
+gradlew.bat
+```
+
+Do **not** open only the `app/` folder.
+
+## 2. Sync Gradle
+
+After opening the project, Android Studio should start Gradle sync automatically.
 
 The project uses:
 
-- `compileSdk 35`;
-- `targetSdk 35`;
-- `minSdk 24`;
+- Android Gradle Plugin 8.13.1;
+- compileSdk 35;
+- targetSdk 35;
+- minSdk 24;
 - Java 17.
 
-If Android Studio says SDK Platform 35 is missing, use the install/fix link shown by Android Studio.
+If Android Studio asks to install SDK Platform 35 or related build tools, accept the installation.
 
 ## 3. Build a debug APK
 
-Android Studio menu path:
+Use Android Studio:
 
-1. **Build > Make Project**
-2. **Build > Build Bundle(s) / APK(s) > Build APK(s)**
+1. Click **Build > Make Project**.
+2. Then click **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
 
-Command line:
+Or use command line:
 
 ```bash
 ./gradlew assembleDebug
 ```
 
-Windows:
+On Windows:
 
-```powershell
+```bat
 .\gradlew.bat assembleDebug
 ```
 
-The locally generated debug APK appears under:
+The debug APK is generated locally at:
 
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-That APK is build output. Do not upload it to GitHub.
+Do not upload this APK to GitHub source history.
 
-## 4. Run on your phone
+## 4. Run on a phone
 
 1. Enable Developer Options on the phone.
 2. Enable USB Debugging.
 3. Connect the phone by USB.
-4. In Android Studio, choose your phone from the device dropdown.
+4. Select the phone in Android Studio.
 5. Press the green Run button.
 
-## 5. First test checklist
+## 5. First-use checklist
 
-After the app installs:
+After the app launches:
 
-1. Give storage permission/all-files permission if prompted.
-2. Open the app. The home page should show **Recently Read** files.
-3. Open a `.txt`, `.pdf`, `.epub`, or `.docx` file.
-4. Return to the main screen and confirm the file appears at the top of Recently Read.
-5. Tap the small sort icon beside file search and verify sort modes work on the home page.
-6. Open a folder from the drawer and verify the same sort icon works in folder browsing.
-7. Type in the file search bar and test the All / General / PDF / EPUB / Word filters.
-8. Open the left drawer and confirm fixed shortcuts stay separate from the scrollable recent-folder list.
-9. Use the drawer bottom actions to open file picker, bookmarks, and settings.
-10. In the TXT reader, test tap-zone page movement, volume-key paging, search, and bookmark creation.
-11. In PDF/Word/EPUB viewers, test page movement, bookmarks, and returning to the file browser.
-12. Open a different file while a viewer was recently used; the app should reuse the matching viewer path instead of stacking repeated viewer loops.
-13. Close and reopen a file; position should restore.
-14. Try dark mode and reading themes in Settings.
+1. Confirm the initial app language follows the device/system language.
+2. Open a TXT file.
+3. Confirm recent files appear on the home screen after opening a file.
+4. Use the search field to filter files.
+5. Use the small sort icon beside search to change sort order.
+6. Open the left drawer and check Recent, Internal Storage, Downloads, and recent folders.
+7. Long-press a file and check file information, rename, and delete dialogs.
+8. Open PDF, EPUB, or Word files if available.
+9. Add a bookmark and confirm it appears in the bookmark list.
+10. Open Settings and check language, theme, behavior, backup, and lock options.
 
-## 6. Current known limitations
+## 6. Clean package rule
 
-- This is still a source package for development/testing, not a polished store release.
-- Large TXT files are rendered through a custom view; extremely large files may still need optimization.
-- SAF-opened files may be copied/cached for local reading behavior.
-- All-files storage permission is convenient for sideload testing, but a stricter SAF-first model is better for public store distribution.
-- PIN lock is an app-level convenience lock, not cryptographic file encryption.
+Before uploading source to GitHub, remove or exclude:
 
-## 7. If Gradle fails
-
-Capture the first red error line before changing files.
-
-Common first failures are:
-
-- Missing SDK Platform 35.
-- Wrong JDK selection; use JDK 17.
-- Gradle sync interrupted before wrapper download finished.
-- Resource compile issue after manually editing XML.
-- Opening only the `app/` folder instead of the repository root.
-
-Do not randomly delete or regenerate source files before recording the exact error.
+```text
+.gradle/
+.idea/
+build/
+app/build/
+local.properties
+*.apk
+*.aab
+*.apks
+*.jks
+*.keystore
+*.pem
+*.p12
+.env
+.env.*
+secrets.properties
+google-services.json
+captures/
+*.hprof
+*.log
+```

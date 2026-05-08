@@ -1,6 +1,40 @@
 # GitHub Upload Notes
 
-This repository should contain only source files and public project documentation.
+Use this checklist before replacing files on GitHub through the web interface.
+
+## Safe upload contents
+
+Upload the contents of the clean source folder, not the outer folder itself.
+
+The repository root should contain files and folders like:
+
+```text
+app/
+gradle/
+.gitignore
+README.md
+CHANGELOG.md
+LICENSE
+PRIVACY.md
+CONTRIBUTING.md
+ANDROID_STUDIO_SETUP_FOR_BEGINNERS.md
+BUILD_FIX_NOTES.md
+GITHUB_UPLOAD_NOTES.md
+build.gradle
+gradle.properties
+gradlew
+gradlew.bat
+settings.gradle
+```
+
+The Android source should remain under:
+
+```text
+app/src/main/java/
+app/src/main/res/
+app/src/main/AndroidManifest.xml
+app/src/main/ic_launcher-playstore.png
+```
 
 ## Do not upload
 
@@ -10,125 +44,63 @@ This repository should contain only source files and public project documentatio
 build/
 app/build/
 local.properties
-*.iml
 *.apk
 *.aab
+*.apks
 *.jks
 *.keystore
 *.pem
 *.p12
 .env
+.env.*
 secrets.properties
 google-services.json
 captures/
 *.hprof
+*.log
 ```
 
-`local.properties` is machine-specific. Android Studio recreates it with the local SDK path.
+## Web upload steps
 
-## Correct project layout
-
-The Android app source should be under:
-
-```text
-app/src/main/AndroidManifest.xml
-app/src/main/java/
-app/src/main/res/
-app/src/main/ic_launcher-playstore.png
-```
-
-The repository root should not contain these Android source/resource duplicates:
-
-```text
-java/
-res/
-AndroidManifest.xml
-ic_launcher-playstore.png
-```
-
-If those root-level duplicates are already visible on GitHub, delete them from GitHub and commit the deletion.
-
-Suggested deletion commit message:
-
-```text
-Remove accidentally uploaded root Android source duplicates
-```
-
-## Web upload / replacement flow
-
-1. Unzip the clean upload package.
-2. Open the unzipped folder.
-3. Go **inside** `TextView-Reader_GitHub_SAFE_UPDATE/`.
-4. Select the contents of that folder, such as:
-   - `app/`;
-   - `gradle/`;
-   - `.gitignore`;
-   - `README.md`;
-   - `LICENSE`;
-   - `build.gradle`;
-   - `settings.gradle`.
-5. On GitHub, open the `k1717/TextView-Reader` repository root.
+1. Unzip the clean source zip.
+2. Open the extracted folder.
+3. Select the files and folders **inside** the extracted folder.
+4. Do not select the outer extracted folder itself.
+5. Open the GitHub repository root page.
 6. Click **Add file > Upload files**.
-7. Drag the selected contents into the upload page.
-8. Commit with a message such as:
+7. Drag the selected contents into GitHub.
+8. Wait until GitHub finishes processing the files.
+9. Commit with a message such as:
 
 ```text
-Update reader fixes and documentation
+Update TextView Reader 2.0.1 source
 ```
 
-Do not upload the outer package folder itself, or GitHub will create an extra nested directory.
+## Important limitation
 
-## Important replacement warning
+GitHub web upload overwrites files with matching paths, but it does not automatically delete old files that are no longer in the upload.
 
-GitHub web upload overwrites files with matching paths, but it does not automatically delete old files that are no longer in the uploaded package.
+If obsolete files remain in the repository, delete them manually on GitHub and commit the deletion.
 
-If the repository already contains old generated files or accidental duplicate files, delete those files/directories from GitHub and commit the deletion separately.
-
-Check especially for:
+Root-level duplicates to delete if they ever appear:
 
 ```text
-.idea/
-.gradle/
-build/
-app/build/
-local.properties
-*.apk
-*.aab
 java/
 res/
 AndroidManifest.xml
 ic_launcher-playstore.png
 ```
 
-## Command-line alternative
+Keep the correct copies under `app/src/main/`.
 
-```bash
-git clone https://github.com/k1717/TextView-Reader.git
-cd TextView-Reader
+## Privacy check before upload
 
-# Copy the contents of TextView-Reader_GitHub_SAFE_UPDATE/ here.
-# Do not copy .gradle, .idea, build outputs, APKs, keys, or local.properties.
+Before uploading, confirm the package does not contain:
 
-git status
-git add .
-git commit -m "Update reader fixes and documentation"
-git push origin main
-```
-
-If root-level duplicate Android files exist, remove them before committing:
-
-```bash
-git rm -r java res
-git rm AndroidManifest.xml ic_launcher-playstore.png
-git commit -m "Remove accidentally uploaded root Android source duplicates"
-git push origin main
-```
-
-## Sanity checks before commit
-
-```bash
-git status --short
-find . -name local.properties -o -name "*.apk" -o -name "*.aab" -o -name "*.jks" -o -name "*.keystore"
-```
-
-The second command should not list anything that you intend to commit.
+- local username paths such as `C:\Users\...`;
+- Android Studio workspace files;
+- Gradle cache folders;
+- generated APK/AAB files;
+- local SDK path files;
+- signing keys;
+- secret/environment files.

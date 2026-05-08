@@ -2,45 +2,42 @@
 
 TextView Reader is designed as an offline local reader.
 
-## Data collected
+## What the app does not include
 
-The app does not include:
+- No analytics SDK.
+- No advertising SDK.
+- No account system.
+- No cloud sync backend.
+- No remote telemetry collection.
 
-- analytics SDKs;
-- advertising SDKs;
-- account login;
-- remote telemetry upload.
+## Data stored locally
 
-## Local data
-
-The app may store local reading-related data on the device, including:
+The app may store local-only data needed for reading behavior:
 
 - recent files;
 - recent folders;
 - reading position;
-- bookmarks;
+- bookmarks and bookmark labels;
+- reader settings;
 - theme settings;
-- language settings;
-- imported fonts;
-- app preferences;
-- optional PIN-lock configuration.
+- optional imported fonts;
+- optional PIN-lock state;
+- disposable TXT page/index cache metadata for large-file handling.
 
-This data is used for app functionality and remains on the device unless the user manually exports, backs up, shares, or deletes it.
+This data stays on the device unless the user manually exports, backs up, shares, deletes, or transfers it.
 
-## Exported data
+## Bookmark export/import
 
-Bookmark and reading-position export/import features use local JSON files selected by the user. Exported files are controlled by the user and may be copied, shared, backed up, or deleted like any other local file.
+Bookmark backup/export uses JSON. The exported JSON can include file paths, file names, reading positions, bookmark labels, and excerpts. Treat exported bookmark files as user data.
 
-## Network
+## File permissions
 
-The app does not require a network connection for normal reading features.
+The app requests storage access so it can open local documents selected by the user. On Android versions that require scoped-storage handling, the app may also request broader storage access for file-browser behavior.
 
-## Permissions
+## PIN lock limitation
 
-Storage-related permissions are used to let the user browse and open local files.
+The optional PIN lock is an app-level convenience lock. It is not a substitute for Android device encryption, lock-screen security, or secure storage of sensitive documents.
 
-The app may request notification permission on Android versions that require runtime notification permission for reading-progress notification behavior.
+## Generated cache data
 
-## Security note
-
-The optional app PIN lock is a convenience lock for opening the app. It is not file encryption and does not encrypt the user's documents.
+Disposable TXT page/index cache bookkeeping is used only for generated cache data under app cache storage. Cache cleanup must not remove bookmarks, reading history, saved reading position, or user documents.

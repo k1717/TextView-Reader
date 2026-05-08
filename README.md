@@ -6,28 +6,32 @@ The project focuses on comfortable offline reading, fast local file browsing, re
 
 ## Current update highlights
 
+- Version remains **2.0.1**.
+- Initial language now follows the Android system language until the user explicitly chooses English or Korean in settings.
 - Home opens to **Recently Read** files.
-- Recent files default to **recently read first**, not alphabetical or numeric order.
+- Recent files default to recently-read order, not alphabetical or numeric order.
 - The sort control is now a small icon beside the file search field.
 - Sorting works on both the Recently Read page and normal folder browsing.
 - Folder browsing supports sorting by name, date, size, and type.
 - The left drawer keeps storage shortcuts fixed while only the recent-folder list scrolls.
 - Viewer activities use `singleTop` / `onNewIntent` behavior so opening a new file reuses the matching viewer instead of creating repeated viewer stacks.
-- TXT, PDF, and document viewers include additional lifecycle cleanup for callbacks, background work, bitmaps/renderers, WebViews, and selection state.
+- TXT large-file cache bookkeeping was added for disposable page/index cache cleanup. It uses access count and last-access time, but does **not** delete bookmarks, reading history, or saved reading position.
+- TXT, PDF, EPUB, and document viewers include additional lifecycle cleanup for callbacks, background work, bitmaps/renderers, WebViews, and selection state.
 - DOCX/Word rendering stays WebView-based to preserve document layout and selectable text behavior.
 - Dialogs, file actions, and document/PDF controls were polished to better match the app theme.
+- Public repository documentation and upload instructions were cleaned up.
 
 ## Quick UI map
 
 | Area | What it does |
-| --- | --- |
+|---|---|
 | Home / Recently Read | Shows files ordered by most recently read first. |
 | Search field | Filters files by name. |
 | File-type chips | Filter by All, General, PDF, EPUB, or Word. |
 | Small sort icon beside search | Changes recent-page or folder-page sorting. |
 | Left drawer | Opens Recent, Internal Storage, External Storage, Downloads, `/storage`, and recent folders. |
 | Drawer bottom actions | Opens file picker, bookmarks, and settings. |
-| File long press | Opens file actions such as info, rename, and delete. |
+| File long press | Opens the actions menu with info, rename, and delete. |
 | TXT reader bottom bar | Page movement, search, bookmarks, and reader options. |
 | PDF / document bottom bar | Page movement, page jump, bookmark, and viewer options. |
 | Settings | Reading themes, language, behavior, backup/import, and lock options. |
@@ -41,8 +45,9 @@ The project focuses on comfortable offline reading, fast local file browsing, re
   - Tap-zone page movement.
   - Hardware volume-key paging.
   - Text search with next/previous match movement.
-  - Page, percentage, and line/position jump.
+  - Page, percentage, and line-position jump.
   - Auto-resume reading position.
+  - Large-text fast-open path with safe disposable cache bookkeeping.
 
 - **PDF reader**
   - Android `PdfRenderer`-based page rendering.
@@ -54,7 +59,7 @@ The project focuses on comfortable offline reading, fast local file browsing, re
   - EPUB and OOXML Word support.
   - Supported Word extensions: `.docx`, `.docm`, `.dotx`, `.dotm`.
   - Page-style WebView rendering.
-  - Per-page vertical scrolling.
+  - Pinch-page vertical scrolling.
   - Left/right swipe page movement.
   - Selectable text.
   - Cleanup of stale native text-selection handles after scrolling.
@@ -62,7 +67,7 @@ The project focuses on comfortable offline reading, fast local file browsing, re
 ### File browser
 
 - Home page shows **Recently Read** files.
-- Recent-files page keeps a separate **Recently read** ordering preference.
+- Recent-file page keeps a separate recently-read ordering preference.
 - Folder browser supports sorting by:
   - name A to Z / Z to A;
   - date newest / oldest;
@@ -127,27 +132,27 @@ Invalid or unmappable bytes are replaced safely instead of crashing the reader.
   - Dark.
 - Reader brightness override.
 - Optional keep-screen-on behavior.
-- Optional reading progress notification.
+- Optional reading-progress notification.
 - Edge-to-edge safe toolbar and bottom-bar insets for newer Android targets.
 - Custom rounded dialogs/menus and reader/document selection-handle styling.
 
 ## Supported file types
 
 | Type | Extensions / MIME examples | Reader |
-| --- | --- | --- |
-| Plain text | `.txt`, `text/plain`, `text/*` | TXT reader |
+|---|---|---|
+| Plain text | `.txt`, `.text/plain`, `text/*` | TXT reader |
 | PDF | `.pdf`, `application/pdf` | PDF reader |
 | EPUB | `.epub`, `application/epub+zip` | Document viewer |
 | Word OOXML | `.docx`, `.docm`, `.dotx`, `.dotm` | Document viewer |
 
 ## Requirements
 
-- Android 7.0+ / API 24+
+- Android 7.0 / API 24+
 - Android Studio with JDK 17
 - Android Gradle Plugin 8.13.1
 - Gradle wrapper included in the repository
-- Compile SDK: 35
-- Target SDK: 35
+- Compile SDK 35
+- Target SDK 35
 - Language: Java
 
 ## Build from source
@@ -168,7 +173,7 @@ Command-line build:
 
 Windows:
 
-```powershell
+```bat
 .\gradlew.bat assembleDebug
 ```
 
@@ -194,7 +199,7 @@ app/src/main/java/com/simpletext/reader/
 ├── ThemeEditorActivity.java       # Custom theme editor
 ├── adapter/                       # RecyclerView adapters
 ├── model/                         # Data models
-├── util/                          # Preferences, bookmarks, files, fonts, themes
+├── util/                          # Preferences, bookmarks, files, fonts, themes, cache helpers
 ├── view/                          # Custom reader view
 └── widget/                        # WebView and selection helpers
 ```
@@ -208,7 +213,7 @@ app/src/main/res/
 app/src/main/ic_launcher-playstore.png
 ```
 
-The repository root should **not** contain duplicate Android source folders such as root-level `java/`, `res/`, `AndroidManifest.xml`, or `ic_launcher-playstore.png`.
+The repository root should not contain duplicate Android source folders such as root-level `java/`, `res/`, `AndroidManifest.xml`, or `ic_launcher-playstore.png`.
 
 ## Privacy
 
@@ -217,7 +222,7 @@ TextView Reader is designed as an offline local reader.
 - No analytics SDK.
 - No advertising SDK.
 - No account system.
-- Reading history, bookmarks, settings, and imported fonts stay local on the device unless the user manually exports, backs up, shares, or deletes them.
+- Reading history, bookmarks, settings, disposable cache metadata, and imported fonts stay local on the device unless the user manually exports, backs up, shares, or deletes them.
 
 See `PRIVACY.md` for details.
 
@@ -233,18 +238,20 @@ Do not commit:
 build/
 app/build/
 local.properties
-*.iml
 *.apk
 *.aab
+*.apks
 *.jks
 *.keystore
 *.pem
 *.p12
 .env
+.env.*
 secrets.properties
 google-services.json
 captures/
 *.hprof
+*.log
 ```
 
 See `.gitignore` and `GITHUB_UPLOAD_NOTES.md` before pushing or uploading a new package.
