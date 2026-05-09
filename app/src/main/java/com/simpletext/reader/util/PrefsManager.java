@@ -29,6 +29,10 @@ public class PrefsManager {
     public static final int LANGUAGE_KOREAN = 1;
     public static final int TAP_ZONE_VERTICAL = 0;
     public static final int TAP_ZONE_HORIZONTAL = 1;
+    public static final int PAGE_STATUS_ALIGN_LEFT = 0;
+    public static final int PAGE_STATUS_ALIGN_CENTER = 1;
+    public static final int PAGE_STATUS_ALIGN_RIGHT = 2;
+    public static final int PAGE_STATUS_ALIGN_HIDDEN = 3;
 
     private final SharedPreferences prefs;
     private static PrefsManager instance;
@@ -125,6 +129,18 @@ public class PrefsManager {
     public void setKeepScreenOn(boolean v) { prefs.edit().putBoolean("keep_screen_on", v).apply(); }
     public boolean getShowStatusBar() { return prefs.getBoolean("show_status_bar", false); }
     public void setShowStatusBar(boolean v) { prefs.edit().putBoolean("show_status_bar", v).apply(); }
+    public int getPageStatusAlignment() {
+        return normalizePageStatusAlignment(prefs.getInt("page_status_alignment", PAGE_STATUS_ALIGN_CENTER));
+    }
+    public void setPageStatusAlignment(int alignment) {
+        prefs.edit().putInt("page_status_alignment", normalizePageStatusAlignment(alignment)).apply();
+    }
+    private int normalizePageStatusAlignment(int alignment) {
+        if (alignment == PAGE_STATUS_ALIGN_LEFT
+                || alignment == PAGE_STATUS_ALIGN_RIGHT
+                || alignment == PAGE_STATUS_ALIGN_HIDDEN) return alignment;
+        return PAGE_STATUS_ALIGN_CENTER;
+    }
     public boolean getAutoSavePosition() { return prefs.getBoolean("auto_save_position", true); }
     public void setAutoSavePosition(boolean v) { prefs.edit().putBoolean("auto_save_position", v).apply(); }
     public String getLastDirectory() { return prefs.getString("last_directory", null); }
@@ -171,6 +187,73 @@ public class PrefsManager {
         }
         prefs.edit().putString("recent_folders", sb.toString()).apply();
     }
+    public List<String> getFolderShortcuts(int limit) {
+        String raw = prefs.getString("folder_shortcuts", "");
+        ArrayList<String> result = new ArrayList<>();
+        if (raw == null || raw.isEmpty()) return result;
+        String[] parts = raw.split("\n");
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+        for (String part : parts) {
+            if (part == null) continue;
+            String path = part.trim();
+            if (path.isEmpty() || !seen.add(path)) continue;
+            result.add(path);
+            if (limit > 0 && result.size() >= limit) break;
+        }
+        return result;
+    }
+
+    public boolean isFolderShortcut(String path) {
+        if (path == null) return false;
+        String clean = path.trim();
+        if (clean.isEmpty()) return false;
+        for (String shortcut : getFolderShortcuts(0)) {
+            if (clean.equals(shortcut)) return true;
+        }
+        return false;
+    }
+
+    public void addFolderShortcut(String path) {
+        if (path == null) return;
+        String clean = path.trim();
+        if (clean.isEmpty()) return;
+
+        LinkedHashSet<String> ordered = new LinkedHashSet<>();
+        ordered.add(clean);
+        for (String old : getFolderShortcuts(64)) {
+            if (old != null && !old.trim().isEmpty()) ordered.add(old.trim());
+            if (ordered.size() >= 30) break;
+        }
+        saveFolderShortcuts(ordered, 30);
+    }
+
+    public void removeFolderShortcut(String path) {
+        if (path == null) return;
+        String clean = path.trim();
+        if (clean.isEmpty()) return;
+
+        LinkedHashSet<String> ordered = new LinkedHashSet<>();
+        for (String old : getFolderShortcuts(64)) {
+            if (old == null) continue;
+            String item = old.trim();
+            if (item.isEmpty() || item.equals(clean)) continue;
+            ordered.add(item);
+        }
+        saveFolderShortcuts(ordered, 30);
+    }
+
+    private void saveFolderShortcuts(LinkedHashSet<String> ordered, int limit) {
+        StringBuilder sb = new StringBuilder();
+        int count = 0;
+        for (String item : ordered) {
+            if (item == null || item.trim().isEmpty()) continue;
+            if (count++ > 0) sb.append('\n');
+            sb.append(item.trim());
+            if (limit > 0 && count >= limit) break;
+        }
+        prefs.edit().putString("folder_shortcuts", sb.toString()).apply();
+    }
+
     public int getMarginHorizontal() { return prefs.getInt("page_margin_h", 24); }
     public void setMarginHorizontal(int dp) { prefs.edit().putInt("page_margin_h", dp).apply(); }
     public int getMarginVertical() { return prefs.getInt("page_margin_v", 16); }

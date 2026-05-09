@@ -47,6 +47,7 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
     private static class Row {
         int type;
         String filePath;
+        String expansionKey;
         String fileName;
         int count;
         boolean expanded;
@@ -61,10 +62,11 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
             return r;
         }
 
-        static Row folder(String filePath, String fileName, int count, boolean expanded, boolean currentFile) {
+        static Row folder(String filePath, String expansionKey, String fileName, int count, boolean expanded, boolean currentFile) {
             Row r = new Row();
             r.type = TYPE_FOLDER;
             r.filePath = filePath;
+            r.expansionKey = expansionKey;
             r.fileName = fileName;
             r.count = count;
             r.expanded = expanded;
@@ -94,6 +96,10 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
     private int textColor = Color.WHITE;
     private int subTextColor = Color.LTGRAY;
     private int pathTextColor = Color.GRAY;
+
+    public BookmarkFolderAdapter() {
+        setHasStableIds(true);
+    }
 
     public void setThemeColors(int dialogBgColor, int textColor, int subTextColor, int folderBgColor) {
         this.dialogBgColor = dialogBgColor;
@@ -161,7 +167,7 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
             for (Bookmark b : sorted) {
                 if (typeRank(b) != rank) continue;
                 sectionCount++;
-                String key = b.getFilePath() != null ? b.getFilePath() : "";
+                String key = groupKeyForBookmark(b, rank);
                 if (!grouped.containsKey(key)) grouped.put(key, new ArrayList<>());
                 grouped.get(key).add(b);
             }
@@ -170,15 +176,27 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
             rows.add(Row.section(typeTitle(rank), sectionCount));
 
             for (Map.Entry<String, List<Bookmark>> entry : grouped.entrySet()) {
-                String path = entry.getKey();
+                String groupKey = entry.getKey();
                 List<Bookmark> bookmarks = entry.getValue();
                 Collections.sort(bookmarks, Comparator.comparingInt(Bookmark::getCharPosition));
 
-                String fileName = bookmarks.isEmpty() ? new File(path).getName() : safeFileName(bookmarks.get(0));
-                boolean expanded = expandedFolders.contains(path);
+                Bookmark first = bookmarks.isEmpty() ? null : bookmarks.get(0);
+                String path = first != null && first.getFilePath() != null ? first.getFilePath() : "";
+                String fileName = first != null ? safeFileName(first) : new File(groupKey).getName();
+                String expansionKey = expansionKeyFor(rank, groupKey);
+
+                // Migrate older raw-path expansion entries into type-aware folder keys.
+                // Without this, a TXT group and a PDF group can share the same raw key
+                // and expand/collapse together.
+                if (expandedFolders.contains(path)) {
+                    expandedFolders.remove(path);
+                    expandedFolders.add(expansionKey);
+                }
+
+                boolean expanded = expandedFolders.contains(expansionKey);
                 boolean current = currentFilePath != null && currentFilePath.equals(path);
 
-                rows.add(Row.folder(path, fileName, bookmarks.size(), expanded, current));
+                rows.add(Row.folder(path, expansionKey, fileName, bookmarks.size(), expanded, current));
                 folderCount++;
                 if (expanded) {
                     for (Bookmark b : bookmarks) rows.add(Row.bookmark(b));
@@ -212,6 +230,62 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
         if (b.getFileName() != null && !b.getFileName().isEmpty()) return b.getFileName();
         if (b.getFilePath() != null && !b.getFilePath().isEmpty()) return new File(b.getFilePath()).getName();
         return "(unknown file)";
+    }
+
+    private static String groupKeyForBookmark(Bookmark b, int rank) {
+        String path = b.getFilePath();
+        if (path != null && !path.trim().isEmpty()) {
+            return path.trim();
+        }
+
+        // Fall back to a typed file-name key for legacy/corrupt bookmarks with
+        // missing paths so TXT/PDF/EPUB/Word sections do not share one empty key.
+        return "missing-path:" + rank + ":" + safeFileName(b);
+    }
+
+    private static String expansionKeyFor(int rank, String groupKey) {
+        return "bookmark-folder:v2:" + rank + ":" + safeString(groupKey);
+    }
+
+    private static long stableIdFor(@NonNull Row row) {
+        String key;
+        switch (row.type) {
+            case TYPE_SECTION:
+                key = "section:" + safeString(row.fileName);
+                break;
+            case TYPE_FOLDER:
+                key = "folder:" + safeString(row.expansionKey);
+                break;
+            case TYPE_BOOKMARK:
+            default:
+                Bookmark b = row.bookmark;
+                key = "bookmark:"
+                        + (b != null ? safeString(b.getId()) : "")
+                        + ":"
+                        + (b != null ? safeString(b.getFilePath()) : "")
+                        + ":"
+                        + (b != null ? b.getCharPosition() : 0);
+                break;
+        }
+        return stableLongHash(key);
+    }
+
+    private static long stableLongHash(String key) {
+        long h = 1125899906842597L;
+        for (int i = 0; i < key.length(); i++) {
+            h = 31L * h + key.charAt(i);
+        }
+        return h;
+    }
+
+    private static String safeString(String value) {
+        return value != null ? value : "";
+    }
+
+    @Override
+    public long getItemId(int position) {
+        if (position < 0 || position >= rows.size()) return RecyclerView.NO_ID;
+        return stableIdFor(rows.get(position));
     }
 
     @Override
@@ -284,6 +358,7 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
 
     class FolderHolder extends RecyclerView.ViewHolder {
         TextView arrow, title, meta, path;
+        private String boundExpansionKey;
 
         FolderHolder(View itemView) {
             super(itemView);
@@ -292,14 +367,14 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
             meta = itemView.findViewById(R.id.folder_meta);
             path = itemView.findViewById(R.id.folder_path);
             itemView.setOnClickListener(v -> {
-                int pos = getAdapterPosition();
-                if (pos != RecyclerView.NO_POSITION && listener != null) {
-                    listener.onFolderClick(rows.get(pos).filePath);
+                if (listener != null && boundExpansionKey != null) {
+                    listener.onFolderClick(boundExpansionKey);
                 }
             });
         }
 
         void bind(Row row) {
+            boundExpansionKey = row.expansionKey;
             itemView.setBackground(rowBackground(folderBgColor, folderBorderColor, 8f, 1.4f, itemView));
 
             arrow.setText(row.expanded ? "▾" : "▸");
@@ -322,6 +397,7 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
         TextView excerpt;
         TextView meta;
         ImageButton btnDelete;
+        private Bookmark boundBookmark;
 
         BookmarkHolder(View itemView) {
             super(itemView);
@@ -331,29 +407,27 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
             btnDelete = itemView.findViewById(R.id.bookmark_delete);
 
             itemView.setOnClickListener(v -> {
-                int pos = getAdapterPosition();
-                if (pos != RecyclerView.NO_POSITION && listener != null) {
-                    listener.onBookmarkClick(rows.get(pos).bookmark);
+                if (listener != null && boundBookmark != null) {
+                    listener.onBookmarkClick(boundBookmark);
                 }
             });
 
             itemView.setOnLongClickListener(v -> {
-                int pos = getAdapterPosition();
-                if (pos != RecyclerView.NO_POSITION && listener != null) {
-                    listener.onBookmarkEdit(rows.get(pos).bookmark);
+                if (listener != null && boundBookmark != null) {
+                    listener.onBookmarkEdit(boundBookmark);
                 }
                 return true;
             });
 
             btnDelete.setOnClickListener(v -> {
-                int pos = getAdapterPosition();
-                if (pos != RecyclerView.NO_POSITION && listener != null) {
-                    listener.onBookmarkDelete(rows.get(pos).bookmark);
+                if (listener != null && boundBookmark != null) {
+                    listener.onBookmarkDelete(boundBookmark);
                 }
             });
         }
 
         void bind(Bookmark bookmark) {
+            boundBookmark = bookmark;
             // Bookmark rows should blend into the bookmark dialog background, not show black boxes.
             itemView.setBackgroundColor(Color.TRANSPARENT);
 

@@ -1,8 +1,8 @@
 package com.simpletext.reader.adapter;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Typeface;
-import android.os.Build;
 import android.text.Layout;
 import android.util.TypedValue;
 import android.view.View;
@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.simpletext.reader.model.TextChunk;
@@ -36,9 +37,33 @@ public class TextChunkAdapter extends RecyclerView.Adapter<TextChunkAdapter.Chun
     }
 
     public void setChunks(List<TextChunk> newChunks) {
+        List<TextChunk> old = new ArrayList<>(chunks);
+        List<TextChunk> next = new ArrayList<>();
+        if (newChunks != null) next.addAll(newChunks);
+
+        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override public int getOldListSize() { return old.size(); }
+            @Override public int getNewListSize() { return next.size(); }
+
+            @Override public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                TextChunk a = old.get(oldItemPosition);
+                TextChunk b = next.get(newItemPosition);
+                return a.getIndex() == b.getIndex()
+                        && a.getStartChar() == b.getStartChar();
+            }
+
+            @Override public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                TextChunk a = old.get(oldItemPosition);
+                TextChunk b = next.get(newItemPosition);
+                String aText = a.getText();
+                String bText = b.getText();
+                return java.util.Objects.equals(aText, bText);
+            }
+        });
+
         chunks.clear();
-        if (newChunks != null) chunks.addAll(newChunks);
-        notifyDataSetChanged();
+        chunks.addAll(next);
+        diff.dispatchUpdatesTo(this);
     }
 
     public List<TextChunk> getChunks() { return chunks; }
@@ -60,9 +85,10 @@ public class TextChunkAdapter extends RecyclerView.Adapter<TextChunkAdapter.Chun
         this.marginHorizontalPx = marginHorizontalPx;
         this.marginVerticalPx = Math.max(0, marginVerticalPx / 2);
         this.typeface = typeface != null ? typeface : Typeface.DEFAULT;
-        notifyDataSetChanged();
+        notifyItemRangeChanged(0, chunks.size());
     }
 
+    @SuppressLint("WrongConstant")
     @NonNull
     @Override
     public ChunkViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -76,10 +102,8 @@ public class TextChunkAdapter extends RecyclerView.Adapter<TextChunkAdapter.Chun
         tv.setTextIsSelectable(false);
         tv.setTextDirection(View.TEXT_DIRECTION_LOCALE);
         tv.setTextAlignment(View.TEXT_ALIGNMENT_GRAVITY);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            tv.setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE);
-            tv.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE);
-        }
+        tv.setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE);
+        tv.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE);
         return new ChunkViewHolder(tv);
     }
 

@@ -16,6 +16,7 @@ import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.ViewConfiguration;
 import android.widget.EditText;
@@ -71,10 +72,14 @@ public class PdfReaderActivity extends AppCompatActivity {
 
     private View root;
     private ImageView pageImage;
+    private RecyclerView pdfContinuousList;
+    private PdfContinuousPageAdapter pdfContinuousAdapter;
+    private boolean suppressContinuousScrollSync = false;
     private ProgressBar progressBar;
     private TextView pageStatus;
     private TextView prevButton;
     private TextView nextButton;
+    private TextView slideModeButton;
     private TextView pageButton;
     private TextView bookmarkButton;
     private TextView zoomMoreButton;
@@ -95,8 +100,18 @@ public class PdfReaderActivity extends AppCompatActivity {
     private float lastPanRawY;
     private int touchSlop;
     private boolean gestureStartedWithHorizontalScrollable = false;
+    private boolean gestureStartedWithVerticalScrollable = false;
     private boolean gestureStartedAtLeftEdge = true;
     private boolean gestureStartedAtRightEdge = true;
+    private boolean gestureStartedAtTopEdge = true;
+    private boolean gestureStartedAtBottomEdge = true;
+    private boolean verticalPageSlideMode = false;
+
+    private boolean pendingZoomFocus = false;
+    private float pendingZoomFocusXRatio = 0.5f;
+    private float pendingZoomFocusYRatio = 0.5f;
+    private float pendingZoomViewportX = 0.5f;
+    private float pendingZoomViewportY = 0.5f;
 
     private int readerBg = Color.rgb(18, 18, 18);
     private int readerFg = Color.rgb(232, 234, 237);
@@ -129,6 +144,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         prefs = PrefsManager.getInstance(this);
         prefs.applyLanguage(prefs.getLanguageMode());
         super.onCreate(savedInstanceState);
+        ViewerRegistry.activate(this);
 
         resolveReaderThemeColors();
         touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
@@ -158,18 +174,23 @@ public class PdfReaderActivity extends AppCompatActivity {
 
         root = findViewById(R.id.pdf_root);
         pageImage = findViewById(R.id.pdf_page_image);
+        pdfContinuousList = findViewById(R.id.pdf_continuous_list);
         progressBar = findViewById(R.id.pdf_progress);
         pageStatus = findViewById(R.id.pdf_page_status);
         prevButton = findViewById(R.id.pdf_prev);
         nextButton = findViewById(R.id.pdf_next);
+        slideModeButton = findViewById(R.id.pdf_slide_toggle);
         pageButton = findViewById(R.id.pdf_page);
         bookmarkButton = findViewById(R.id.pdf_bookmark);
         zoomMoreButton = findViewById(R.id.pdf_zoom_more);
         pdfViewport = findViewById(R.id.pdf_viewport);
         pdfHScroll = findViewById(R.id.pdf_h_scroll);
         pdfVScroll = findViewById(R.id.pdf_v_scroll);
+        setupContinuousPdfList();
 
         bookmarkManager = BookmarkManager.getInstance(this);
+        verticalPageSlideMode = getSharedPreferences("pdf_reader", MODE_PRIVATE)
+                .getBoolean("vertical_page_slide_mode", false);
         styleControls();
         setupControls();
         installPdfGestures();
@@ -187,6 +208,87 @@ public class PdfReaderActivity extends AppCompatActivity {
         loadPdfFromIntent();
     }
 
+
+    private void setupContinuousPdfList() {
+        if (pdfContinuousList == null) return;
+
+        pdfContinuousAdapter = new PdfContinuousPageAdapter();
+        LinearLayoutManager lm = new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false);
+        pdfContinuousList.setLayoutManager(lm);
+        pdfContinuousList.setAdapter(pdfContinuousAdapter);
+        pdfContinuousList.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        pdfContinuousList.setBackgroundColor(readerPanel);
+        pdfContinuousList.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                if (suppressContinuousScrollSync || !verticalPageSlideMode || pageCount <= 0) return;
+
+                RecyclerView.LayoutManager manager = recyclerView.getLayoutManager();
+                if (!(manager instanceof LinearLayoutManager)) return;
+
+                int visible = ((LinearLayoutManager) manager).findFirstCompletelyVisibleItemPosition();
+                if (visible == RecyclerView.NO_POSITION) {
+                    visible = ((LinearLayoutManager) manager).findFirstVisibleItemPosition();
+                }
+                if (visible != RecyclerView.NO_POSITION && visible != currentPage) {
+                    currentPage = clampPage(visible);
+                    saveReadingState();
+                    updatePageStatus();
+                }
+            }
+        });
+    }
+
+    private void applyPdfDisplayMode() {
+        boolean continuous = verticalPageSlideMode;
+
+        if (pdfContinuousList != null) {
+            pdfContinuousList.setVisibility(continuous ? View.VISIBLE : View.GONE);
+        }
+        if (pdfHScroll != null) {
+            pdfHScroll.setVisibility(continuous ? View.GONE : View.VISIBLE);
+        }
+
+        if (continuous) {
+            renderContinuousPages();
+        } else {
+            if (pdfContinuousAdapter != null) pdfContinuousAdapter.clearBitmaps();
+            renderCurrentPage();
+        }
+    }
+
+    private void renderContinuousPages() {
+        if (pdfContinuousList == null || pdfContinuousAdapter == null || pdfRenderer == null || pageCount <= 0 || pdfViewport == null) return;
+
+        int viewportWidth = pdfViewport.getWidth();
+        if (viewportWidth <= 0) {
+            pdfViewport.post(this::renderContinuousPages);
+            return;
+        }
+
+        progressBar.setVisibility(View.GONE);
+        updatePageStatus();
+        pdfContinuousAdapter.configure(pageCount, viewportWidth, zoom);
+        scrollContinuousListToCurrentPage(false);
+    }
+
+    private void scrollContinuousListToCurrentPage(boolean smooth) {
+        if (pdfContinuousList == null || pageCount <= 0) return;
+        final int target = clampPage(currentPage);
+        suppressContinuousScrollSync = true;
+        pdfContinuousList.post(() -> {
+            RecyclerView.LayoutManager manager = pdfContinuousList.getLayoutManager();
+            if (smooth) {
+                pdfContinuousList.smoothScrollToPosition(target);
+            } else if (manager instanceof LinearLayoutManager) {
+                ((LinearLayoutManager) manager).scrollToPositionWithOffset(target, 0);
+            } else {
+                pdfContinuousList.scrollToPosition(target);
+            }
+            pdfContinuousList.postDelayed(() -> suppressContinuousScrollSync = false, 180L);
+        });
+    }
+
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (handlePdfViewportGesture(event)) return true;
@@ -197,6 +299,14 @@ public class PdfReaderActivity extends AppCompatActivity {
         if (pdfViewport == null || pageCount <= 0) return false;
 
         boolean insideViewport = isEventInsideView(pdfViewport, event);
+        if (verticalPageSlideMode) {
+            // Continuous vertical PDF mode is handled by the RecyclerView itself.
+            // Do not convert vertical drags into page-cut jumps.
+            if (insideViewport && gestureDetector != null && gestureDetector.onTouchEvent(event)) {
+                return true;
+            }
+            return false;
+        }
         if (insideViewport && gestureDetector != null && gestureDetector.onTouchEvent(event)) {
             resetViewportGesture();
             return true;
@@ -215,8 +325,11 @@ public class PdfReaderActivity extends AppCompatActivity {
                 gestureStartedInViewport = insideViewport;
                 gestureSawMultiTouch = event.getPointerCount() > 1;
                 gestureStartedWithHorizontalScrollable = insideViewport && isPdfHorizontallyScrollable();
+                gestureStartedWithVerticalScrollable = insideViewport && isPdfVerticallyScrollable();
                 gestureStartedAtLeftEdge = !gestureStartedWithHorizontalScrollable || isPdfAtLeftEdge(dpToPx(3));
                 gestureStartedAtRightEdge = !gestureStartedWithHorizontalScrollable || isPdfAtRightEdge(dpToPx(3));
+                gestureStartedAtTopEdge = !gestureStartedWithVerticalScrollable || isPdfAtTopEdge(dpToPx(3));
+                gestureStartedAtBottomEdge = !gestureStartedWithVerticalScrollable || isPdfAtBottomEdge(dpToPx(3));
                 return false;
 
             case MotionEvent.ACTION_POINTER_DOWN:
@@ -253,12 +366,24 @@ public class PdfReaderActivity extends AppCompatActivity {
                 }
                 float dx = event.getRawX() - gestureStartRawX;
                 float dy = event.getRawY() - gestureStartRawY;
-                boolean strongPageSwipe = Math.abs(dx) >= dpToPx(82) && Math.abs(dx) > Math.abs(dy) * 1.35f;
-                if (strongPageSwipe && canTurnPdfPageFromSwipe(dx)) {
-                    if (dx < 0) goToPage(currentPage + 1, 1);
-                    else goToPage(currentPage - 1, -1);
-                    resetViewportGesture();
-                    return true;
+                if (verticalPageSlideMode) {
+                    boolean strongVerticalPageSwipe = Math.abs(dy) >= dpToPx(82)
+                            && Math.abs(dy) > Math.abs(dx) * 1.25f;
+                    if (strongVerticalPageSwipe && canTurnPdfPageFromVerticalSwipe(dy)) {
+                        if (dy < 0) goToPage(currentPage + 1, 1);
+                        else goToPage(currentPage - 1, -1);
+                        resetViewportGesture();
+                        return true;
+                    }
+                } else {
+                    boolean strongPageSwipe = Math.abs(dx) >= dpToPx(82)
+                            && Math.abs(dx) > Math.abs(dy) * 1.35f;
+                    if (strongPageSwipe && canTurnPdfPageFromSwipe(dx)) {
+                        if (dx < 0) goToPage(currentPage + 1, 1);
+                        else goToPage(currentPage - 1, -1);
+                        resetViewportGesture();
+                        return true;
+                    }
                 }
                 boolean consumed = viewportPanConsumed;
                 resetViewportGesture();
@@ -278,8 +403,11 @@ public class PdfReaderActivity extends AppCompatActivity {
         gestureSawMultiTouch = false;
         viewportPanConsumed = false;
         gestureStartedWithHorizontalScrollable = false;
+        gestureStartedWithVerticalScrollable = false;
         gestureStartedAtLeftEdge = true;
         gestureStartedAtRightEdge = true;
+        gestureStartedAtTopEdge = true;
+        gestureStartedAtBottomEdge = true;
     }
 
     private boolean isPdfContentScrollable() {
@@ -340,6 +468,30 @@ public class PdfReaderActivity extends AppCompatActivity {
         if (pdfHScroll == null || pdfHScroll.getChildCount() == 0) return true;
         int maxScroll = Math.max(0, pdfHScroll.getChildAt(0).getWidth() - pdfHScroll.getWidth());
         return pdfHScroll.getScrollX() >= maxScroll - tolerancePx;
+    }
+
+    private boolean isPdfAtTopEdge(int tolerancePx) {
+        return pdfVScroll == null || pdfVScroll.getScrollY() <= tolerancePx;
+    }
+
+    private boolean isPdfAtBottomEdge(int tolerancePx) {
+        if (pdfVScroll == null || pdfVScroll.getChildCount() == 0) return true;
+        int maxScroll = Math.max(0, pdfVScroll.getChildAt(0).getHeight() - pdfVScroll.getHeight());
+        return pdfVScroll.getScrollY() >= maxScroll - tolerancePx;
+    }
+
+    private boolean canTurnPdfPageFromVerticalSwipe(float dy) {
+        if (pageCount <= 1 || pdfVScroll == null) return false;
+        if (!gestureStartedWithVerticalScrollable) return true;
+
+        // Same edge rule as horizontal zoomed-page panning:
+        // first drag pans the enlarged page to the edge; a drag that starts at the
+        // edge turns to the neighboring page.
+        if (dy < 0) {
+            return gestureStartedAtBottomEdge && currentPage < pageCount - 1;
+        } else {
+            return gestureStartedAtTopEdge && currentPage > 0;
+        }
     }
 
     private boolean isEventInsideView(View view, @NonNull MotionEvent event) {
@@ -449,7 +601,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         if (pdfViewport != null) pdfViewport.setBackgroundColor(readerPanel);
         if (pageStatus != null) pageStatus.setTextColor(readerFg);
 
-        TextView[] buttons = {prevButton, nextButton, pageButton, bookmarkButton, zoomMoreButton};
+        TextView[] buttons = {prevButton, nextButton, slideModeButton, pageButton, bookmarkButton, zoomMoreButton};
         for (TextView b : buttons) {
             if (b == null) continue;
             b.setTextColor(readerFg);
@@ -460,6 +612,10 @@ public class PdfReaderActivity extends AppCompatActivity {
     private void setupControls() {
         prevButton.setOnClickListener(v -> goToPage(currentPage - 1, -1));
         nextButton.setOnClickListener(v -> goToPage(currentPage + 1, 1));
+        if (slideModeButton != null) {
+            slideModeButton.setOnClickListener(v -> togglePdfSlideMode());
+            updatePdfSlideModeButton();
+        }
         if (pageButton != null) pageButton.setOnClickListener(v -> showGoToPageDialog());
         bookmarkButton.setOnClickListener(v -> showBookmarksDialog());
         if (zoomMoreButton != null) zoomMoreButton.setOnClickListener(v -> showMoreDialog());
@@ -505,17 +661,33 @@ public class PdfReaderActivity extends AppCompatActivity {
         gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onDoubleTap(MotionEvent e) {
-                toggleDoubleTapZoom();
+                toggleDoubleTapZoom(e);
                 return true;
             }
         });
     }
 
     private void setZoomSmooth(float targetZoom) {
+        setZoomSmooth(targetZoom, null);
+    }
+
+    private void setZoomSmooth(float targetZoom, MotionEvent focusEvent) {
         zoom = Math.max(0.55f, Math.min(4.5f, targetZoom));
+        if (verticalPageSlideMode) {
+            if (pdfContinuousAdapter != null) pdfContinuousAdapter.clearBitmaps();
+            renderContinuousPages();
+            return;
+        }
+        prepareDoubleTapZoomFocus(focusEvent);
         if (pageImage != null) {
             float displayScale = Math.max(0.55f, Math.min(4.5f, zoom / Math.max(0.1f, renderedZoom)));
             pageImage.animate().cancel();
+            if (focusEvent != null) {
+                int[] imageLoc = new int[2];
+                pageImage.getLocationOnScreen(imageLoc);
+                pageImage.setPivotX(Math.max(0f, Math.min(pageImage.getWidth(), focusEvent.getRawX() - imageLoc[0])));
+                pageImage.setPivotY(Math.max(0f, Math.min(pageImage.getHeight(), focusEvent.getRawY() - imageLoc[1])));
+            }
             pageImage.animate()
                     .scaleX(displayScale)
                     .scaleY(displayScale)
@@ -527,11 +699,37 @@ public class PdfReaderActivity extends AppCompatActivity {
         }
     }
 
+    private void prepareDoubleTapZoomFocus(MotionEvent focusEvent) {
+        if (focusEvent == null || pageImage == null || pdfViewport == null) {
+            pendingZoomFocus = false;
+            return;
+        }
+
+        int imageWidth = Math.max(1, pageImage.getWidth());
+        int imageHeight = Math.max(1, pageImage.getHeight());
+
+        int[] imageLoc = new int[2];
+        int[] viewportLoc = new int[2];
+        pageImage.getLocationOnScreen(imageLoc);
+        pdfViewport.getLocationOnScreen(viewportLoc);
+
+        float localX = Math.max(0f, Math.min(imageWidth, focusEvent.getRawX() - imageLoc[0]));
+        float localY = Math.max(0f, Math.min(imageHeight, focusEvent.getRawY() - imageLoc[1]));
+
+        pendingZoomFocusXRatio = localX / imageWidth;
+        pendingZoomFocusYRatio = localY / imageHeight;
+        pendingZoomViewportX = Math.max(0f, Math.min(pdfViewport.getWidth(), focusEvent.getRawX() - viewportLoc[0]));
+        pendingZoomViewportY = Math.max(0f, Math.min(pdfViewport.getHeight(), focusEvent.getRawY() - viewportLoc[1]));
+        pendingZoomFocus = true;
+    }
+
     private void showMoreDialog() {
         final int bg = dialogBg();
         final int fg = dialogFg();
         LinearLayout box = makeDialogBox();
         box.addView(makeDialogTitle(getString(R.string.more)));
+        addDialogAction(box, pdfSlideModeDialogLabel(), this::togglePdfSlideMode);
+        addDialogDivider(box);
         addDialogAction(box, getString(R.string.zoom_out), () -> setZoomSmooth(Math.max(0.55f, zoom - 0.2f)));
         addDialogAction(box, getString(R.string.zoom_in), () -> setZoomSmooth(Math.min(4.5f, zoom + 0.2f)));
         addDialogAction(box, getString(R.string.reset_zoom), this::resetZoomToOriginal);
@@ -541,12 +739,68 @@ public class PdfReaderActivity extends AppCompatActivity {
         showCustomDialog(box, getString(R.string.close), true);
     }
 
-    private void toggleDoubleTapZoom() {
+    private void toggleDoubleTapZoom(MotionEvent focusEvent) {
         if (zoom <= 1.08f) {
-            setZoomSmooth(2.35f);
+            setZoomSmooth(2.35f, focusEvent);
         } else {
             resetZoomToOriginal();
         }
+    }
+
+    private void togglePdfSlideMode() {
+        verticalPageSlideMode = !verticalPageSlideMode;
+        getSharedPreferences("pdf_reader", MODE_PRIVATE)
+                .edit()
+                .putBoolean("vertical_page_slide_mode", verticalPageSlideMode)
+                .apply();
+        updatePdfSlideModeButton();
+        applyPdfDisplayMode();
+        Toast.makeText(this, pdfSlideModeToastLabel(), Toast.LENGTH_SHORT).show();
+    }
+
+    private void updatePdfSlideModeButton() {
+        if (slideModeButton == null) return;
+
+        slideModeButton.setText(pdfSlideModeButtonLabel());
+        slideModeButton.setCompoundDrawablesWithIntrinsicBounds(
+                0,
+                verticalPageSlideMode
+                        ? R.drawable.ic_pdf_slide_up_down
+                        : R.drawable.ic_pdf_slide_left_right,
+                0,
+                0);
+        slideModeButton.setContentDescription(pdfSlideModeDialogLabel());
+    }
+
+    private boolean isKoreanUi() {
+        return Locale.getDefault().getLanguage().toLowerCase(Locale.ROOT).startsWith("ko");
+    }
+
+    private String pdfSlideModeButtonLabel() {
+        if (verticalPageSlideMode) return isKoreanUi() ? "세로" : "V";
+        return isKoreanUi() ? "가로" : "H";
+    }
+
+    private String pdfSlideModeDialogLabel() {
+        if (verticalPageSlideMode) {
+            return isKoreanUi()
+                    ? "읽기 방식: 세로 연속 스크롤"
+                    : "Read mode: Vertical continuous scroll";
+        }
+        return isKoreanUi()
+                ? "슬라이드 방식: 가로로 다음/이전 페이지"
+                : "Slide mode: Horizontal page swipe";
+    }
+
+    private String pdfSlideModeToastLabel() {
+        if (verticalPageSlideMode) {
+            return isKoreanUi()
+                    ? "PDF 세로 연속 스크롤 모드"
+                    : "PDF vertical continuous mode";
+        }
+        return isKoreanUi()
+                ? "PDF 가로 슬라이드 모드"
+                : "PDF horizontal slide mode";
     }
 
     private void resetZoomToOriginal() {
@@ -857,7 +1111,7 @@ public class PdfReaderActivity extends AppCompatActivity {
             }
             currentPage = clampPage(restored);
             saveReadingState();
-            renderCurrentPage();
+            applyPdfDisplayMode();
         } catch (Exception e) {
             showLoadError(e);
         }
@@ -887,10 +1141,21 @@ public class PdfReaderActivity extends AppCompatActivity {
         pendingPageSlideDirection = direction == 0 ? Integer.compare(target, currentPage) : direction;
         currentPage = target;
         saveReadingState();
-        renderCurrentPage();
+
+        if (verticalPageSlideMode) {
+            renderContinuousPages();
+            scrollContinuousListToCurrentPage(true);
+            pendingPageSlideDirection = 0;
+        } else {
+            renderCurrentPage();
+        }
     }
 
     private void renderCurrentPage() {
+        if (verticalPageSlideMode) {
+            renderContinuousPages();
+            return;
+        }
         if (pdfRenderer == null || pageCount <= 0 || pdfViewport == null) return;
         final int pageToRender = currentPage;
         final float zoomToRender = zoom;
@@ -950,6 +1215,8 @@ public class PdfReaderActivity extends AppCompatActivity {
                     if (pendingPageSlideDirection != 0) {
                         if (pdfHScroll != null) pdfHScroll.post(() -> pdfHScroll.scrollTo(0, 0));
                         if (pdfVScroll != null) pdfVScroll.post(() -> pdfVScroll.scrollTo(0, 0));
+                    } else {
+                        restoreDoubleTapZoomFocusAfterRender();
                     }
                     runPageSlideInAnimation();
                     if (old != null && old != finalBitmap && !old.isRecycled()) old.recycle();
@@ -965,6 +1232,37 @@ public class PdfReaderActivity extends AppCompatActivity {
         });
     }
 
+    private void restoreDoubleTapZoomFocusAfterRender() {
+        if (!pendingZoomFocus || pageImage == null || pdfViewport == null) return;
+
+        final float xRatio = pendingZoomFocusXRatio;
+        final float yRatio = pendingZoomFocusYRatio;
+        final float viewportX = pendingZoomViewportX;
+        final float viewportY = pendingZoomViewportY;
+        pendingZoomFocus = false;
+
+        pageImage.post(() -> {
+            if (pageImage == null || pdfViewport == null) return;
+            int targetX = Math.round(pageImage.getWidth() * xRatio - viewportX);
+            int targetY = Math.round(pageImage.getHeight() * yRatio - viewportY);
+
+            if (pdfHScroll != null) {
+                int maxX = 0;
+                if (pdfHScroll.getChildCount() > 0) {
+                    maxX = Math.max(0, pdfHScroll.getChildAt(0).getWidth() - pdfHScroll.getWidth());
+                }
+                pdfHScroll.scrollTo(Math.max(0, Math.min(maxX, targetX)), pdfHScroll.getScrollY());
+            }
+            if (pdfVScroll != null) {
+                int maxY = 0;
+                if (pdfVScroll.getChildCount() > 0) {
+                    maxY = Math.max(0, pdfVScroll.getChildAt(0).getHeight() - pdfVScroll.getHeight());
+                }
+                pdfVScroll.scrollTo(pdfVScroll.getScrollX(), Math.max(0, Math.min(maxY, targetY)));
+            }
+        });
+    }
+
     private void runPageSlideInAnimation() {
         if (pageImage == null) return;
         int direction = pendingPageSlideDirection;
@@ -972,13 +1270,22 @@ public class PdfReaderActivity extends AppCompatActivity {
         if (direction == 0) {
             pageImage.setAlpha(1.0f);
             pageImage.setTranslationX(0f);
+            pageImage.setTranslationY(0f);
             return;
         }
-        float distance = Math.max(dpToPx(56), pageImage.getWidth() * 0.18f);
-        pageImage.setTranslationX(direction > 0 ? distance : -distance);
+        float distance = Math.max(dpToPx(56),
+                (verticalPageSlideMode ? pageImage.getHeight() : pageImage.getWidth()) * 0.18f);
+        pageImage.setTranslationX(0f);
+        pageImage.setTranslationY(0f);
+        if (verticalPageSlideMode) {
+            pageImage.setTranslationY(direction > 0 ? distance : -distance);
+        } else {
+            pageImage.setTranslationX(direction > 0 ? distance : -distance);
+        }
         pageImage.setAlpha(0.72f);
         pageImage.animate()
                 .translationX(0f)
+                .translationY(0f)
                 .alpha(1.0f)
                 .setDuration(150)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator())
@@ -992,6 +1299,7 @@ public class PdfReaderActivity extends AppCompatActivity {
             return;
         }
         pageStatus.setText(String.format(Locale.getDefault(), "%d / %d", currentPage + 1, pageCount));
+        updatePdfSlideModeButton();
         prevButton.setEnabled(currentPage > 0);
         nextButton.setEnabled(currentPage < pageCount - 1);
     }
@@ -1263,8 +1571,164 @@ public class PdfReaderActivity extends AppCompatActivity {
         saveReadingState();
     }
 
+
+    private class PdfContinuousPageAdapter extends RecyclerView.Adapter<PdfContinuousPageAdapter.PageViewHolder> {
+        private int count = 0;
+        private int viewportWidth = 0;
+        private float adapterZoom = 1.0f;
+        private int adapterGeneration = 0;
+
+        void configure(int newCount, int newViewportWidth, float newZoom) {
+            boolean changed = count != newCount
+                    || viewportWidth != newViewportWidth
+                    || Math.abs(adapterZoom - newZoom) > 0.01f;
+            count = Math.max(0, newCount);
+            viewportWidth = Math.max(1, newViewportWidth);
+            adapterZoom = Math.max(0.55f, Math.min(4.5f, newZoom));
+            if (changed) {
+                adapterGeneration++;
+                notifyDataSetChanged();
+            }
+        }
+
+        void clearBitmaps() {
+            adapterGeneration++;
+            notifyDataSetChanged();
+        }
+
+        void release() {
+            adapterGeneration++;
+            count = 0;
+            notifyDataSetChanged();
+        }
+
+        @NonNull
+        @Override
+        public PageViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            ImageView image = new ImageView(parent.getContext());
+            image.setAdjustViewBounds(true);
+            image.setBackgroundColor(Color.WHITE);
+            image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            image.setContentDescription(getString(R.string.pdf_page));
+            image.setPadding(0, 0, 0, 0);
+
+            RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
+                    RecyclerView.LayoutParams.MATCH_PARENT,
+                    RecyclerView.LayoutParams.WRAP_CONTENT);
+            lp.setMargins(0, 0, 0, dpToPx(10));
+            image.setLayoutParams(lp);
+            return new PageViewHolder(image);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull PageViewHolder holder, int position) {
+            holder.bind(position, adapterGeneration);
+        }
+
+        @Override
+        public int getItemCount() {
+            return count;
+        }
+
+        @Override
+        public void onViewRecycled(@NonNull PageViewHolder holder) {
+            holder.clear();
+            super.onViewRecycled(holder);
+        }
+
+        class PageViewHolder extends RecyclerView.ViewHolder {
+            private final ImageView image;
+            private Bitmap bitmap;
+            private int boundPage = RecyclerView.NO_POSITION;
+            private int boundGeneration = -1;
+
+            PageViewHolder(@NonNull ImageView image) {
+                super(image);
+                this.image = image;
+            }
+
+            void bind(int pageIndex, int generation) {
+                clear();
+                boundPage = pageIndex;
+                boundGeneration = generation;
+                image.setImageDrawable(null);
+                image.setBackgroundColor(Color.WHITE);
+                image.setMinimumHeight(Math.max(dpToPx(160), pdfViewport != null ? pdfViewport.getHeight() / 2 : dpToPx(300)));
+                renderContinuousPageIntoHolder(this, pageIndex, generation);
+            }
+
+            void setBitmapIfStillBound(Bitmap nextBitmap, int pageIndex, int generation) {
+                if (boundPage != pageIndex || boundGeneration != generation || activityDestroyed) {
+                    if (nextBitmap != null && !nextBitmap.isRecycled()) nextBitmap.recycle();
+                    return;
+                }
+                Bitmap old = bitmap;
+                bitmap = nextBitmap;
+                image.setMinimumHeight(0);
+                image.setImageBitmap(nextBitmap);
+                if (old != null && old != nextBitmap && !old.isRecycled()) old.recycle();
+            }
+
+            void clear() {
+                if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
+                bitmap = null;
+                image.setImageDrawable(null);
+                boundPage = RecyclerView.NO_POSITION;
+                boundGeneration = -1;
+            }
+        }
+    }
+
+    private void renderContinuousPageIntoHolder(
+            @NonNull PdfContinuousPageAdapter.PageViewHolder holder,
+            int pageIndex,
+            int generation
+    ) {
+        if (pdfRenderer == null || pageIndex < 0 || pageIndex >= pageCount) return;
+        final int pageToRender = pageIndex;
+        final int widthForRender = Math.max(1, pdfViewport != null ? pdfViewport.getWidth() : holder.itemView.getWidth());
+        final float zoomForRender = zoom;
+
+        executor.execute(() -> {
+            Bitmap bitmap = null;
+            try {
+                synchronized (rendererLock) {
+                    if (pdfRenderer == null || pageToRender >= pageCount) return;
+                    PdfRenderer.Page page = pdfRenderer.openPage(pageToRender);
+                    try {
+                        int baseWidth = Math.max(1, widthForRender - dpToPx(24));
+                        float fitScale = baseWidth / (float) page.getWidth();
+                        float renderScale = Math.max(0.2f, fitScale * zoomForRender);
+                        int width = Math.max(1, Math.round(page.getWidth() * renderScale));
+                        int height = Math.max(1, Math.round(page.getHeight() * renderScale));
+
+                        long pixels = (long) width * (long) height;
+                        long maxPixels = 16000000L;
+                        if (pixels > maxPixels) {
+                            float shrink = (float) Math.sqrt(maxPixels / (double) pixels);
+                            width = Math.max(1, Math.round(width * shrink));
+                            height = Math.max(1, Math.round(height * shrink));
+                        }
+
+                        bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+                        bitmap.eraseColor(Color.WHITE);
+                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                    } finally {
+                        page.close();
+                    }
+                }
+
+                Bitmap finalBitmap = bitmap;
+                handler.post(() -> holder.setBitmapIfStillBound(finalBitmap, pageToRender, generation));
+            } catch (Exception e) {
+                if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
+            }
+        });
+    }
+
     @Override
     protected void onDestroy() {
+        ViewerRegistry.unregister(this);
         activityDestroyed = true;
         ++renderGeneration;
         handler.removeCallbacksAndMessages(null);
@@ -1272,6 +1736,9 @@ public class PdfReaderActivity extends AppCompatActivity {
         if (pageImage != null) {
             pageImage.animate().cancel();
             pageImage.setImageDrawable(null);
+        }
+        if (pdfContinuousAdapter != null) {
+            pdfContinuousAdapter.release();
         }
         closeRenderer();
         executor.shutdownNow();

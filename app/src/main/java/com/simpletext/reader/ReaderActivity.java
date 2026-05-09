@@ -9,6 +9,7 @@ import android.graphics.Paint;
 import android.graphics.Canvas;
 import android.graphics.RectF;
 import android.graphics.Rect;
+import android.graphics.Path;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Drawable;
@@ -73,19 +74,21 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ReaderActivity extends AppCompatActivity {
 
     private static final long VIEWER_DOUBLE_BACK_TIMEOUT_MS = 1000L;
     private static final long VIEWER_BACK_TOAST_DURATION_MS = 650L;
     private static final long LARGE_TEXT_FAST_OPEN_THRESHOLD_BYTES = 3L * 1024L * 1024L;
-    private static final long HUGE_TEXT_PREVIEW_ONLY_THRESHOLD_BYTES = 20L * 1024L * 1024L;
+    private static final long HUGE_TEXT_PREVIEW_ONLY_THRESHOLD_BYTES = 32L * 1024L * 1024L;
     private static final int LARGE_TEXT_PREVIEW_BYTES = 768 * 1024;
 
     public static final String EXTRA_FILE_PATH = "file_path";
@@ -140,7 +143,7 @@ public class ReaderActivity extends AppCompatActivity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private volatile boolean activityDestroyed = false;
-    private int loadGeneration = 0;
+    private final AtomicInteger loadGeneration = new AtomicInteger(0);
     private boolean largeTextEstimateActive = false;
     private int largeTextEstimatedTotalPages = 0;
     private int pendingLargeTextRestorePosition = -1;
@@ -156,6 +159,7 @@ public class ReaderActivity extends AppCompatActivity {
         prefs = PrefsManager.getInstance(this);
         prefs.applyLanguage(prefs.getLanguageMode());
         super.onCreate(savedInstanceState);
+        ViewerRegistry.activate(this);
 
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().setStatusBarColor(Color.BLACK);
@@ -276,11 +280,7 @@ public class ReaderActivity extends AppCompatActivity {
         int leftTextInsetPx = prefs.getReaderTextLeftInsetPx();
         int rightTextInsetPx = prefs.getReaderTextRightInsetPx();
 
-        Typeface tf = Typeface.DEFAULT;
-        String fontName = prefs.getFontFamily();
-        if (fontName != null && !fontName.equals("default")) {
-            tf = FontManager.getInstance().getTypeface(fontName);
-        }
+        Typeface tf = resolveReadingTypeface(prefs.getFontFamily());
 
         Theme theme = themeManager != null ? themeManager.getActiveTheme() : null;
         int textColor = theme != null ? theme.getTextColor() : 0xFFE0E0E0;
@@ -327,8 +327,22 @@ public class ReaderActivity extends AppCompatActivity {
         if (prefs.getKeepScreenOn()) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        getWindow().getDecorView().setSystemUiVisibility(0);
+        applyStatusBarVisibilityPreference();
+        applyPageStatusAlignment(0);
         if (readerRoot != null) ViewCompat.requestApplyInsets(readerRoot);
+    }
+
+    private void applyStatusBarVisibilityPreference() {
+        WindowInsetsControllerCompat controller =
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+
+        if (prefs != null && prefs.getShowStatusBar()) {
+            controller.show(WindowInsetsCompat.Type.statusBars());
+        } else {
+            controller.hide(WindowInsetsCompat.Type.statusBars());
+            controller.setSystemBarsBehavior(
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        }
     }
 
 
@@ -350,6 +364,7 @@ public class ReaderActivity extends AppCompatActivity {
         updateLoadingIndicatorColors(backgroundColor);
         updateBottomMenuBackground();
         updateNavigationBarForBottomMenu();
+        applyStatusBarVisibilityPreference();
     }
 
     private boolean isLightColor(int color) {
@@ -525,7 +540,7 @@ public class ReaderActivity extends AppCompatActivity {
 
 
 
-    private void redrawDialogOuterBorder(AlertDialog dialog, int borderColor) {
+    private void redrawDialogOuterBorder(android.app.Dialog dialog, int borderColor) {
     if (dialog == null || dialog.getWindow() == null) return;
 
     View decor = dialog.getWindow().getDecorView();
@@ -603,6 +618,115 @@ public class ReaderActivity extends AppCompatActivity {
         styleReaderDialogButton(dialog.getButton(AlertDialog.BUTTON_NEUTRAL), subColor);
     }
 
+    private GradientDrawable positionedReaderDialogBackground(int bgColor) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(bgColor);
+        drawable.setCornerRadius(dpToPx(16));
+        drawable.setStroke(dpToPx(2), strongDialogBorderColor(bgColor));
+        return drawable;
+    }
+
+    private android.app.Dialog createPositionedReaderDialog(@NonNull View content,
+                                                            int bgColor,
+                                                            int gravity,
+                                                            int yDp,
+                                                            int horizontalMarginDp,
+                                                            int maxWidthDp,
+                                                            boolean adjustResize) {
+        return createPositionedReaderDialog(content, bgColor, gravity, yDp,
+                horizontalMarginDp, maxWidthDp, 0f, adjustResize);
+    }
+
+    private android.app.Dialog createNarrowPositionedReaderDialog(@NonNull View content,
+                                                                  int bgColor,
+                                                                  int gravity,
+                                                                  int yDp,
+                                                                  float widthFraction,
+                                                                  int maxWidthDp,
+                                                                  boolean adjustResize) {
+        return createPositionedReaderDialog(content, bgColor, gravity, yDp,
+                0, maxWidthDp, widthFraction, adjustResize);
+    }
+
+    private android.app.Dialog createPositionedReaderDialog(@NonNull View content,
+                                                            int bgColor,
+                                                            int gravity,
+                                                            int yDp,
+                                                            int horizontalMarginDp,
+                                                            int maxWidthDp,
+                                                            float widthFraction,
+                                                            boolean adjustResize) {
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        dialog.setCanceledOnTouchOutside(true);
+
+        FrameLayout outerFrame = new FrameLayout(this);
+        outerFrame.setBackground(positionedReaderDialogBackground(bgColor));
+        outerFrame.setClipToOutline(true);
+        outerFrame.setClipChildren(true);
+        outerFrame.setClipToPadding(true);
+        int borderPad = dpToPx(2);
+        outerFrame.setPadding(borderPad, borderPad, borderPad, borderPad);
+
+        content.setBackgroundColor(Color.TRANSPARENT);
+        if (content instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) content;
+            group.setClipChildren(false);
+            group.setClipToPadding(false);
+        }
+
+        outerFrame.addView(content, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT));
+
+        dialog.setContentView(outerFrame);
+
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setGravity(gravity);
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+            lp.copyFrom(window.getAttributes());
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            int cappedWidth = Math.min(screenWidth - dpToPx(horizontalMarginDp), dpToPx(maxWidthDp));
+            if (widthFraction > 0f && widthFraction < 1f) {
+                cappedWidth = Math.min(Math.round(screenWidth * widthFraction), dpToPx(maxWidthDp));
+            }
+            lp.width = Math.max(dpToPx(220), cappedWidth);
+            lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+            lp.y = dpToPx(yDp);
+            lp.dimAmount = 0.16f;
+            window.setAttributes(lp);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            if (adjustResize) {
+                window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+            }
+        }
+        return dialog;
+    }
+
+    private void updatePositionedReaderDialogYOffset(@NonNull android.app.Dialog dialog, int yDp) {
+        android.view.Window window = dialog.getWindow();
+        if (window == null) return;
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+        lp.copyFrom(window.getAttributes());
+        lp.y = dpToPx(yDp);
+        window.setAttributes(lp);
+    }
+
+    private TextView makeReaderDialogActionText(String label, int textColor, int gravity) {
+        TextView button = new TextView(this);
+        button.setText(label);
+        button.setTextColor(textColor);
+        button.setTextSize(16f);
+        button.setGravity(gravity);
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setBackgroundColor(Color.TRANSPARENT);
+        button.setPadding(dpToPx(18), 0, dpToPx(18), 0);
+        return button;
+    }
+
 
 
     private int dialogActionPanelFillColor(int bgColor) {
@@ -637,6 +761,55 @@ public class ReaderActivity extends AppCompatActivity {
                 // rounded path drawing on top of it. This removes the AA "chipping"
                 // that appeared where the panel's own curve met the parent's curve.
                 canvas.drawRect(bounds, fillPaint);
+
+                float h = getResources().getDisplayMetrics().density;
+                canvas.drawRect(bounds.left, bounds.top, bounds.right, bounds.top + h, linePaint);
+            }
+
+            @Override public void setAlpha(int alpha) {
+                fillPaint.setAlpha(alpha);
+                linePaint.setAlpha(alpha);
+            }
+
+            @Override public void setColorFilter(ColorFilter colorFilter) {
+                fillPaint.setColorFilter(colorFilter);
+                linePaint.setColorFilter(colorFilter);
+            }
+
+            @Override public int getOpacity() {
+                return PixelFormat.TRANSLUCENT;
+            }
+        };
+    }
+
+    private Drawable positionedActionPanelBackground(int fillColor, int lineColor) {
+        return new Drawable() {
+            private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private final RectF rect = new RectF();
+            private final Path path = new Path();
+
+            {
+                fillPaint.setColor(fillColor);
+                fillPaint.setStyle(Paint.Style.FILL);
+                linePaint.setColor(lineColor);
+                linePaint.setStyle(Paint.Style.FILL);
+            }
+
+            @Override
+            public void draw(Canvas canvas) {
+                Rect bounds = getBounds();
+                rect.set(bounds.left, bounds.top, bounds.right, bounds.bottom);
+
+                float r = dpToPx(16);
+                path.reset();
+                path.addRoundRect(rect, new float[]{
+                        0, 0,   // top-left
+                        0, 0,   // top-right
+                        r, r,   // bottom-right
+                        r, r    // bottom-left
+                }, Path.Direction.CW);
+                canvas.drawPath(path, fillPaint);
 
                 float h = getResources().getDisplayMetrics().density;
                 canvas.drawRect(bounds.left, bounds.top, bounds.right, bounds.top + h, linePaint);
@@ -967,7 +1140,7 @@ public class ReaderActivity extends AppCompatActivity {
         if (readerRoot == null) return;
         ViewCompat.setOnApplyWindowInsetsListener(readerRoot, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            int topInset = bars.top;
+            int topInset = (prefs != null && prefs.getShowStatusBar()) ? bars.top : 0;
             int bottomInset = bars.bottom;
 
             if (navBarSpacer != null) {
@@ -978,18 +1151,29 @@ public class ReaderActivity extends AppCompatActivity {
                 navBarSpacer.setLayoutParams(spacerLp);
             }
 
-            int pageStatusHeight = topInset + dpToPx(24);
+            // Always reserve the page-indicator row height. The "Do not show" option
+            // makes the indicator invisible, but it should not move the text upward.
+            int pageStatusHeight = topInset + dpToPx(28);
             if (readerPageStatus != null) {
                 FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) readerPageStatus.getLayoutParams();
                 lp.topMargin = 0;
                 lp.height = pageStatusHeight;
                 readerPageStatus.setLayoutParams(lp);
-                readerPageStatus.setPadding(0, topInset, 0, dpToPx(4));
+                applyPageStatusAlignment(topInset);
+            }
+
+            int statusOffExtraTopPadding = 0;
+            if (prefs != null && !prefs.getShowStatusBar()) {
+                // When the Android status bar is hidden, the content can start too close
+                // to the punch-hole/cutout area. Add roughly one text row of top padding.
+                statusOffExtraTopPadding = Math.round(prefs.getFontSize()
+                        * prefs.getLineSpacing()
+                        * getResources().getDisplayMetrics().scaledDensity);
             }
 
             readerView.setPadding(
                     readerView.getPaddingLeft(),
-                    pageStatusHeight + dpToPx(8),
+                    pageStatusHeight + dpToPx(8) + statusOffExtraTopPadding,
                     readerView.getPaddingRight(),
                     bottomInset + dpToPx(12));
 
@@ -1011,6 +1195,48 @@ public class ReaderActivity extends AppCompatActivity {
             return insets;
         });
         ViewCompat.requestApplyInsets(readerRoot);
+    }
+
+    private void applyPageStatusAlignment(int topInset) {
+        if (readerPageStatus == null) return;
+
+        int alignment = prefs != null
+                ? prefs.getPageStatusAlignment()
+                : PrefsManager.PAGE_STATUS_ALIGN_CENTER;
+
+        if (alignment == PrefsManager.PAGE_STATUS_ALIGN_HIDDEN) {
+            readerPageStatus.setVisibility(View.INVISIBLE);
+            return;
+        }
+
+        readerPageStatus.setVisibility(View.VISIBLE);
+
+        int horizontalGravity;
+        int startPadding;
+        int endPadding;
+
+        // Extra side padding keeps left/right indicators away from curved edges,
+        // punch-hole/camera cutouts, and gesture-status areas.
+        int sideInset = Math.max(dpToPx(36), topInset + dpToPx(18));
+        int nearSideInset = dpToPx(16);
+
+        if (alignment == PrefsManager.PAGE_STATUS_ALIGN_LEFT) {
+            horizontalGravity = Gravity.START;
+            startPadding = sideInset;
+            endPadding = nearSideInset;
+        } else if (alignment == PrefsManager.PAGE_STATUS_ALIGN_RIGHT) {
+            horizontalGravity = Gravity.END;
+            startPadding = nearSideInset;
+            endPadding = sideInset;
+        } else {
+            horizontalGravity = Gravity.CENTER_HORIZONTAL;
+            startPadding = sideInset;
+            endPadding = sideInset;
+        }
+
+        readerPageStatus.setGravity(Gravity.BOTTOM | horizontalGravity);
+        // Smaller bottom padding moves the page indicator slightly downward.
+        readerPageStatus.setPadding(startPadding, topInset, endPadding, dpToPx(1));
     }
 
     private void openFileBrowserFromViewer() {
@@ -1044,15 +1270,20 @@ public class ReaderActivity extends AppCompatActivity {
         int totalPages = getTotalPageCount();
         int currentPage = getCurrentPageNumber();
 
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+
         TextView title = makeReaderDialogTitle(getString(R.string.page_move), bubbleBg, bubbleFg);
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         int pad = dpToPx(20);
-        box.setPadding(pad, dpToPx(12), pad, dpToPx(12));
-        // No inner/subsection border here.
-        // Only the most outer dialog window gets the contrast border.
-        box.setBackgroundColor(bubbleBg);
+        box.setPadding(pad, dpToPx(8), pad, dpToPx(12));
+        box.setBackgroundColor(Color.TRANSPARENT);
 
         TextView label = new TextView(this);
         label.setGravity(Gravity.CENTER);
@@ -1067,13 +1298,9 @@ public class ReaderActivity extends AppCompatActivity {
         SeekBar dialogSeek = new SeekBar(this);
         dialogSeek.setMax(Math.max(0, totalPages - 1));
         dialogSeek.setProgress(Math.max(0, currentPage - 1));
-        // Visible for every reader theme:
-        // background track = medium contrast
-        // progress/thumbnail = high contrast
         int trackColor = blendColors(bubbleBg, bubbleFg, 0.52f);
         int progressColor = blendColors(bubbleBg, bubbleFg, 0.82f);
         int thumbColor = blendColors(bubbleBg, bubbleFg, 0.94f);
-
         dialogSeek.setThumbTintList(ColorStateList.valueOf(thumbColor));
         dialogSeek.setProgressTintList(ColorStateList.valueOf(progressColor));
         dialogSeek.setProgressBackgroundTintList(ColorStateList.valueOf(trackColor));
@@ -1087,7 +1314,6 @@ public class ReaderActivity extends AppCompatActivity {
         pageHint.setTextSize(13f);
         pageHint.setTextColor(blendColors(bubbleBg, bubbleFg, 0.78f));
         pageHint.setGravity(Gravity.CENTER);
-        // Keep the label close to the slider, but leave enough room above the input box.
         pageHint.setPadding(0, dpToPx(3), 0, 0);
         box.addView(pageHint, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1104,6 +1330,36 @@ public class ReaderActivity extends AppCompatActivity {
         pageInputLp.gravity = Gravity.CENTER_HORIZONTAL;
         pageInputLp.setMargins(0, dpToPx(8), 0, 0);
         box.addView(pageInput, pageInputLp);
+
+        panel.addView(box, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setBackground(positionedActionPanelBackground(
+                dialogActionPanelFillColor(bubbleBg),
+                dialogActionPanelLineColor(bubbleBg)));
+        actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
+
+        TextView closeButton = makeReaderDialogActionText(getString(R.string.close), bubbleFg,
+                Gravity.CENTER_VERTICAL | Gravity.END);
+        actionRow.addView(closeButton, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT));
+        panel.addView(actionRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(54)));
+
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                panel,
+                bubbleBg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                88,
+                0.85f,
+                460,
+                true);
 
         final int[] pendingPage = new int[]{currentPage};
         dialogSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -1127,54 +1383,29 @@ public class ReaderActivity extends AppCompatActivity {
             }
         });
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setCustomTitle(title)
-                .setView(box)
-                .setPositiveButton(getString(R.string.go), null)
-                .setNegativeButton(getString(R.string.close), null)
-                .create();
-
-        dialog.setOnShowListener(d -> {
-            styleReaderDialogWindow(dialog, bubbleBg, bubbleFg, bubbleSub);
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-                String raw = pageInput.getText().toString().trim();
-                if (raw.isEmpty()) {
-                    Toast.makeText(this, getString(R.string.enter_page_number), Toast.LENGTH_SHORT).show();
+        closeButton.setOnClickListener(v -> {
+            String raw = pageInput.getText().toString().trim();
+            if (raw.isEmpty()) {
+                dialog.dismiss();
+                return;
+            }
+            try {
+                int page = Integer.parseInt(raw);
+                if (page < 1 || page > getTotalPageCount()) {
+                    Toast.makeText(this,
+                            getString(R.string.page_range_error, getTotalPageCount()),
+                            Toast.LENGTH_SHORT).show();
                     return;
                 }
-                try {
-                    int page = Integer.parseInt(raw);
-                    if (page < 1 || page > getTotalPageCount()) {
-                        Toast.makeText(this,
-                                getString(R.string.page_range_error, getTotalPageCount()),
-                                Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    scrollToPageNumber(page);
-                    updatePositionLabel();
-                    dialog.dismiss();
-                } catch (NumberFormatException ex) {
-                    Toast.makeText(this, getString(R.string.invalid_page_number), Toast.LENGTH_SHORT).show();
-                }
-            });
+                scrollToPageNumber(page);
+                updatePositionLabel();
+                dialog.dismiss();
+            } catch (NumberFormatException ex) {
+                Toast.makeText(this, getString(R.string.invalid_page_number), Toast.LENGTH_SHORT).show();
+            }
         });
 
         dialog.show();
-        positionPageMoveDialogForThumbReach(dialog);
-    }
-
-    private void positionPageMoveDialogForThumbReach(@NonNull AlertDialog dialog) {
-        if (dialog.getWindow() == null) return;
-        android.view.Window window = dialog.getWindow();
-        window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
-        lp.copyFrom(window.getAttributes());
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        lp.width = Math.min(screenWidth - dpToPx(14), dpToPx(460));
-        lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dpToPx(74);
-        window.setAttributes(lp);
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
 
     private String formatPageMoveLabel(int page, int totalPages) {
@@ -1189,10 +1420,6 @@ public class ReaderActivity extends AppCompatActivity {
 
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
-        // The rounded background + overlay stroke now come from the shared
-        // styleReaderDialogWindow path, identical to 페이지 이동 / 책갈피 / 본문 검색.
-        // No inline rounded background here, otherwise we'd paint two stacked
-        // rounded fills and lose the outer overlay border.
         outer.setBackgroundColor(Color.TRANSPARENT);
 
         TextView title = makeReaderDialogTitle(getString(R.string.more), bg, fg);
@@ -1210,47 +1437,30 @@ public class ReaderActivity extends AppCompatActivity {
         scroll.setBackgroundColor(Color.TRANSPARENT);
         scroll.addView(list);
 
-        final AlertDialog[] ref = new AlertDialog[1];
+        final android.app.Dialog[] ref = new android.app.Dialog[1];
 
-        // Removed from 더보기:
-        // - 책갈피 추가: already has a bottom 책갈피 button
-        // - 위치/줄 이동: already has a bottom 페이지 이동 button
-        // - 검색: bottom-left button is now 찾기
         addMoreActionRow(list, getString(R.string.brightness), fg, panel, this::showBrightnessDialog, ref);
         addMoreActionRow(list, getString(R.string.font), fg, panel, this::showFontDialog, ref);
         addMoreActionRow(list, getString(R.string.increase_font), fg, panel, () -> changeFontSize(2f), ref);
         addMoreActionRow(list, getString(R.string.decrease_font), fg, panel, () -> changeFontSize(-2f), ref);
-
         addMoreActionRow(list, getString(R.string.file_info), fg, panel, this::showFileInfoDialog, ref);
 
         outer.addView(scroll, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f));
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
         LinearLayout actionRow = new LinearLayout(this);
         actionRow.setOrientation(LinearLayout.HORIZONTAL);
         actionRow.setGravity(Gravity.CENTER_VERTICAL);
-        // Match the normal AlertDialog bottom action area used by 페이지 이동 / 책갈피:
-        // subtle theme-blended fill + top divider line.
-        actionRow.setBackground(actionPanelBackground(
+        actionRow.setBackground(positionedActionPanelBackground(
                 dialogActionPanelFillColor(bg),
                 dialogActionPanelLineColor(bg)));
         actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
 
-        TextView openFile = new TextView(this);
-        openFile.setText(getString(R.string.action_open_file));
-        openFile.setTextColor(fg);
-        openFile.setTextSize(16f);
-        openFile.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
-        openFile.setBackgroundColor(Color.TRANSPARENT);
-
-        TextView close = new TextView(this);
-        close.setText(getString(R.string.close));
-        close.setTextColor(fg);
-        close.setTextSize(16f);
-        close.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
-        close.setBackgroundColor(Color.TRANSPARENT);
+        TextView openFile = makeReaderDialogActionText(getString(R.string.action_open_file), fg,
+                Gravity.CENTER_VERTICAL | Gravity.START);
+        TextView close = makeReaderDialogActionText(getString(R.string.close), fg,
+                Gravity.CENTER_VERTICAL | Gravity.END);
 
         actionRow.addView(openFile, new LinearLayout.LayoutParams(
                 0,
@@ -1265,9 +1475,14 @@ public class ReaderActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dpToPx(54)));
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setView(outer)
-                .create();
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                outer,
+                bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                88,
+                0.85f,
+                460,
+                false);
         ref[0] = dialog;
 
         openFile.setOnClickListener(v -> {
@@ -1276,23 +1491,7 @@ public class ReaderActivity extends AppCompatActivity {
         });
         close.setOnClickListener(v -> dialog.dismiss());
 
-        dialog.setOnShowListener(d -> styleReaderDialogWindow(dialog, bg, fg, sub));
-
         dialog.show();
-        positionMoreDialogForThumbReach(dialog);
-    }
-
-    private void positionMoreDialogForThumbReach(@NonNull AlertDialog dialog) {
-        if (dialog.getWindow() == null) return;
-        android.view.Window window = dialog.getWindow();
-        window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
-        lp.copyFrom(window.getAttributes());
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        lp.width = Math.min(screenWidth - dpToPx(16), dpToPx(460));
-        lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dpToPx(54);
-        window.setAttributes(lp);
     }
 
     private void addMoreActionRow(
@@ -1301,7 +1500,7 @@ public class ReaderActivity extends AppCompatActivity {
             int fg,
             int panel,
             Runnable action,
-            AlertDialog[] dialogRef
+            android.app.Dialog[] dialogRef
     ) {
         TextView row = makeReaderActionRow(label, fg);
         row.setOnClickListener(v -> {
@@ -1312,7 +1511,7 @@ public class ReaderActivity extends AppCompatActivity {
     }
 
     private void loadFileFromIntent(@NonNull Intent sourceIntent) {
-        final int generation = ++loadGeneration;
+        final int generation = loadGeneration.incrementAndGet();
         activityDestroyed = false;
         progressBar.setVisibility(View.VISIBLE);
         progressText.setVisibility(View.VISIBLE);
@@ -1342,7 +1541,7 @@ public class ReaderActivity extends AppCompatActivity {
         int jumpTotalPages = sourceIntent.getIntExtra(EXTRA_JUMP_TOTAL_PAGES, 0);
 
         executor.execute(() -> {
-            if (activityDestroyed || generation != loadGeneration) return;
+            if (activityDestroyed || generation != loadGeneration.get()) return;
             try {
                 File fileToRead = null;
                 String loadedFilePath = null;
@@ -1391,7 +1590,7 @@ public class ReaderActivity extends AppCompatActivity {
                     boolean previewOnly = fileToRead.length() >= HUGE_TEXT_PREVIEW_ONLY_THRESHOLD_BYTES;
 
                     handler.post(() -> {
-                        if (!activityDestroyed && generation == loadGeneration) {
+                        if (!activityDestroyed && generation == loadGeneration.get()) {
                             onLargeTextPreviewLoaded(previewContent, previewLineCount,
                                     finalFilePath, finalFileName, jumpPosition,
                                     fullByteLength, previewByteCount,
@@ -1401,20 +1600,20 @@ public class ReaderActivity extends AppCompatActivity {
                         }
                     });
 
-                    if (activityDestroyed || generation != loadGeneration || previewOnly) return;
+                    if (activityDestroyed || generation != loadGeneration.get() || previewOnly) return;
                 }
 
                 String content = FileUtils.readReadableFile(this, fileToRead);
                 int lineCount = countLines(content);
 
                 handler.post(() -> {
-                    if (!activityDestroyed && generation == loadGeneration) {
+                    if (!activityDestroyed && generation == loadGeneration.get()) {
                         onFileLoaded(content, lineCount, finalFilePath, finalFileName, jumpPosition);
                     }
                 });
             } catch (Exception e) {
                 handler.post(() -> {
-                    if (activityDestroyed || generation != loadGeneration) return;
+                    if (activityDestroyed || generation != loadGeneration.get()) return;
                     progressText.setText(String.format(Locale.getDefault(), "%s%s", getString(R.string.error_prefix), e.getMessage()));
                     Toast.makeText(this, getString(R.string.error_prefix) + e.getMessage(), Toast.LENGTH_LONG).show();
                 });
@@ -2152,7 +2351,7 @@ public class ReaderActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dpToPx(430)));
 
-        final AlertDialog[] dialogRef = new AlertDialog[1];
+        final android.app.Dialog[] dialogRef = new AlertDialog[1];
 
         Runnable refresh = () -> {
             List<Bookmark> allBookmarks = bookmarkManager.getAllBookmarks();
@@ -2312,6 +2511,15 @@ public class ReaderActivity extends AppCompatActivity {
         final int fg = readerDialogTextColor(bg);
         final int sub = readerDialogSubTextColor(bg);
 
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+
+        TextView title = makeReaderDialogTitle(getString(R.string.brightness), bg, fg);
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackgroundColor(Color.TRANSPARENT);
@@ -2340,6 +2548,37 @@ public class ReaderActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dpToPx(48)));
 
+        panel.addView(box, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setBackground(positionedActionPanelBackground(
+                dialogActionPanelFillColor(bg),
+                dialogActionPanelLineColor(bg)));
+        actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
+
+        TextView ok = makeReaderDialogActionText(getString(R.string.ok), fg,
+                Gravity.CENTER_VERTICAL | Gravity.END);
+        actionRow.addView(ok, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1f));
+        panel.addView(actionRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(54)));
+
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                panel,
+                bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                88,
+                0.85f,
+                360,
+                false);
+
         seekbar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
                 if (fromUser) {
@@ -2363,14 +2602,7 @@ public class ReaderActivity extends AppCompatActivity {
             }
         });
 
-        TextView title = makeReaderDialogTitle(getString(R.string.brightness), bg, fg);
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setCustomTitle(title)
-                .setView(box)
-                .setPositiveButton(getString(R.string.ok), null)
-                .create();
-
-        dialog.setOnShowListener(d -> styleReaderDialogWindow(dialog, bg, fg, sub));
+        ok.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
     }
 
@@ -2422,19 +2654,190 @@ public class ReaderActivity extends AppCompatActivity {
     // --- Font selection ---
 
     private void showFontDialog() {
-        FontManager fm = FontManager.getInstance();
-        if (!fm.isScanned()) {
-            Toast.makeText(this, getString(R.string.scanning_fonts), Toast.LENGTH_SHORT).show();
-            fm.scanFonts(this, this::showFontPickerDialog);
-        } else {
-            showFontPickerDialog(fm.getFontNames());
+        showFontPickerDialog(getReadingFontOptions());
+    }
+
+    private static final class ReadingFontOption {
+        final String value;
+        final String englishLabel;
+        final String koreanLabel;
+
+        ReadingFontOption(String value, String englishLabel, String koreanLabel) {
+            this.value = value;
+            this.englishLabel = englishLabel;
+            this.koreanLabel = koreanLabel;
         }
     }
 
-    private void showFontPickerDialog(List<String> fontNames) {
+    private ReadingFontOption[] getReadingFontOptions() {
+        List<ReadingFontOption> options = new ArrayList<>();
+
+        options.add(new ReadingFontOption("default",
+                "System Sans (recommended)",
+                "시스템 산세리프 (추천)"));
+        options.add(new ReadingFontOption("korean_sans",
+                "Korean/System Sans",
+                "한글 산세리프"));
+        options.add(new ReadingFontOption("korean_serif",
+                "Korean/System Serif",
+                "한글 명조/세리프"));
+        options.add(new ReadingFontOption("serif",
+                "Serif",
+                "세리프"));
+        options.add(new ReadingFontOption("monospace",
+                "Monospace",
+                "고정폭"));
+        options.add(new ReadingFontOption("sans_medium",
+                "Sans Medium",
+                "산세리프 미디엄"));
+        options.add(new ReadingFontOption("sans_condensed",
+                "Sans Condensed",
+                "산세리프 압축"));
+        options.add(new ReadingFontOption("sans_light",
+                "Sans Light",
+                "산세리프 라이트"));
+
+        addUserFontOptions(options);
+
+        String current = normalizeReadingFontValue(prefs != null ? prefs.getFontFamily() : "default");
+        if (!isCuratedReadingFontValue(current) && !containsReadingFontOption(options, current)) {
+            options.add(new ReadingFontOption(current,
+                    "Installed/Custom: " + current,
+                    "설치/사용자 글꼴: " + current));
+        }
+
+        return options.toArray(new ReadingFontOption[0]);
+    }
+
+    private void addUserFontOptions(@NonNull List<ReadingFontOption> options) {
+        try {
+            FontManager fontManager = FontManager.getInstance();
+            if (!fontManager.isScanned()) {
+                fontManager.scanFontsSync(this);
+            }
+
+            // System-installed custom fonts, such as Samsung/Android installed font
+            // styles, should be visible without showing the full raw /system/fonts list.
+            for (String fontName : fontManager.getSystemInstalledFontNames()) {
+                if (fontName == null || fontName.trim().isEmpty()) continue;
+                String value = normalizeReadingFontValue(fontName);
+                if (isCuratedReadingFontValue(value) || containsReadingFontOption(options, value)) continue;
+                options.add(new ReadingFontOption(value,
+                        "Installed: " + fontName,
+                        "설치된 글꼴: " + fontName));
+            }
+
+            // Keep manually provided font files available, but separate them from
+            // OS-installed custom fonts so the picker stays readable.
+            for (String fontName : fontManager.getUserFontNames()) {
+                if (fontName == null || fontName.trim().isEmpty()) continue;
+                String value = normalizeReadingFontValue(fontName);
+                if (isCuratedReadingFontValue(value) || containsReadingFontOption(options, value)) continue;
+                options.add(new ReadingFontOption(value,
+                        "Font file: " + fontName,
+                        "글꼴 파일: " + fontName));
+            }
+        } catch (Throwable ignored) {
+            // Font scanning should never block opening the font picker.
+        }
+    }
+
+    private boolean containsReadingFontOption(@NonNull List<ReadingFontOption> options, String value) {
+        for (ReadingFontOption option : options) {
+            if (option.value.equals(value)) return true;
+        }
+        return false;
+    }
+
+    private boolean isCuratedReadingFontValue(String value) {
+        switch (normalizeReadingFontValue(value)) {
+            case "default":
+            case "korean_sans":
+            case "korean_serif":
+            case "serif":
+            case "monospace":
+            case "sans_medium":
+            case "sans_condensed":
+            case "sans_light":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private String getReadingFontLabel(@NonNull ReadingFontOption option) {
+        String lang = Locale.getDefault().getLanguage();
+        return "ko".equalsIgnoreCase(lang) ? option.koreanLabel : option.englishLabel;
+    }
+
+    private String normalizeReadingFontValue(String fontName) {
+        if (fontName == null || fontName.trim().isEmpty()) return "default";
+
+        switch (fontName) {
+            case "Default (Sans-serif)":
+            case "DEFAULT":
+                return "default";
+            case "Serif":
+            case "SERIF":
+                return "serif";
+            case "Monospace":
+            case "MONOSPACE":
+                return "monospace";
+            case "default":
+            case "korean_sans":
+            case "korean_serif":
+            case "serif":
+            case "monospace":
+            case "sans_medium":
+            case "sans_condensed":
+            case "sans_light":
+                return fontName;
+            default:
+                return fontName;
+        }
+    }
+
+    private Typeface resolveReadingTypeface(String fontName) {
+        String value = normalizeReadingFontValue(fontName);
+
+        switch (value) {
+            case "default":
+                return Typeface.DEFAULT;
+            case "korean_sans":
+                // Android's system sans family uses the device CJK fallback chain,
+                // so Korean glyphs are handled by Noto/Samsung CJK fonts without
+                // exposing dozens of raw system font files to the user.
+                return Typeface.create("sans-serif", Typeface.NORMAL);
+            case "korean_serif":
+                return Typeface.create("serif", Typeface.NORMAL);
+            case "serif":
+                return Typeface.SERIF;
+            case "monospace":
+                return Typeface.MONOSPACE;
+            case "sans_medium":
+                return Typeface.create("sans-serif-medium", Typeface.NORMAL);
+            case "sans_condensed":
+                return Typeface.create("sans-serif-condensed", Typeface.NORMAL);
+            case "sans_light":
+                return Typeface.create("sans-serif-light", Typeface.NORMAL);
+            default:
+                // Backward compatibility for a previously saved imported/scanned font.
+                return FontManager.getInstance().getTypeface(value);
+        }
+    }
+
+    private void showFontPickerDialog(ReadingFontOption[] fontOptions) {
         final int bg = readerDialogBgColor();
         final int fg = readerDialogTextColor(bg);
-        final int sub = readerDialogSubTextColor(bg);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+
+        TextView title = makeReaderDialogTitle(getString(R.string.select_font), bg, fg);
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
@@ -2445,29 +2848,55 @@ public class ReaderActivity extends AppCompatActivity {
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(Color.TRANSPARENT);
         scroll.addView(list);
+        panel.addView(scroll, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        final AlertDialog[] ref = new AlertDialog[1];
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setBackground(positionedActionPanelBackground(
+                dialogActionPanelFillColor(bg),
+                dialogActionPanelLineColor(bg)));
+        actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
 
-        for (String name : fontNames) {
-            TextView row = makeReaderActionRow(name, fg);
+        TextView cancel = makeReaderDialogActionText(getString(R.string.cancel), fg,
+                Gravity.CENTER_VERTICAL | Gravity.END);
+        actionRow.addView(cancel, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1f));
+        panel.addView(actionRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(54)));
+
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                panel,
+                bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                88,
+                0.85f,
+                360,
+                false);
+
+        String currentFont = normalizeReadingFontValue(prefs.getFontFamily());
+        for (ReadingFontOption option : fontOptions) {
+            String label = getReadingFontLabel(option);
+            if (option.value.equals(currentFont)) {
+                label = "✓ " + label;
+            }
+
+            TextView row = makeReaderActionRow(label, fg);
             row.setOnClickListener(v -> {
-                if (ref[0] != null) ref[0].dismiss();
-                prefs.setFontFamily(name);
+                dialog.dismiss();
+                prefs.setFontFamily(option.value);
                 applyPreferences();
                 updatePositionLabel();
             });
             list.addView(row);
         }
 
-        TextView title = makeReaderDialogTitle(getString(R.string.select_font), bg, fg);
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setCustomTitle(title)
-                .setView(scroll)
-                .setNegativeButton(getString(R.string.cancel), null)
-                .create();
-        ref[0] = dialog;
-
-        dialog.setOnShowListener(d -> styleReaderDialogWindow(dialog, bg, fg, sub));
+        cancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
     }
 
@@ -2605,10 +3034,28 @@ public class ReaderActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setCustomTitle(titleBox)
-                .setView(box)
-                .create();
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+        panel.addView(titleBox, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(box, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                panel,
+                bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                88,
+                0.85f,
+                460,
+                true);
+
+        // Keep the find dialog at one stable position. Do not move it in response
+        // to keyboard visibility; the previous delayed restore caused bounce.
+        updatePositionedReaderDialogYOffset(dialog, 88);
 
         prevButton.setOnClickListener(v -> performTextSearchMove(
                 input.getText().toString(), false, matchStatus));
@@ -2621,7 +3068,6 @@ public class ReaderActivity extends AppCompatActivity {
             return true;
         });
 
-        dialog.setOnShowListener(d -> styleReaderDialogWindow(dialog, bg, fg, sub));
         dialog.setOnDismissListener(d -> {
             if (prefs != null) {
                 prefs.setLastReaderSearchQuery(input.getText() != null ? input.getText().toString() : "");
@@ -2727,7 +3173,6 @@ public class ReaderActivity extends AppCompatActivity {
 
         final int bg = readerDialogBgColor();
         final int fg = readerDialogTextColor(bg);
-        final int sub = readerDialogSubTextColor(bg);
 
         File file = new File(filePath);
         String info = getString(R.string.file_label) + ": " + fileName
@@ -2741,6 +3186,15 @@ public class ReaderActivity extends AppCompatActivity {
                 + "\n" + getString(R.string.lines) + ": " + totalLines
                 + "\n" + getString(R.string.pages) + ": " + getTotalPageCount();
 
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+
+        TextView title = makeReaderDialogTitle(getString(R.string.file_info), bg, fg);
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
         TextView message = new TextView(this);
         message.setText(info);
         message.setTextColor(fg);
@@ -2749,14 +3203,41 @@ public class ReaderActivity extends AppCompatActivity {
         message.setPadding(dpToPx(24), dpToPx(12), dpToPx(24), dpToPx(12));
         message.setBackgroundColor(Color.TRANSPARENT);
 
-        TextView title = makeReaderDialogTitle(getString(R.string.file_info), bg, fg);
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setCustomTitle(title)
-                .setView(message)
-                .setPositiveButton(getString(R.string.ok), null)
-                .create();
+        ScrollView scroll = new ScrollView(this);
+        scroll.setBackgroundColor(Color.TRANSPARENT);
+        scroll.addView(message);
+        panel.addView(scroll, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        dialog.setOnShowListener(d -> styleReaderDialogWindow(dialog, bg, fg, sub));
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setBackground(positionedActionPanelBackground(
+                dialogActionPanelFillColor(bg),
+                dialogActionPanelLineColor(bg)));
+        actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
+
+        TextView ok = makeReaderDialogActionText(getString(R.string.ok), fg,
+                Gravity.CENTER_VERTICAL | Gravity.END);
+        actionRow.addView(ok, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1f));
+        panel.addView(actionRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(54)));
+
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                panel,
+                bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                88,
+                0.85f,
+                360,
+                false);
+
+        ok.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
     }
 
@@ -2800,7 +3281,7 @@ public class ReaderActivity extends AppCompatActivity {
     @Override protected void onPause() { super.onPause(); saveReadingState(); }
     @Override protected void onDestroy() {
         activityDestroyed = true;
-        loadGeneration++;
+        loadGeneration.incrementAndGet();
         handler.removeCallbacksAndMessages(null);
         if (viewerBackToast != null) {
             viewerBackToast.cancel();
@@ -2808,8 +3289,28 @@ public class ReaderActivity extends AppCompatActivity {
         }
         saveReadingState();
         if (notificationHelper != null) notificationHelper.dismiss();
+        releaseReaderMemory();
         executor.shutdownNow();
+        ViewerRegistry.unregister(this);
         super.onDestroy();
+    }
+
+    private void releaseReaderMemory() {
+        activeSearchQuery = "";
+        activeSearchIndex = -1;
+        fileContent = "";
+        totalChars = 0;
+        totalLines = 0;
+        largeTextEstimateActive = false;
+        largeTextEstimatedTotalPages = 0;
+        hugeTextPreviewOnly = false;
+        pendingLargeTextRestorePosition = -1;
+        pendingLargeTextCachedDisplayPage = 0;
+        pendingLargeTextCachedTotalPages = 0;
+
+        if (readerView != null) {
+            readerView.releaseTextResources();
+        }
     }
 
     private void saveReadingState() {

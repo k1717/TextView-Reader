@@ -14,6 +14,7 @@ public class DrawerEntry {
     public static final int ACTION_DOWNLOADS = 3;
     public static final int ACTION_STORAGE_ROOT = 4;
     public static final int ACTION_RECENT_FOLDER = 5;
+    public static final int ACTION_FOLDER_SHORTCUT = 6;
     public static final int ACTION_HEADER = -1;
     public static final int ACTION_DIVIDER = -2;
 

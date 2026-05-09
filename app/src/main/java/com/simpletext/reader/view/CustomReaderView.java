@@ -99,6 +99,22 @@ public class CustomReaderView extends View {
         this.listener = listener;
     }
 
+    public void releaseTextResources() {
+        if (!scroller.isFinished()) {
+            scroller.abortAnimation();
+        }
+        recycleVelocityTracker();
+
+        listener = null;
+        text = "";
+        layout = null;
+        searchQuery = "";
+        activeSearchIndex = -1;
+        readerScrollY = 0;
+        maxScrollY = 0;
+        invalidate();
+    }
+
     public void setTextContent(String value) {
         text = value != null ? value : "";
         readerScrollY = 0;
@@ -221,7 +237,7 @@ public class CustomReaderView extends View {
                 .setAlignment(Layout.Alignment.ALIGN_NORMAL)
                 .setLineSpacing(0f, lineSpacingMultiplier)
                 .setIncludePad(true)
-                .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
+                .setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_SIMPLE)
                 .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
                 .build();
 
@@ -405,6 +421,9 @@ public class CustomReaderView extends View {
         if (layout == null || text.isEmpty()) return clampScrollY(y);
 
         int clamped = clampScrollY(y);
+        if (clamped <= 0) return 0;
+        if (clamped >= maxScrollY) return maxScrollY;
+
         int layoutY = Math.max(0, clamped - marginVerticalPx);
         int line = layout.getLineForVertical(layoutY);
 
@@ -470,6 +489,17 @@ public class CustomReaderView extends View {
     private int getPageAnchorScrollY(int page) {
         int total = getTotalPageCount();
         int clampedPage = Math.max(1, Math.min(total, page));
+
+        // Page 1 must be the absolute top. Snapping 0 to a line top can otherwise
+        // become marginVerticalPx, which makes the first page drift down by one row
+        // after paging back to the beginning.
+        if (clampedPage <= 1) {
+            return 0;
+        }
+
+        // Keep counted pages on normal page-step anchors. Do not force the last
+        // counted page directly to maxScrollY; otherwise the content between the
+        // last full page anchor and the physical end can be skipped.
         return snapScrollYToLineTop((clampedPage - 1) * getPageStepPx());
     }
 
@@ -479,7 +509,21 @@ public class CustomReaderView extends View {
 
     public void pageBy(int direction) {
         if (direction == 0) return;
-        scrollToPage(getCurrentPageNumber() + direction);
+
+        int total = getTotalPageCount();
+        int current = getCurrentPageNumber();
+
+        if (direction > 0 && current >= total) {
+            setReaderScrollY(maxScrollY);
+            return;
+        }
+
+        if (direction < 0 && current <= 1) {
+            setReaderScrollY(0);
+            return;
+        }
+
+        scrollToPage(current + direction);
     }
 
     public void scrollToPercent(float percent) {

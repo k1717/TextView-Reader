@@ -12,13 +12,17 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 import com.simpletext.reader.R;
 import com.simpletext.reader.util.FileUtils;
 import com.simpletext.reader.util.PrefsManager;
 import java.io.File;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
 
 public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
 
@@ -27,7 +31,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
         void onFileLongClick(File file);
     }
 
-    private List<File> files = new ArrayList<>();
+    private final List<File> files = new ArrayList<>();
     private OnFileClickListener listener;
     private int sortMode = PrefsManager.SORT_NAME_ASC;
     private boolean sortEnabled = true;
@@ -36,34 +40,59 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
     public void setListener(OnFileClickListener listener) { this.listener = listener; }
 
     public void setFiles(List<File> fileList) {
-        this.files = new ArrayList<>(fileList);
-        sortFiles();
-        notifyDataSetChanged();
+        replaceFiles(new ArrayList<>(fileList));
     }
 
     public void setSortMode(int mode) {
+        if (this.sortMode == mode) return;
         this.sortMode = mode;
-        sortFiles();
-        notifyDataSetChanged();
+        replaceFiles(new ArrayList<>(files));
     }
 
     public void setSortEnabled(boolean enabled) {
         if (this.sortEnabled == enabled) return;
         this.sortEnabled = enabled;
-        sortFiles();
-        notifyDataSetChanged();
+        replaceFiles(new ArrayList<>(files));
     }
 
-    private void sortFiles() {
-        if (!sortEnabled) return;
-        Collections.sort(files, (a, b) -> {
+    private void replaceFiles(@NonNull List<File> next) {
+        if (sortEnabled) sortFiles(next);
+        if (files.equals(next)) return;
+
+        List<File> old = new ArrayList<>(files);
+        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override public int getOldListSize() { return old.size(); }
+            @Override public int getNewListSize() { return next.size(); }
+
+            @Override public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                return old.get(oldItemPosition).getAbsolutePath()
+                        .equals(next.get(newItemPosition).getAbsolutePath());
+            }
+
+            @Override public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                File a = old.get(oldItemPosition);
+                File b = next.get(newItemPosition);
+                return a.getName().equals(b.getName())
+                        && a.isDirectory() == b.isDirectory()
+                        && a.length() == b.length()
+                        && a.lastModified() == b.lastModified();
+            }
+        });
+
+        files.clear();
+        files.addAll(next);
+        diff.dispatchUpdatesTo(this);
+    }
+
+    private void sortFiles(@NonNull List<File> target) {
+        target.sort((a, b) -> {
             // Directories always first
             if (a.isDirectory() && !b.isDirectory()) return -1;
             if (!a.isDirectory() && b.isDirectory()) return 1;
 
             switch (sortMode) {
                 case PrefsManager.SORT_NAME_DESC:
-                    return b.getName().compareToIgnoreCase(a.getName());
+                    return compareNames(b, a);
                 case PrefsManager.SORT_DATE_NEW:
                     return Long.compare(b.lastModified(), a.lastModified());
                 case PrefsManager.SORT_DATE_OLD:
@@ -76,11 +105,15 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                     String extA = getExtension(a.getName());
                     String extB = getExtension(b.getName());
                     int cmp = extA.compareToIgnoreCase(extB);
-                    return cmp != 0 ? cmp : a.getName().compareToIgnoreCase(b.getName());
+                    return cmp != 0 ? cmp : compareNames(a, b);
                 default: // SORT_NAME_ASC
-                    return a.getName().compareToIgnoreCase(b.getName());
+                    return compareNames(a, b);
             }
         });
+    }
+
+    private int compareNames(@NonNull File a, @NonNull File b) {
+        return a.getName().compareToIgnoreCase(b.getName());
     }
 
     private String getExtension(String name) {
@@ -101,7 +134,24 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
     @Override
     public int getItemCount() { return files.size(); }
 
-    class ViewHolder extends RecyclerView.ViewHolder {
+    @Override
+    public void onViewRecycled(@NonNull ViewHolder holder) {
+        holder.cancelPendingPress();
+        super.onViewRecycled(holder);
+    }
+
+    @Override
+    public void onViewDetachedFromWindow(@NonNull ViewHolder holder) {
+        holder.cancelPendingPress();
+        super.onViewDetachedFromWindow(holder);
+    }
+
+    public void release() {
+        listener = null;
+        files.clear();
+    }
+
+    public class ViewHolder extends RecyclerView.ViewHolder {
         ImageView icon;
         TextView name, info;
 
@@ -128,10 +178,13 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                         tapCancelled = false;
                         longPressed = false;
                         view.setPressed(true);
-                        if (pendingLongPress != null) touchHandler.removeCallbacks(pendingLongPress);
+                        if (pendingLongPress != null) {
+                            touchHandler.removeCallbacks(pendingLongPress);
+                            pendingLongPress = null;
+                        }
                         pendingLongPress = () -> {
                             if (!tapCancelled && listener != null) {
-                                int pos = getAdapterPosition();
+                                int pos = getBindingAdapterPosition();
                                 if (pos != RecyclerView.NO_POSITION) {
                                     longPressed = true;
                                     view.setPressed(false);
@@ -149,15 +202,21 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                         if (Math.hypot(dx, dy) > tapSlop) {
                             tapCancelled = true;
                             view.setPressed(false);
-                            if (pendingLongPress != null) touchHandler.removeCallbacks(pendingLongPress);
+                            if (pendingLongPress != null) {
+                            touchHandler.removeCallbacks(pendingLongPress);
+                            pendingLongPress = null;
+                        }
                         }
                         return true;
 
                     case MotionEvent.ACTION_UP:
                         view.setPressed(false);
-                        if (pendingLongPress != null) touchHandler.removeCallbacks(pendingLongPress);
+                        if (pendingLongPress != null) {
+                            touchHandler.removeCallbacks(pendingLongPress);
+                            pendingLongPress = null;
+                        }
                         if (!tapCancelled && !longPressed && listener != null) {
-                            int pos = getAdapterPosition();
+                            int pos = getBindingAdapterPosition();
                             if (pos != RecyclerView.NO_POSITION) {
                                 view.performClick();
                                 listener.onFileClick(files.get(pos));
@@ -168,7 +227,10 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                     case MotionEvent.ACTION_CANCEL:
                         view.setPressed(false);
                         tapCancelled = true;
-                        if (pendingLongPress != null) touchHandler.removeCallbacks(pendingLongPress);
+                        if (pendingLongPress != null) {
+                            touchHandler.removeCallbacks(pendingLongPress);
+                            pendingLongPress = null;
+                        }
                         return false;
 
                     default:
@@ -177,7 +239,18 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
             });
         }
 
+        void cancelPendingPress() {
+            tapCancelled = true;
+            longPressed = false;
+            itemView.setPressed(false);
+            if (pendingLongPress != null) {
+                touchHandler.removeCallbacks(pendingLongPress);
+                pendingLongPress = null;
+            }
+        }
+
         void bind(File file) {
+            cancelPendingPress();
             boolean dark = PrefsManager.getInstance(itemView.getContext())
                     .shouldUseDarkColors(itemView.getContext());
             int primaryText = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
@@ -199,7 +272,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                 String size = FileUtils.formatFileSize(file.length());
                 String date = dateFormat.format(new Date(file.lastModified()));
                 String type = FileUtils.getReadableFileType(file.getName());
-                info.setText(type + "  •  " + size + "  •  " + date);
+                info.setText(String.format(Locale.getDefault(), "%s  •  %s  •  %s", type, size, date));
             }
             icon.setImageTintList(ColorStateList.valueOf(iconTint));
         }

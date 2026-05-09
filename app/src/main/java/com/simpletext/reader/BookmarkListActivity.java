@@ -49,6 +49,7 @@ public class BookmarkListActivity extends AppCompatActivity
     private RecyclerView recyclerView;
     private BookmarkFolderAdapter adapter;
     private final Set<String> expandedFolders = new HashSet<>();
+    private boolean didInitialBookmarkExpansion = false;
     private TextView emptyText;
     private BookmarkManager bookmarkManager;
 
@@ -344,7 +345,8 @@ public class BookmarkListActivity extends AppCompatActivity
         } else {
             emptyText.setVisibility(View.GONE);
             recyclerView.setVisibility(View.VISIBLE);
-            if (expandedFolders.isEmpty()) {
+            if (!didInitialBookmarkExpansion) {
+                didInitialBookmarkExpansion = true;
                 for (Bookmark b : bookmarks) {
                     if (b.getFilePath() != null) expandedFolders.add(b.getFilePath());
                 }
@@ -407,6 +409,40 @@ public class BookmarkListActivity extends AppCompatActivity
                 .setNegativeButton(getString(R.string.cancel), null)
                 .show();
     }
+
+    private void openBookmarkTarget(@NonNull Bookmark bookmark) {
+        String path = bookmark.getFilePath();
+        if (path == null || path.trim().isEmpty()) {
+            Toast.makeText(this, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        File target = new File(path);
+        if (!target.exists()) {
+            Toast.makeText(this, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Intent intent;
+        String lowerName = target.getName().toLowerCase(java.util.Locale.ROOT);
+        if (lowerName.endsWith(".pdf")) {
+            intent = new Intent(this, PdfReaderActivity.class);
+            intent.putExtra(PdfReaderActivity.EXTRA_FILE_PATH, target.getAbsolutePath());
+        } else if (lowerName.endsWith(".epub") || lowerName.endsWith(".doc") || lowerName.endsWith(".docx")) {
+            intent = new Intent(this, DocumentPageActivity.class);
+            intent.putExtra(DocumentPageActivity.EXTRA_FILE_PATH, target.getAbsolutePath());
+        } else {
+            intent = new Intent(this, ReaderActivity.class);
+            intent.putExtra(ReaderActivity.EXTRA_FILE_PATH, target.getAbsolutePath());
+        }
+
+        intent.putExtra(ReaderActivity.EXTRA_JUMP_TO_POSITION, bookmark.getCharPosition());
+        intent.putExtra(ReaderActivity.EXTRA_JUMP_DISPLAY_PAGE, bookmark.getPageNumber());
+        intent.putExtra(ReaderActivity.EXTRA_JUMP_TOTAL_PAGES, bookmark.getTotalPages());
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(intent);
+    }
+
 
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {

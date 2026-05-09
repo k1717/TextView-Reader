@@ -1,7 +1,6 @@
 package com.simpletext.reader.adapter;
 
 import android.content.res.ColorStateList;
-import android.content.res.Configuration;
 import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -10,6 +9,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.simpletext.reader.R;
@@ -29,16 +29,44 @@ public class DrawerEntryAdapter extends RecyclerView.Adapter<DrawerEntryAdapter.
         void onEntryClick(@NonNull DrawerEntry entry);
     }
 
+    public interface OnEntryLongClickListener {
+        boolean onEntryLongClick(@NonNull DrawerEntry entry);
+    }
+
     private final List<DrawerEntry> entries = new ArrayList<>();
     private OnEntryClickListener listener;
+    private OnEntryLongClickListener longClickListener;
 
     public void setListener(OnEntryClickListener listener) { this.listener = listener; }
+    public void setLongClickListener(OnEntryLongClickListener listener) { this.longClickListener = listener; }
 
     public void setEntries(@NonNull List<DrawerEntry> newEntries) {
         if (entries.equals(newEntries)) return;
+
+        List<DrawerEntry> old = new ArrayList<>(entries);
+        List<DrawerEntry> next = new ArrayList<>(newEntries);
+        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override public int getOldListSize() { return old.size(); }
+            @Override public int getNewListSize() { return next.size(); }
+
+            @Override public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                DrawerEntry a = old.get(oldItemPosition);
+                DrawerEntry b = next.get(newItemPosition);
+                if (a.getActionType() != b.getActionType()) return false;
+                String aPath = a.getPath();
+                String bPath = b.getPath();
+                if (aPath != null || bPath != null) return java.util.Objects.equals(aPath, bPath);
+                return java.util.Objects.equals(a.getTitle(), b.getTitle());
+            }
+
+            @Override public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                return old.get(oldItemPosition).equals(next.get(newItemPosition));
+            }
+        });
+
         entries.clear();
-        entries.addAll(newEntries);
-        notifyDataSetChanged();
+        entries.addAll(next);
+        diff.dispatchUpdatesTo(this);
     }
 
     @NonNull
@@ -57,7 +85,7 @@ public class DrawerEntryAdapter extends RecyclerView.Adapter<DrawerEntryAdapter.
     @Override
     public int getItemCount() { return entries.size(); }
 
-    class ViewHolder extends RecyclerView.ViewHolder {
+    public class ViewHolder extends RecyclerView.ViewHolder {
         ImageView icon;
         TextView title;
         TextView subtitle;
@@ -68,10 +96,17 @@ public class DrawerEntryAdapter extends RecyclerView.Adapter<DrawerEntryAdapter.
             title = itemView.findViewById(R.id.drawer_entry_title);
             subtitle = itemView.findViewById(R.id.drawer_entry_subtitle);
             itemView.setOnClickListener(v -> {
-                int pos = getAdapterPosition();
+                int pos = getBindingAdapterPosition();
                 if (pos == RecyclerView.NO_POSITION || listener == null) return;
                 DrawerEntry entry = entries.get(pos);
                 if (!entry.isHeader() && !entry.isDivider()) listener.onEntryClick(entry);
+            });
+            itemView.setOnLongClickListener(v -> {
+                int pos = getBindingAdapterPosition();
+                if (pos == RecyclerView.NO_POSITION || longClickListener == null) return false;
+                DrawerEntry entry = entries.get(pos);
+                if (entry.isHeader() || entry.isDivider()) return false;
+                return longClickListener.onEntryLongClick(entry);
             });
         }
 

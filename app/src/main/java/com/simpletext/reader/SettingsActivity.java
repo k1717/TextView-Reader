@@ -372,6 +372,39 @@ public class SettingsActivity extends AppCompatActivity {
         switchStatusBar.setChecked(prefs.getShowStatusBar());
         switchStatusBar.setOnCheckedChangeListener((v, c) -> prefs.setShowStatusBar(c));
 
+        Spinner pageStatusAlignSpinner = findViewById(R.id.spinner_page_status_alignment);
+        String[] pageStatusAlignChoices = {
+                getString(R.string.page_status_align_left),
+                getString(R.string.page_status_align_center),
+                getString(R.string.page_status_align_right),
+                getString(R.string.page_status_align_hidden)
+        };
+        ArrayAdapter<String> pageStatusAlignAdapter = new ArrayAdapter<String>(this,
+                android.R.layout.simple_spinner_item, pageStatusAlignChoices) {
+            @NonNull @Override
+            public View getView(int position, View convertView, @NonNull ViewGroup parent) {
+                View view = super.getView(position, convertView, parent);
+                styleSpinnerText(view);
+                return view;
+            }
+            @Override
+            public View getDropDownView(int position, View convertView, @NonNull ViewGroup parent) {
+                View view = super.getDropDownView(position, convertView, parent);
+                styleSpinnerText(view);
+                return view;
+            }
+        };
+        pageStatusAlignAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        pageStatusAlignSpinner.setAdapter(pageStatusAlignAdapter);
+        pageStatusAlignSpinner.setSelection(prefs.getPageStatusAlignment());
+        pageStatusAlignSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                styleSpinnerText(view);
+                prefs.setPageStatusAlignment(position);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
         Switch switchNotification = findViewById(R.id.switch_notification);
         switchNotification.setChecked(prefs.getShowNotification());
         switchNotification.setOnCheckedChangeListener((v, c) -> prefs.setShowNotification(c));

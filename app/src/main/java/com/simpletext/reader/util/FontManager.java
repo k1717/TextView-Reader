@@ -23,13 +23,24 @@ public class FontManager {
 
     private final Map<String, String> fontPaths = new HashMap<>(); // displayName -> path
     private final Map<String, Typeface> fontCache = new HashMap<>();
+    private final List<String> userFontNames = new ArrayList<>();
+    private final List<String> systemInstalledFontNames = new ArrayList<>();
     private boolean scanned = false;
 
-    // Standard Android font directories
-    private static final String[] FONT_DIRS = {
+    // Built-in Android font directories. These are scanned only so already-saved
+    // font values still resolve, but they are not exposed as a huge picker list.
+    private static final String[] BUILT_IN_FONT_DIRS = {
             "/system/fonts",
-            "/system/font",
-            "/data/fonts"
+            "/system/font"
+    };
+
+    // OS/user-installed font locations used by some Android/Samsung builds.
+    // These are the "system installed custom fonts" the picker should expose.
+    private static final String[] SYSTEM_INSTALLED_FONT_DIRS = {
+            "/data/fonts",
+            "/data/font",
+            "/data/app_fonts",
+            "/data/overlays/fonts"
     };
 
     private static final String[] FONT_EXTENSIONS = {".ttf", ".otf", ".ttc"};
@@ -70,33 +81,43 @@ public class FontManager {
 
     private void doScan(Context context) {
         fontPaths.clear();
+        userFontNames.clear();
+        systemInstalledFontNames.clear();
 
         // Always include defaults
         fontPaths.put("Default (Sans-serif)", "DEFAULT");
         fontPaths.put("Serif", "SERIF");
         fontPaths.put("Monospace", "MONOSPACE");
 
-        // Scan system fonts
-        for (String dir : FONT_DIRS) {
-            scanDirectory(new File(dir));
+        // Scan built-in system fonts for backward compatibility only.
+        // Do not expose these raw Roboto/Noto files in the visible picker.
+        for (String dir : BUILT_IN_FONT_DIRS) {
+            scanDirectory(new File(dir), false, false);
         }
 
-        // Scan user font directories
+        // Scan OS/user-installed custom fonts separately and expose only these
+        // as "Installed" fonts in the picker.
+        for (String dir : SYSTEM_INSTALLED_FONT_DIRS) {
+            scanDirectory(new File(dir), false, true);
+        }
+
+        // Manually provided font directories remain supported, but they are listed
+        // separately from OS-installed fonts.
         File externalFonts = new File(Environment.getExternalStorageDirectory(), "Fonts");
         if (externalFonts.exists()) {
-            scanDirectory(externalFonts);
+            scanDirectory(externalFonts, true, false);
         }
 
         File downloadFonts = new File(Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOWNLOADS), "Fonts");
         if (downloadFonts.exists()) {
-            scanDirectory(downloadFonts);
+            scanDirectory(downloadFonts, true, false);
         }
 
         // App-specific font directory
         File appFonts = new File(context.getFilesDir(), "fonts");
         if (appFonts.exists()) {
-            scanDirectory(appFonts);
+            scanDirectory(appFonts, true, false);
         }
 
         scanned = true;
@@ -104,6 +125,14 @@ public class FontManager {
     }
 
     private void scanDirectory(File dir) {
+        scanDirectory(dir, false, false);
+    }
+
+    private void scanDirectory(File dir, boolean userFont) {
+        scanDirectory(dir, userFont, false);
+    }
+
+    private void scanDirectory(File dir, boolean userFont, boolean systemInstalledFont) {
         if (!dir.exists() || !dir.isDirectory() || !dir.canRead()) return;
 
         File[] files = dir.listFiles();
@@ -111,7 +140,7 @@ public class FontManager {
 
         for (File f : files) {
             if (f.isDirectory()) {
-                scanDirectory(f); // recursive
+                scanDirectory(f, userFont, systemInstalledFont); // recursive
                 continue;
             }
             String name = f.getName().toLowerCase();
@@ -129,6 +158,11 @@ public class FontManager {
                             displayName = displayName.replace('-', ' ').replace('_', ' ');
                             fontPaths.put(displayName, f.getAbsolutePath());
                             fontCache.put(f.getAbsolutePath(), tf);
+                            if (systemInstalledFont && !systemInstalledFontNames.contains(displayName)) {
+                                systemInstalledFontNames.add(displayName);
+                            } else if (userFont && !userFontNames.contains(displayName)) {
+                                userFontNames.add(displayName);
+                            }
                         }
                     } catch (Exception e) {
                         // Skip invalid font files
@@ -149,6 +183,18 @@ public class FontManager {
             if (!aDefault && bDefault) return 1;
             return a.compareToIgnoreCase(b);
         });
+        return names;
+    }
+
+    public List<String> getSystemInstalledFontNames() {
+        List<String> names = new ArrayList<>(systemInstalledFontNames);
+        Collections.sort(names, String::compareToIgnoreCase);
+        return names;
+    }
+
+    public List<String> getUserFontNames() {
+        List<String> names = new ArrayList<>(userFontNames);
+        Collections.sort(names, String::compareToIgnoreCase);
         return names;
     }
 
@@ -211,6 +257,9 @@ public class FontManager {
                 displayName = displayName.replace('-', ' ').replace('_', ' ');
                 fontPaths.put(displayName, destFile.getAbsolutePath());
                 fontCache.put(destFile.getAbsolutePath(), tf);
+                if (!userFontNames.contains(displayName)) {
+                    userFontNames.add(displayName);
+                }
                 return displayName;
             }
         } catch (Exception e) {

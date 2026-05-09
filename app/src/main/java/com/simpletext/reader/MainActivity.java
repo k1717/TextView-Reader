@@ -1,6 +1,7 @@
 package com.simpletext.reader;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
@@ -16,6 +17,7 @@ import android.os.Looper;
 import android.os.Environment;
 import android.provider.Settings;
 import android.text.Editable;
+import android.text.Layout;
 import android.text.TextWatcher;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -24,8 +26,6 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.Gravity;
 import android.view.inputmethod.EditorInfo;
-import android.view.inputmethod.InputMethodManager;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -70,6 +70,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Main entry. Two-mode UI:
@@ -122,8 +123,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private final Handler fileSearchHandler = new Handler(Looper.getMainLooper());
     private Runnable pendingFileSearchRunnable;
     private volatile boolean activityDestroyed = false;
-    private volatile int fileSearchGeneration = 0;
+    private final AtomicInteger fileSearchGeneration = new AtomicInteger(0);
     private boolean searchMode = false;
+    private boolean searchReturnToHome = true;
+    private File searchReturnDirectory = null;
 
     private float drawerSwipeStartX;
     private float drawerSwipeStartY;
@@ -140,9 +143,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private boolean returnToViewerMode = false;
     private File initialBrowseDirectory;
     private long lastBackPressedTime = 0L;
-    private boolean permissionsReady = false;
     /** Toolbar reference cached so onResume can re-apply the theme cheaply. */
     private Toolbar mainToolbar;
+    private DrawerEntry pendingDrawerNavigationEntry;
+    private boolean drawerNavigationPending = false;
     /**
      * Cached SD card detection. The previous code re-scanned /storage and called
      * getExternalFilesDirs() once per recent-folder candidate (up to 50 times per
@@ -201,6 +205,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         drawerToggle = new ActionBarDrawerToggle(this, drawerLayout, toolbar,
                 R.string.drawer_open, R.string.drawer_close);
         drawerLayout.addDrawerListener(drawerToggle);
+        drawerLayout.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
+            @Override
+            public void onDrawerClosed(@NonNull View drawerView) {
+                consumePendingDrawerNavigation();
+            }
+        });
         drawerToggle.syncState();
         // Allow swipe from the left edge to open immediately, even before the hamburger
         // has ever opened the drawer.
@@ -359,19 +369,33 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         loadRecentFiles();
         rebuildDrawerStorageEntries();
         if (!homeMode && !searchMode && currentDirectory != null) loadDirectory(currentDirectory);
-
-        if (recentAdapter != null) recentAdapter.notifyDataSetChanged();
-        if (fileAdapter != null) fileAdapter.notifyDataSetChanged();
-        if (drawerFixedEntryAdapter != null) drawerFixedEntryAdapter.notifyDataSetChanged();
-        if (drawerEntryAdapter != null) drawerEntryAdapter.notifyDataSetChanged();
     }
 
     @Override
     protected void onDestroy() {
         activityDestroyed = true;
+        pendingDrawerNavigationEntry = null;
+        drawerNavigationPending = false;
         clearSearchDebounce();
         fileSearchHandler.removeCallbacksAndMessages(null);
-        ++fileSearchGeneration;
+        fileSearchGeneration.incrementAndGet();
+
+        if (fileAdapter != null) fileAdapter.release();
+        if (recentAdapter != null) recentAdapter.release();
+        if (drawerFixedEntryAdapter != null) {
+            drawerFixedEntryAdapter.setListener(null);
+            drawerFixedEntryAdapter.setLongClickListener(null);
+        }
+        if (drawerEntryAdapter != null) {
+            drawerEntryAdapter.setListener(null);
+            drawerEntryAdapter.setLongClickListener(null);
+        }
+
+        if (fileRecyclerView != null) fileRecyclerView.setAdapter(null);
+        if (recentRecyclerView != null) recentRecyclerView.setAdapter(null);
+        if (drawerFixedList != null) drawerFixedList.setAdapter(null);
+        if (drawerStorageList != null) drawerStorageList.setAdapter(null);
+
         fileSearchExecutor.shutdownNow();
         super.onDestroy();
     }
@@ -421,7 +445,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (fileSearchClearButton != null) {
             fileSearchClearButton.setOnClickListener(v -> {
                 if (fileSearchInput != null) fileSearchInput.setText("");
-                if (searchMode) showHomeMode();
+                if (searchMode) restorePreSearchLocation();
             });
             fileSearchClearButton.setVisibility(View.GONE);
         }
@@ -431,13 +455,112 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         }
     }
 
+    private void scrollListToTop(RecyclerView recyclerView) {
+        if (recyclerView == null) return;
+
+        recyclerView.stopScroll();
+        recyclerView.post(() -> {
+            RecyclerView.LayoutManager lm = recyclerView.getLayoutManager();
+            if (lm instanceof LinearLayoutManager) {
+                ((LinearLayoutManager) lm).scrollToPositionWithOffset(0, 0);
+            } else {
+                recyclerView.scrollToPosition(0);
+            }
+        });
+    }
+
+    private void updateFileSearchClearButtonVisibility() {
+        if (fileSearchClearButton == null) return;
+
+        boolean hasTypedQuery = fileSearchInput != null
+                && fileSearchInput.getText() != null
+                && fileSearchInput.getText().toString().trim().length() > 0;
+
+        // The X next to the sort button is only for clearing typed search text.
+        // File-type filters already reset through the "전체" chip, so selecting
+        // 일반/PDF/EPUB/Word with an empty search box must not show this X.
+        fileSearchClearButton.setVisibility(hasTypedQuery ? View.VISIBLE : View.GONE);
+    }
+
     private void setupFileTypeChip(TextView chip, int filter) {
         if (chip == null) return;
         chip.setOnClickListener(v -> {
+            String query = fileSearchInput != null
+                    ? fileSearchInput.getText().toString().trim()
+                    : "";
+
+            // On the Recent page, file-type chips should filter the recent-read list.
+            // They must not start an all-storage scan from Internal storage.
+            if (query.isEmpty() && (homeMode || (searchMode && searchReturnToHome))) {
+                activeFileFilter = filter;
+                clearSearchDebounce();
+                fileSearchGeneration.incrementAndGet();
+                searchMode = false;
+                homeMode = true;
+                searchReturnToHome = true;
+                searchReturnDirectory = null;
+                if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.GONE);
+                updateFileSearchClearButtonVisibility();
+                if (recentSection != null) recentSection.setVisibility(View.VISIBLE);
+                if (browserSection != null) browserSection.setVisibility(View.GONE);
+                if (pathText != null) pathText.setVisibility(View.GONE);
+                if (getSupportActionBar() != null) {
+                    getSupportActionBar().setTitle(R.string.app_name);
+                }
+                updateFileTypeChips();
+                loadRecentFiles();
+                invalidateOptionsMenu();
+                return;
+            }
+
+            // Returning from a type-filter-only result to "All" should restore the
+            // folder/storage location the filter started from, not the Recent page.
+            // Do this directly here instead of routing through the generic search path.
+            if (filter == FILTER_ALL && query.isEmpty()) {
+                activeFileFilter = FILTER_ALL;
+                updateFileTypeChips();
+                restoreAllFilterLocation();
+                return;
+            }
+
+            captureFilterReturnLocationIfNeeded();
             activeFileFilter = filter;
             updateFileTypeChips();
             runLiveFileSearchNow();
         });
+    }
+
+    private void captureFilterReturnLocationIfNeeded() {
+        if (searchMode) return;
+        boolean allStorage = homeMode || currentDirectory == null;
+        searchReturnToHome = allStorage;
+        searchReturnDirectory = allStorage ? null : currentDirectory;
+    }
+
+    private void restoreAllFilterLocation() {
+        clearSearchDebounce();
+        fileSearchGeneration.incrementAndGet();
+        if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.GONE);
+        updateFileSearchClearButtonVisibility();
+
+        File visibleFolder = currentDirectory;
+        if (visibleFolder != null
+                && visibleFolder.exists()
+                && visibleFolder.isDirectory()
+                && visibleFolder.canRead()
+                && (!searchReturnToHome || searchMode || !homeMode)) {
+            searchMode = false;
+            homeMode = false;
+            recentSection.setVisibility(View.GONE);
+            browserSection.setVisibility(View.VISIBLE);
+            pathText.setVisibility(View.VISIBLE);
+            loadDirectory(visibleFolder);
+            rebuildDrawerStorageEntries();
+            invalidateOptionsMenu();
+            return;
+        }
+
+        restorePreSearchLocation();
     }
 
     private void updateFileTypeChips() {
@@ -446,6 +569,28 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         styleFileTypeChip(filterPdfChip, activeFileFilter == FILTER_PDF);
         styleFileTypeChip(filterEpubChip, activeFileFilter == FILTER_EPUB);
         styleFileTypeChip(filterWordChip, activeFileFilter == FILTER_WORD);
+    }
+
+    private void resetFileFilterForNavigation() {
+        activeFileFilter = FILTER_ALL;
+
+        if (fileSearchInput != null && fileSearchInput.length() > 0) {
+            fileSearchInput.setText("");
+        }
+
+        clearSearchDebounce();
+        fileSearchGeneration.incrementAndGet();
+
+        if (fileSearchProgress != null) {
+            fileSearchProgress.setVisibility(View.GONE);
+        }
+        if (fileSearchClearButton != null) {
+            fileSearchClearButton.setVisibility(View.GONE);
+        }
+
+        searchReturnToHome = true;
+        searchReturnDirectory = null;
+        updateFileTypeChips();
     }
 
     private void styleFileTypeChip(TextView chip, boolean selected) {
@@ -487,109 +632,66 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (activityDestroyed || fileSearchInput == null) return;
         String query = fileSearchInput.getText().toString().trim();
 
+        // With no text, never start an expensive full-storage scan from the Recent page.
+        // If a type chip is active on Recent, filter the recent-read list locally.
+        if (query.isEmpty() && homeMode) {
+            fileSearchGeneration.incrementAndGet();
+            if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.GONE);
+            updateFileSearchClearButtonVisibility();
+            if (activeFileFilter == FILTER_ALL) {
+                if (searchMode) restorePreSearchLocation();
+            } else {
+                searchMode = false;
+                loadRecentFiles();
+            }
+            return;
+        }
+
         // With no text and no active type filter, do not start an expensive full scan.
         if (query.isEmpty() && activeFileFilter == FILTER_ALL) {
-            ++fileSearchGeneration;
+            fileSearchGeneration.incrementAndGet();
             if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.GONE);
-            if (fileSearchClearButton != null) fileSearchClearButton.setVisibility(View.GONE);
-            if (searchMode) showHomeMode();
+            updateFileSearchClearButtonVisibility();
+            if (searchMode) restorePreSearchLocation();
             return;
         }
 
         boolean allStorage = homeMode || currentDirectory == null;
+        if (!searchMode) {
+            searchReturnToHome = allStorage;
+            searchReturnDirectory = allStorage ? null : currentDirectory;
+        }
         startFileSearch(query, allStorage);
     }
 
-    private void runBottomFileSearch() {
-        runLiveFileSearchNow();
-    }
+    private void restorePreSearchLocation() {
+        fileSearchGeneration.incrementAndGet();
+        searchMode = false;
 
-    private void hideKeyboard(@NonNull View source) {
-        try {
-            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-            if (imm != null) imm.hideSoftInputFromWindow(source.getWindowToken(), 0);
-            source.clearFocus();
-        } catch (Throwable ignored) {
-        }
-    }
-
-    private void showFileSearchDialog() {
-        LinearLayoutWrapper wrapper = new LinearLayoutWrapper(this);
-        final EditText input = wrapper.input;
-        final RadioGroup scopeGroup = wrapper.scopeGroup;
-        final int currentId = 1001;
-        final int allId = 1002;
-
-        RadioButton current = new RadioButton(this);
-        current.setId(currentId);
-        current.setText(!homeMode && currentDirectory != null
-                ? getString(R.string.search_current_folder, currentDirectory.getName().isEmpty() ? currentDirectory.getAbsolutePath() : currentDirectory.getName())
-                : getString(R.string.search_recent_storage_roots));
-
-        RadioButton all = new RadioButton(this);
-        all.setId(allId);
-        all.setText(R.string.search_all_storage);
-
-        scopeGroup.addView(current);
-        scopeGroup.addView(all);
-        scopeGroup.check(!homeMode && currentDirectory != null ? currentId : allId);
-
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.file_search)
-                .setView(wrapper.root)
-                .setPositiveButton(R.string.file_search, (dialog, which) -> {
-                    String query = input.getText().toString().trim();
-                    if (query.isEmpty()) {
-                        Toast.makeText(this, getString(R.string.enter_file_search_text), Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    boolean allStorage = scopeGroup.getCheckedRadioButtonId() == allId;
-                    startFileSearch(query, allStorage);
-                })
-                .setNegativeButton(R.string.cancel, null)
-                .show();
-    }
-
-    private static final class LinearLayoutWrapper {
-        final android.widget.LinearLayout root;
-        final EditText input;
-        final RadioGroup scopeGroup;
-
-        LinearLayoutWrapper(@NonNull MainActivity activity) {
-            root = new android.widget.LinearLayout(activity);
-            root.setOrientation(android.widget.LinearLayout.VERTICAL);
-            int pad = activity.dpToPx(20);
-            root.setPadding(pad, activity.dpToPx(8), pad, activity.dpToPx(4));
-
-            input = new EditText(activity);
-            input.setHint(R.string.file_search_hint);
-            input.setSingleLine(true);
-            input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
-            input.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
-            root.addView(input, new android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT));
-
-            scopeGroup = new RadioGroup(activity);
-            scopeGroup.setOrientation(RadioGroup.VERTICAL);
-            root.addView(scopeGroup, new android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT));
+        File target = searchReturnDirectory;
+        if (!searchReturnToHome
+                && target != null
+                && target.exists()
+                && target.isDirectory()
+                && target.canRead()) {
+            showBrowseMode(target);
+        } else {
+            showHomeMode();
         }
     }
 
     private void startFileSearch(@NonNull String query, boolean allStorage) {
-        final int generation = ++fileSearchGeneration;
+        final int generation = fileSearchGeneration.incrementAndGet();
         if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.VISIBLE);
         if (fileSearchClearButton != null) {
-            fileSearchClearButton.setVisibility(View.VISIBLE);
             fileSearchClearButton.setEnabled(true);
         }
+        updateFileSearchClearButtonVisibility();
 
         List<File> roots = buildSearchRoots(allStorage);
         final int filter = activeFileFilter;
         fileSearchExecutor.execute(() -> {
-            if (activityDestroyed || generation != fileSearchGeneration) return;
+            if (activityDestroyed || generation != fileSearchGeneration.get()) return;
             List<File> results = new ArrayList<>();
             Set<String> seen = new LinkedHashSet<>();
             String needle = query.toLowerCase(java.util.Locale.ROOT);
@@ -599,11 +701,11 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             for (File root : roots) {
                 if (root == null || !root.exists() || !root.canRead()) continue;
                 searchFilesRecursive(root, needle, filter, showHidden, seen, results, visited, generation, 0);
-                if (generation != fileSearchGeneration || results.size() >= 300 || visited[0] >= 12000) break;
+                if (generation != fileSearchGeneration.get() || results.size() >= 300 || visited[0] >= 12000) break;
             }
 
             runOnUiThread(() -> {
-                if (activityDestroyed || generation != fileSearchGeneration) return;
+                if (activityDestroyed || generation != fileSearchGeneration.get()) return;
                 if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.GONE);
                 showFileSearchResults(query, results);
             });
@@ -641,12 +743,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                                       @NonNull int[] visited,
                                       int generation,
                                       int depth) {
-        if (generation != fileSearchGeneration || depth > 16 || results.size() >= 300 || visited[0] >= 12000) return;
+        if (generation != fileSearchGeneration.get() || depth > 16 || results.size() >= 300 || visited[0] >= 12000) return;
         File[] children = dir.listFiles();
         if (children == null) return;
 
         for (File child : children) {
-            if (generation != fileSearchGeneration) return;
+            if (generation != fileSearchGeneration.get()) return;
             if (child == null) continue;
             visited[0]++;
             if (visited[0] >= 12000 || results.size() >= 300) return;
@@ -707,11 +809,13 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         pathText.setVisibility(View.VISIBLE);
         pathText.setText(getString(R.string.file_search_results_for, query.isEmpty() ? filterLabelFor(activeFileFilter) : query, results.size()));
         if (getSupportActionBar() != null) getSupportActionBar().setTitle(R.string.file_search);
-        if (fileSearchClearButton != null) fileSearchClearButton.setVisibility(View.VISIBLE);
+        updateFileSearchClearButtonVisibility();
 
         fileAdapter.setFiles(results);
+        scrollListToTop(fileRecyclerView);
         emptyText.setVisibility(results.isEmpty() ? View.VISIBLE : View.GONE);
         if (results.isEmpty()) emptyText.setText(getString(R.string.no_file_search_results));
+        updateFileSearchClearButtonVisibility();
         invalidateOptionsMenu();
     }
 
@@ -737,12 +841,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             drawerStorageList.setAdapter(drawerEntryAdapter);
         }
 
-        DrawerEntryAdapter.OnEntryClickListener clickListener = entry -> {
-            handleDrawerEntryClick(entry);
-            drawerLayout.closeDrawer(GravityCompat.START);
-        };
+        DrawerEntryAdapter.OnEntryClickListener clickListener = this::queueDrawerNavigation;
+        DrawerEntryAdapter.OnEntryLongClickListener longClickListener = this::handleDrawerEntryLongClick;
         drawerFixedEntryAdapter.setListener(clickListener);
         drawerEntryAdapter.setListener(clickListener);
+        drawerFixedEntryAdapter.setLongClickListener(longClickListener);
+        drawerEntryAdapter.setLongClickListener(longClickListener);
 
         rebuildDrawerStorageEntries();
     }
@@ -750,7 +854,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private void rebuildDrawerStorageEntries() {
         List<DrawerEntry> fixedEntries = new ArrayList<>();
 
-        // Fixed storage shortcuts: these do not scroll.
+        // Middle storage shortcuts: scrollable list capped to 3 full rows.
         fixedEntries.add(new DrawerEntry(
                 DrawerEntry.ACTION_RECENT,
                 R.drawable.ic_recent,
@@ -788,23 +892,88 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                     downloads.getAbsolutePath()));
         }
 
-        File storageRoot = new File("/storage");
-        if (storageRoot.exists() && storageRoot.canRead()) {
-            fixedEntries.add(new DrawerEntry(
-                    DrawerEntry.ACTION_STORAGE_ROOT,
-                    R.drawable.ic_folder,
-                    getString(R.string.storage_root),
-                    "/storage",
-                    "/storage"));
-        }
+        // User-added folder shortcuts are in the middle scrollable section,
+        // directly below Downloads, and can be removed by long-press.
+        addShortcutFolderEntries(fixedEntries);
+        addShortcutPlaceholderRows(fixedEntries);
 
         List<DrawerEntry> recentFolderEntries = new ArrayList<>();
         addRecentFolderEntries(recentFolderEntries);
 
-        if (drawerFixedEntryAdapter != null) drawerFixedEntryAdapter.setEntries(fixedEntries);
         if (drawerEntryAdapter != null) drawerEntryAdapter.setEntries(recentFolderEntries);
+        if (drawerFixedEntryAdapter != null) drawerFixedEntryAdapter.setEntries(fixedEntries);
+
+        if (drawerStorageList != null) {
+            // Top recent-folder area: show only full rows, capped at 7.
+            applyRecentFolderListHeight(drawerStorageList, recentFolderEntries.size());
+        }
+        if (drawerFixedList != null) {
+            // Middle storage/shortcut area is always 5 full rows.
+            // Missing shortcut rows are represented by placeholder entries instead of blank space.
+            android.view.ViewGroup.LayoutParams lp = drawerFixedList.getLayoutParams();
+            if (lp != null) {
+                lp.height = dpToPx(5 * 48);
+                drawerFixedList.setLayoutParams(lp);
+            }
+            drawerFixedList.setVisibility(View.VISIBLE);
+        }
         if (drawerRecentFoldersTitle != null) {
             drawerRecentFoldersTitle.setVisibility(recentFolderEntries.isEmpty() ? View.GONE : View.VISIBLE);
+            if (!recentFolderEntries.isEmpty()) {
+                drawerRecentFoldersTitle.setText(R.string.recent_folders);
+            }
+        }
+    }
+
+    private void applyRecentFolderListHeight(@NonNull RecyclerView list, int itemCount) {
+        android.view.ViewGroup.LayoutParams lp = list.getLayoutParams();
+        if (lp == null) return;
+
+        final int maxRecentFolderRows = 7;
+        int rows = Math.max(0, Math.min(itemCount, maxRecentFolderRows));
+        lp.height = rows <= 0 ? 0 : dpToPx(rows * 48);
+        list.setLayoutParams(lp);
+        list.setVisibility(rows <= 0 ? View.GONE : View.VISIBLE);
+    }
+
+    private void addShortcutPlaceholderRows(@NonNull List<DrawerEntry> entries) {
+        final int middleDrawerRows = 5;
+        int missing = Math.max(0, middleDrawerRows - entries.size());
+        for (int i = 0; i < missing; i++) {
+            entries.add(new DrawerEntry(
+                    DrawerEntry.ACTION_FOLDER_SHORTCUT,
+                    R.drawable.ic_folder,
+                    getShortcutPlaceholderTitle(),
+                    null,
+                    null));
+        }
+    }
+
+    private String getShortcutPlaceholderTitle() {
+        String lang = java.util.Locale.getDefault().getLanguage();
+        return "ko".equalsIgnoreCase(lang)
+                ? "바로가기가 여기에 추가됩니다"
+                : "Shortcut will be added here";
+    }
+
+    private void addShortcutFolderEntries(@NonNull List<DrawerEntry> entries) {
+        if (prefs == null) return;
+
+        for (String path : prefs.getFolderShortcuts(30)) {
+            if (path == null || path.trim().isEmpty()) continue;
+            File folder = new File(path.trim());
+            if (!folder.exists() || !folder.isDirectory() || !folder.canRead()) continue;
+            if (isBuiltInDrawerPath(folder.getAbsolutePath())) continue;
+
+            String name = folder.getName();
+            if (name.isEmpty()) name = folder.getAbsolutePath();
+            entries.add(new DrawerEntry(
+                    DrawerEntry.ACTION_FOLDER_SHORTCUT,
+                    R.drawable.ic_folder,
+                    name,
+                    folder.getAbsolutePath(),
+                    folder.getAbsolutePath()));
+            if (entries.size() >= 30) break;
         }
     }
 
@@ -836,8 +1005,9 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             File folder = new File(path);
             if (!folder.exists() || !folder.isDirectory() || !folder.canRead()) continue;
             if (isBuiltInDrawerPath(folder.getAbsolutePath())) continue;
+            if (prefs != null && prefs.isFolderShortcut(folder.getAbsolutePath())) continue;
             String name = folder.getName();
-            if (name == null || name.isEmpty()) name = folder.getAbsolutePath();
+            if (name.isEmpty()) name = folder.getAbsolutePath();
             folderEntries.add(new DrawerEntry(
                     DrawerEntry.ACTION_RECENT_FOLDER,
                     R.drawable.ic_folder,
@@ -893,7 +1063,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
         // Method 2: derive from getExternalFilesDirs (skip the first = internal)
         File[] appDirs = ContextCompat.getExternalFilesDirs(this, null);
-        if (appDirs != null && appDirs.length > 1) {
+        if (appDirs.length > 1) {
             for (int i = 1; i < appDirs.length; i++) {
                 File d = appDirs[i];
                 if (d == null) continue;
@@ -1015,19 +1185,48 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
+    private void queueDrawerNavigation(@NonNull DrawerEntry entry) {
+        pendingDrawerNavigationEntry = entry;
+        drawerNavigationPending = true;
+
+        // Drawer navigation can be expensive, especially Downloads, because
+        // directory listing may touch many files. Close the drawer first so the
+        // tap response is immediate; run navigation only after the close animation.
+        if (drawerLayout != null && drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            drawerLayout.closeDrawer(GravityCompat.START);
+        } else {
+            consumePendingDrawerNavigation();
+        }
+    }
+
+    private void consumePendingDrawerNavigation() {
+        if (!drawerNavigationPending) return;
+
+        DrawerEntry entry = pendingDrawerNavigationEntry;
+        pendingDrawerNavigationEntry = null;
+        drawerNavigationPending = false;
+
+        if (entry != null && !activityDestroyed) {
+            handleDrawerEntryClick(entry);
+        }
+    }
+
     private void handleDrawerEntryClick(@NonNull DrawerEntry entry) {
         switch (entry.getActionType()) {
             case DrawerEntry.ACTION_RECENT:
+                resetFileFilterForNavigation();
                 showHomeMode();
                 break;
             case DrawerEntry.ACTION_INTERNAL:
             case DrawerEntry.ACTION_EXTERNAL_SD:
             case DrawerEntry.ACTION_DOWNLOADS:
             case DrawerEntry.ACTION_STORAGE_ROOT:
+            case DrawerEntry.ACTION_FOLDER_SHORTCUT:
             case DrawerEntry.ACTION_RECENT_FOLDER:
                 if (entry.getPath() != null) {
                     File target = new File(entry.getPath());
                     if (target.exists() && target.canRead()) {
+                        resetFileFilterForNavigation();
                         showBrowseMode(target);
                     } else {
                         Toast.makeText(this, target.getAbsolutePath(),
@@ -1038,17 +1237,115 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         }
     }
 
+    private boolean handleDrawerEntryLongClick(@NonNull DrawerEntry entry) {
+        if (entry.getActionType() == DrawerEntry.ACTION_FOLDER_SHORTCUT && entry.getPath() != null) {
+            showShortcutRemoveDialog(new File(entry.getPath()));
+            return true;
+        }
+        return false;
+    }
+
+    private void addFolderShortcut(@NonNull File folder) {
+        if (prefs == null || !folder.isDirectory()) return;
+        prefs.addFolderShortcut(folder.getAbsolutePath());
+        rebuildDrawerStorageEntries();
+        Toast.makeText(this, getString(R.string.shortcut_added), Toast.LENGTH_SHORT).show();
+    }
+
+    private void removeFolderShortcut(@NonNull File folder) {
+        if (prefs == null) return;
+        prefs.removeFolderShortcut(folder.getAbsolutePath());
+        rebuildDrawerStorageEntries();
+        Toast.makeText(this, getString(R.string.shortcut_removed), Toast.LENGTH_SHORT).show();
+    }
+
+    private void showShortcutRemoveDialog(@NonNull File folder) {
+        final boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
+        final int bg = dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255);
+        final int panel = dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245);
+        final int fg = dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36);
+        final int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104);
+        final int danger = dark ? Color.rgb(255, 170, 170) : Color.rgb(176, 0, 32);
+        final int line = dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dpToPx(18), dpToPx(16), dpToPx(18), dpToPx(10));
+        GradientDrawable bgShape = new GradientDrawable();
+        bgShape.setColor(bg);
+        bgShape.setCornerRadius(dpToPx(18));
+        bgShape.setStroke(Math.max(1, dpToPx(1)), line);
+        box.setBackground(bgShape);
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.remove_shortcut));
+        title.setTextColor(fg);
+        title.setTextSize(21f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setPadding(dpToPx(6), 0, dpToPx(6), dpToPx(6));
+        box.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView hint = new TextView(this);
+        hint.setText(folder.getAbsolutePath());
+        hint.setTextColor(sub);
+        hint.setTextSize(13f);
+        hint.setSingleLine(true);
+        hint.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        hint.setPadding(dpToPx(6), 0, dpToPx(6), dpToPx(12));
+        box.addView(hint, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        final AlertDialog[] ref = new AlertDialog[1];
+        addFileOpsRow(box, getString(R.string.remove_shortcut), danger, panel, () -> {
+            if (ref[0] != null) ref[0].dismiss();
+            removeFolderShortcut(folder);
+        });
+
+        TextView cancel = new TextView(this);
+        cancel.setText(getString(R.string.cancel));
+        cancel.setTextColor(sub);
+        cancel.setTextSize(16f);
+        cancel.setGravity(Gravity.CENTER);
+        cancel.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        cancel.setPadding(dpToPx(12), 0, dpToPx(12), 0);
+        LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(50));
+        cancelLp.setMargins(0, dpToPx(4), 0, 0);
+        box.addView(cancel, cancelLp);
+
+        AlertDialog dialog = new AlertDialog.Builder(this).create();
+        ref[0] = dialog;
+        dialog.setView(box);
+        dialog.setOnShowListener(d -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(
+                        new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+                android.view.WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
+                lp.dimAmount = 0.22f;
+                dialog.getWindow().setAttributes(lp);
+                dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            }
+        });
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+    }
+
     // -------------------------------------------------------------------------
     // Home / Browse mode switching
     // -------------------------------------------------------------------------
 
     private void showHomeMode() {
         searchMode = false;
+        searchReturnToHome = true;
+        searchReturnDirectory = null;
         homeMode = true;
         recentSection.setVisibility(View.VISIBLE);
         browserSection.setVisibility(View.GONE);
         pathText.setVisibility(View.GONE);
-        if (fileSearchClearButton != null) fileSearchClearButton.setVisibility(View.GONE);
+        updateFileSearchClearButtonVisibility();
         if (getSupportActionBar() != null) {
             getSupportActionBar().setTitle(R.string.app_name);
         }
@@ -1058,11 +1355,13 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     private void showBrowseMode(@NonNull File dir) {
         searchMode = false;
+        searchReturnToHome = false;
+        searchReturnDirectory = dir;
         homeMode = false;
         recentSection.setVisibility(View.GONE);
         browserSection.setVisibility(View.VISIBLE);
         pathText.setVisibility(View.VISIBLE);
-        if (fileSearchClearButton != null) fileSearchClearButton.setVisibility(View.GONE);
+        updateFileSearchClearButtonVisibility();
         if (prefs != null) prefs.addRecentFolder(dir.getAbsolutePath());
         loadDirectory(dir);
         rebuildDrawerStorageEntries();
@@ -1194,10 +1493,6 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         }
     }
 
-    private void forceBrightDrawerIndicator(Toolbar toolbar) {
-        installToolbarMenuButton(toolbar);
-    }
-
     private void tintMainToolbarIcons(@NonNull Toolbar toolbar, int color) {
         Drawable overflow = ContextCompat.getDrawable(this, R.drawable.ic_more_vert);
         if (overflow != null) {
@@ -1265,7 +1560,6 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     }
 
     private void onPermissionsGranted() {
-        permissionsReady = true;
         rebuildDrawerStorageEntries();
         loadRecentFiles();
     }
@@ -1294,7 +1588,11 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             }
         }
 
+        if (fileAdapter != null && prefs != null) {
+            fileAdapter.setSortMode(prefs.getSortMode());
+        }
         fileAdapter.setFiles(fileList);
+        scrollListToTop(fileRecyclerView);
         emptyText.setVisibility(fileList.isEmpty() ? View.VISIBLE : View.GONE);
         if (fileList.isEmpty()) emptyText.setText(getString(R.string.no_text_files_in_directory));
     }
@@ -1311,7 +1609,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         List<File> recentFiles = new ArrayList<>();
         for (ReaderState s : recent) {
             File f = new File(s.getFilePath());
-            if (f.exists()) recentFiles.add(f);
+            if (!f.exists()) continue;
+            if (activeFileFilter != FILTER_ALL
+                    && !matchesActiveFileFilter(f.getName(), activeFileFilter)) {
+                continue;
+            }
+            recentFiles.add(f);
         }
 
         if (recentAdapter != null) {
@@ -1325,6 +1628,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                 recentAdapter.setSortMode(recentSort);
             }
             recentAdapter.setFiles(recentFiles);
+            scrollListToTop(recentRecyclerView);
         }
         if (recentEmptyText != null) {
             recentEmptyText.setVisibility(recentFiles.isEmpty() ? View.VISIBLE : View.GONE);
@@ -1427,6 +1731,17 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         final AlertDialog[] ref = new AlertDialog[1];
         if (!file.isDirectory()) {
             addFileOpsRow(box, getString(R.string.open), fg, panel, () -> { if (ref[0] != null) ref[0].dismiss(); openFile(file); });
+        } else if (!isBuiltInDrawerPath(file.getAbsolutePath())) {
+            boolean shortcut = prefs != null && prefs.isFolderShortcut(file.getAbsolutePath());
+            addFileOpsRow(box,
+                    getString(shortcut ? R.string.remove_shortcut : R.string.add_shortcut),
+                    fg,
+                    panel,
+                    () -> {
+                        if (ref[0] != null) ref[0].dismiss();
+                        if (shortcut) removeFolderShortcut(file);
+                        else addFolderShortcut(file);
+                    });
         }
         addFileOpsRow(box, getString(R.string.rename), fg, panel, () -> { if (ref[0] != null) ref[0].dismiss(); showRenameDialog(file); });
         addFileOpsRow(box, getString(R.string.delete), danger, panel, () -> { if (ref[0] != null) ref[0].dismiss(); showDeleteConfirm(file); });
@@ -1728,6 +2043,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         dialog.show();
     }
 
+    @SuppressLint("WrongConstant")
     private void addFileInfoRow(@NonNull LinearLayout box, @NonNull String label, String value, int fg, int sub, int panelColor) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
@@ -1749,7 +2065,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         valueView.setTextColor(fg);
         valueView.setTextSize(15f);
         valueView.setPadding(0, dpToPx(3), 0, 0);
-        valueView.setBreakStrategy(android.text.Layout.BREAK_STRATEGY_SIMPLE);
+        valueView.setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE);
         row.addView(valueView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -1857,6 +2173,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             if (sortingRecentHome && checkedId == recentReadId) {
                 if (prefs != null) prefs.setRecentSortMode(PrefsManager.SORT_RECENT_READ);
                 loadRecentFiles();
+                scrollListToTop(recentRecyclerView);
                 dialog.dismiss();
                 return;
             }
@@ -1866,9 +2183,19 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                     if (sortingRecentHome) {
                         if (prefs != null) prefs.setRecentSortMode(i);
                         loadRecentFiles();
+                        scrollListToTop(recentRecyclerView);
                     } else {
                         if (prefs != null) prefs.setSortMode(i);
                         if (fileAdapter != null) fileAdapter.setSortMode(i);
+
+                        if (!searchMode && currentDirectory != null) {
+                            // Folder sort is scoped to the currently opened directory.
+                            // Reload that directory instead of touching all-storage/search roots.
+                            loadDirectory(currentDirectory);
+                        } else {
+                            // Search results stay as the current result set; only their order changes.
+                            scrollListToTop(fileRecyclerView);
+                        }
                     }
                     dialog.dismiss();
                     break;
@@ -1905,14 +2232,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         rowBg.setStroke(Math.max(1, dpToPx(1)), line);
         radio.setBackground(rowBg);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            int[][] states = new int[][] {
-                    new int[] { android.R.attr.state_checked },
-                    new int[] {}
-            };
-            int[] colors = new int[] { fg, fg };
-            radio.setButtonTintList(new android.content.res.ColorStateList(states, colors));
-        }
+        int[][] states = new int[][] {
+                new int[] { android.R.attr.state_checked },
+                new int[] {}
+        };
+        int[] colors = new int[] { fg, fg };
+        radio.setButtonTintList(new android.content.res.ColorStateList(states, colors));
 
         RadioGroup.LayoutParams lp = new RadioGroup.LayoutParams(
                 RadioGroup.LayoutParams.MATCH_PARENT,
@@ -1987,7 +2312,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
         // 2. Search results return to home first.
         if (searchMode) {
-            showHomeMode();
+            restorePreSearchLocation();
             return;
         }
 
