@@ -54,6 +54,15 @@
             </ScrollView>
         </HorizontalScrollView>
 
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/pdf_continuous_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:visibility="gone" />
+
         <ProgressBar
             android:id="@+id/pdf_progress"
             android:layout_width="48dp"
@@ -102,6 +111,11 @@
                 style="@style/ReaderBottomButton"
                 android:drawableTop="@drawable/ic_bottom_arrow_right"
                 android:text="@string/next_page" />
+
+            <TextView
+                android:id="@+id/pdf_slide_toggle"
+                style="@style/ReaderBottomButton"
+                android:text="" />
 
             <TextView
                 android:id="@+id/pdf_page"

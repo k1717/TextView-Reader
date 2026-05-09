@@ -213,4 +213,15 @@ Open a text, PDF, EPUB, or Word file to get started.</string>
     <string name="bookmark_type_word">Word</string>
     <string name="bookmark_type_other">Other</string>
     <string name="sort_recent_read">Recently read</string>
+    <string name="page_status_alignment">Page indicator position</string>
+    <string name="page_status_align_left">Left</string>
+    <string name="page_status_align_center">Middle</string>
+    <string name="page_status_align_right">Right</string>
+    <string name="add_shortcut">Add shortcut</string>
+    <string name="remove_shortcut">Remove shortcut</string>
+    <string name="shortcut_added">Shortcut added</string>
+    <string name="shortcut_removed">Shortcut removed</string>
+    <string name="folder_shortcuts">Shortcuts</string>
+    <string name="drawer_folders">Folders</string>
+    <string name="page_status_align_hidden">Do not show</string>
 </resources>

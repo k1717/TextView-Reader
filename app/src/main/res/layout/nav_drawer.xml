@@ -7,6 +7,7 @@
     android:fitsSystemWindows="true"
     android:orientation="vertical">
 
+    <!-- Scrollable top section: Recent folders only. -->
     <TextView
         android:id="@+id/drawer_recent_folders_title"
         android:layout_width="match_parent"
@@ -20,17 +21,16 @@
         android:textStyle="bold"
         android:letterSpacing="0.08" />
 
-    <!-- Recent folder list should scroll independently instead of becoming a fixed block. -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/drawer_storage_list"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="336dp"
         android:background="?attr/colorSurface"
         android:clipToPadding="false"
+        android:nestedScrollingEnabled="true"
         android:overScrollMode="ifContentScrolls"
         android:paddingTop="0dp"
-        android:paddingBottom="8dp"
+        android:paddingBottom="0dp"
         android:scrollbars="vertical" />
 
     <View
@@ -39,16 +39,18 @@
         android:layout_marginHorizontal="16dp"
         android:background="?attr/colorOutline" />
 
-    <!-- Shortcut section stays compact; it should not stretch and create a large empty gap. -->
+    <!-- Scrollable middle section: Recent, Internal, SD, Downloads, added shortcuts. Java keeps this at 5 full rows and fills missing rows with shortcut placeholders. -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/drawer_fixed_list"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="240dp"
         android:background="?attr/colorSurface"
-        android:nestedScrollingEnabled="false"
-        android:overScrollMode="never"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp" />
+        android:clipToPadding="false"
+        android:nestedScrollingEnabled="true"
+        android:overScrollMode="ifContentScrolls"
+        android:paddingTop="0dp"
+        android:paddingBottom="0dp"
+        android:scrollbars="vertical" />
 
     <View
         android:layout_width="match_parent"
@@ -56,7 +58,13 @@
         android:layout_marginHorizontal="16dp"
         android:background="?attr/colorOutline" />
 
-    <!-- Bottom action buttons. -->
+    <!-- Flexible blank area lives outside the scrollable lists, so list borders never show partial/blank rows. -->
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <!-- Bottom action buttons remain fixed. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
