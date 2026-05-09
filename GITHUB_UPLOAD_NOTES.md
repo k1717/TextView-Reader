@@ -73,7 +73,7 @@ captures/
 9. Commit with a message such as:
 
 ```text
-Update TextView Reader 2.0.1 source
+Update TextView Reader 2.0.2 source
 ```
 
 ## Important limitation
@@ -104,3 +104,18 @@ Before uploading, confirm the package does not contain:
 - local SDK path files;
 - signing keys;
 - secret/environment files.
+
+## Release notes summary for v2.0.2
+
+Use this if GitHub asks for a short release description:
+
+```markdown
+## TextView Reader 2.0.2 — Functional changes from 2.0.1
+
+- Increased huge TXT preview-only threshold from 20 MB to 32 MB.
+- Added user folder shortcuts: long-press a folder to add a drawer shortcut; long-press an added shortcut to remove it.
+- Added PDF horizontal slide / vertical continuous reading-mode toggle.
+- Added TXT page indicator alignment setting: left, center, right, or hidden.
+- Refined file search/type-filter behavior and drawer navigation responsiveness.
+- Strengthened viewer lifecycle handling to reduce stacked viewer instances.
+```

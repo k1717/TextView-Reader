@@ -16,15 +16,21 @@ The app may store local-only data needed for reading behavior:
 
 - recent files;
 - recent folders;
+- user-added folder shortcuts;
 - reading position;
 - bookmarks and bookmark labels;
 - reader settings;
 - theme settings;
 - optional imported fonts;
 - optional PIN-lock state;
+- PDF reading-mode preference;
 - disposable TXT page/index cache metadata for large-file handling.
 
 This data stays on the device unless the user manually exports, backs up, shares, deletes, or transfers it.
+
+## Folder shortcuts
+
+Folder shortcuts store local folder paths selected by the user. They are used only to show faster navigation entries in the app drawer. Removing a folder shortcut removes the shortcut entry; it does not delete the folder or files.
 
 ## Bookmark export/import
 
@@ -40,4 +46,4 @@ The optional PIN lock is an app-level convenience lock. It is not a substitute f
 
 ## Generated cache data
 
-Disposable TXT page/index cache bookkeeping is used only for generated cache data under app cache storage. Cache cleanup must not remove bookmarks, reading history, saved reading position, or user documents.
+Disposable TXT page/index cache bookkeeping is used only for generated cache data under app cache storage. Cache cleanup must not remove bookmarks, reading history, saved reading position, folder shortcuts, or user documents.

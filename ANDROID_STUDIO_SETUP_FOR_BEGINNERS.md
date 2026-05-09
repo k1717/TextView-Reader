@@ -32,7 +32,9 @@ The project uses:
 - compileSdk 35;
 - targetSdk 35;
 - minSdk 24;
-- Java 17.
+- Java 17;
+- app versionName `2.0.2`;
+- app versionCode `202`.
 
 If Android Studio asks to install SDK Platform 35 or related build tools, accept the installation.
 
@@ -71,20 +73,22 @@ Do not upload this APK to GitHub source history.
 4. Select the phone in Android Studio.
 5. Press the green Run button.
 
-## 5. First-use checklist
+## 5. First-use checklist for 2.0.2
 
 After the app launches:
 
-1. Confirm the initial app language follows the device/system language.
-2. Open a TXT file.
-3. Confirm recent files appear on the home screen after opening a file.
-4. Use the search field to filter files.
-5. Use the small sort icon beside search to change sort order.
-6. Open the left drawer and check Recent, Internal Storage, Downloads, and recent folders.
-7. Long-press a file and check file information, rename, and delete dialogs.
-8. Open PDF, EPUB, or Word files if available.
-9. Add a bookmark and confirm it appears in the bookmark list.
-10. Open Settings and check language, theme, behavior, backup, and lock options.
+1. Confirm the initial app language follows the device/system language until manually changed.
+2. Open a TXT file larger than 20 MB if available and confirm it no longer switches to preview-only mode at the old 20 MB threshold.
+3. Open a very large TXT file at or above 32 MB and confirm preview-only behavior is used as intended.
+4. Long-press a folder in the file browser and add it as a shortcut.
+5. Open the left drawer and confirm the shortcut appears below built-in storage entries.
+6. Long-press the added drawer shortcut and remove it.
+7. Use the search field and file-type chips; confirm the clear button only appears for typed search text.
+8. Use the small sort icon beside search to change recent or folder sort order.
+9. Open a PDF and test the horizontal/vertical reading-mode toggle.
+10. Open Settings and test TXT page indicator alignment: left, center, right, and hidden.
+11. Open TXT, PDF, EPUB, and Word files to confirm viewer transitions do not create stacked repeated viewers.
+12. Add a bookmark and confirm it appears in the bookmark list.
 
 ## 6. Clean package rule
 

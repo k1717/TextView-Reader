@@ -4,22 +4,33 @@ TextView Reader is a local-first Android reader app for TXT, PDF, EPUB, and OOXM
 
 The project focuses on comfortable offline reading, fast local file browsing, recent-file recovery, bookmarks, Korean/Unicode-friendly text decoding, and a clean reader UI.
 
-## Current update highlights
+## Current version
 
-- Version remains **2.0.1**.
-- Initial language now follows the Android system language until the user explicitly chooses English or Korean in settings.
-- Home opens to **Recently Read** files.
-- Recent files default to recently-read order, not alphabetical or numeric order.
-- The sort control is now a small icon beside the file search field.
-- Sorting works on both the Recently Read page and normal folder browsing.
-- Folder browsing supports sorting by name, date, size, and type.
-- The left drawer keeps storage shortcuts fixed while only the recent-folder list scrolls.
-- Viewer activities use `singleTop` / `onNewIntent` behavior so opening a new file reuses the matching viewer instead of creating repeated viewer stacks.
-- TXT large-file cache bookkeeping was added for disposable page/index cache cleanup. It uses access count and last-access time, but does **not** delete bookmarks, reading history, or saved reading position.
-- TXT, PDF, EPUB, and document viewers include additional lifecycle cleanup for callbacks, background work, bitmaps/renderers, WebViews, and selection state.
-- DOCX/Word rendering stays WebView-based to preserve document layout and selectable text behavior.
-- Dialogs, file actions, and document/PDF controls were polished to better match the app theme.
-- Public repository documentation and upload instructions were cleaned up.
+- Version: **2.0.2**
+- Android `versionName`: `2.0.2`
+- Android `versionCode`: `202`
+- Minimum Android version: Android 7.0 / API 24
+- Target SDK: 35
+
+## What changed from 2.0.1 to 2.0.2
+
+### Functional changes
+
+- Large TXT preview-only threshold increased from **20 MB** to **32 MB**.
+- Folder shortcuts can now be added by long-pressing a folder in the file browser.
+- Added folder shortcuts appear in the left drawer below the built-in storage shortcuts.
+- Added folder shortcuts can be removed by long-pressing the shortcut in the drawer or by long-pressing the folder again and choosing remove shortcut.
+- PDF reading now includes a mode toggle for horizontal page-slide mode versus vertical continuous reading mode.
+- TXT page indicator alignment can now be configured as left, center, right, or hidden.
+- The page-indicator row keeps its reserved space even when hidden, preventing the TXT page content from jumping upward.
+- Main file search and type-filter behavior were refined so type-only filters do not show an unnecessary clear button and empty recent-page filtering does not trigger a broad storage scan.
+- Drawer navigation is more responsive because expensive folder navigation is queued until after the drawer closes.
+- Viewer lifecycle handling was tightened through shared viewer registration, reducing repeated stacked viewer instances when moving between TXT, PDF, EPUB, and Word viewers.
+
+### Documentation and package changes
+
+- README, changelog, privacy notes, build notes, contribution notes, and GitHub upload instructions were refreshed for the 2.0.2 source package.
+- The source zip excludes local/private/generated files such as Android Studio workspace state, Gradle caches, build outputs, APKs, local SDK paths, signing files, and secret files.
 
 ## Quick UI map
 
@@ -29,64 +40,61 @@ The project focuses on comfortable offline reading, fast local file browsing, re
 | Search field | Filters files by name. |
 | File-type chips | Filter by All, General, PDF, EPUB, or Word. |
 | Small sort icon beside search | Changes recent-page or folder-page sorting. |
-| Left drawer | Opens Recent, Internal Storage, External Storage, Downloads, `/storage`, and recent folders. |
+| Left drawer | Opens Recent, Internal Storage, External Storage, Downloads, user folder shortcuts, and recent folders. |
+| Folder long press | Adds or removes a drawer shortcut for that folder. |
+| Drawer shortcut long press | Removes a user-added folder shortcut. |
 | Drawer bottom actions | Opens file picker, bookmarks, and settings. |
-| File long press | Opens the actions menu with info, rename, and delete. |
+| File long press | Opens the actions menu with open, shortcut, info, rename, and delete actions depending on file type. |
 | TXT reader bottom bar | Page movement, search, bookmarks, and reader options. |
-| PDF / document bottom bar | Page movement, page jump, bookmark, and viewer options. |
-| Settings | Reading themes, language, behavior, backup/import, and lock options. |
+| PDF bottom bar | Page movement, slide/continuous-mode toggle, page jump, bookmarks, and more options. |
+| Document bottom bar | Page movement, page jump, bookmarks, and viewer options for EPUB/Word. |
+| Settings | Reading themes, language, page indicator alignment, behavior, backup/import, and lock options. |
 
 ## Features
 
-### Reader modes
+### TXT reader
 
-- **TXT reader**
-  - Custom rendered scrolling.
-  - Tap-zone page movement.
-  - Hardware volume-key paging.
-  - Text search with next/previous match movement.
-  - Page, percentage, and line-position jump.
-  - Auto-resume reading position.
-  - Large-text fast-open path with safe disposable cache bookkeeping.
+- Custom rendered scrolling reader.
+- Tap-zone page movement.
+- Hardware volume-key paging.
+- Text search with next/previous match movement.
+- Page, percentage, and line-position jump.
+- Auto-resume reading position.
+- Large-text fast-open path.
+- Preview-only fallback now starts at **32 MB** instead of **20 MB**.
+- Disposable page/index cache bookkeeping for large files.
+- Page indicator alignment: left, center, right, or hidden.
 
-- **PDF reader**
-  - Android `PdfRenderer`-based page rendering.
-  - Page navigation.
-  - Zoom controls.
-  - Bookmark and recent-position restore.
+### PDF reader
 
-- **Document viewer**
-  - EPUB and OOXML Word support.
-  - Supported Word extensions: `.docx`, `.docm`, `.dotx`, `.dotm`.
-  - Page-style WebView rendering.
-  - Pinch-page vertical scrolling.
-  - Left/right swipe page movement.
-  - Selectable text.
-  - Cleanup of stale native text-selection handles after scrolling.
+- Android `PdfRenderer`-based page rendering.
+- Horizontal page-slide mode.
+- Vertical continuous reading mode.
+- Mode toggle in the PDF bottom control bar.
+- Page navigation and jump controls.
+- Zoom controls.
+- Bookmark and recent-position restore.
 
-### File browser
+### Document viewer
+
+- EPUB and OOXML Word support.
+- Supported Word extensions: `.docx`, `.docm`, `.dotx`, `.dotm`.
+- Page-style WebView rendering.
+- Per-page vertical scrolling.
+- Left/right swipe page movement.
+- Selectable text.
+- Cleanup of stale native text-selection handles after scrolling.
+
+### File browser and drawer
 
 - Home page shows **Recently Read** files.
 - Recent-file page keeps a separate recently-read ordering preference.
-- Folder browser supports sorting by:
-  - name A to Z / Z to A;
-  - date newest / oldest;
-  - size largest / smallest;
-  - file type.
-- File search supports these filters:
-  - All;
-  - General;
-  - PDF;
-  - EPUB;
-  - Word.
-- Left drawer shortcuts:
-  - Recent;
-  - Internal Storage;
-  - External Storage when available;
-  - Downloads;
-  - `/storage`.
-- Recent-folder drawer section keeps up to 10 recent folder entries.
-- File actions include open, file information, rename, delete, and new folder.
+- Folder browser supports sorting by name, date, size, and type.
+- File search supports All, General, PDF, EPUB, and Word filters.
+- Left drawer shortcuts include Recent, Internal Storage, External Storage when available, Downloads, user-added folder shortcuts, and recent folders.
+- Add a folder shortcut by long-pressing a folder in the browser.
+- Remove a folder shortcut by long-pressing the shortcut in the drawer or long-pressing that folder again.
+- File actions include open, shortcut add/remove for folders, file information, rename, delete, and new folder.
 - Android Storage Access Framework support for files opened from other apps.
 
 ### Encoding support
@@ -117,55 +125,43 @@ Invalid or unmappable bytes are replaced safely instead of crashing the reader.
 
 ### Appearance and controls
 
-- Built-in reading themes:
-  - Light;
-  - Dark;
-  - Sepia;
-  - Night Blue;
-  - Eye Care;
-  - Cream.
-- Custom theme editor with RGB color selection.
-- Custom font import and device font scanning.
-- App dark mode:
-  - Follow System;
-  - Light;
-  - Dark.
-- Reader brightness override.
-- Optional keep-screen-on behavior.
-- Optional reading-progress notification.
-- Edge-to-edge safe toolbar and bottom-bar insets for newer Android targets.
-- Custom rounded dialogs/menus and reader/document selection-handle styling.
+- Built-in reading themes.
+- Custom theme editor.
+- Light/dark app appearance with follow-system option.
+- Per-app brightness override.
+- Optional status bar visibility in the reader.
+- Configurable TXT page indicator alignment.
+- Keep-screen-on option.
+- Optional reading progress notification.
+- Optional PIN lock.
 
-## Supported file types
+## Project structure
 
-| Type | Extensions / MIME examples | Reader |
-|---|---|---|
-| Plain text | `.txt`, `.text/plain`, `text/*` | TXT reader |
-| PDF | `.pdf`, `application/pdf` | PDF reader |
-| EPUB | `.epub`, `application/epub+zip` | Document viewer |
-| Word OOXML | `.docx`, `.docm`, `.dotx`, `.dotm` | Document viewer |
+```text
+app/src/main/java/com/simpletext/reader/
+├── MainActivity.java             # File browser, drawer, search, sort, shortcuts, file actions
+├── ReaderActivity.java           # TXT reader, large-file handling, themes, search, bookmarks
+├── PdfReaderActivity.java        # PDF reader, zoom, page modes, bookmarks
+├── DocumentPageActivity.java     # EPUB/Word WebView-based document reader
+├── BookmarkListActivity.java     # All-bookmarks screen
+├── SettingsActivity.java         # Settings, language, behavior, page indicator alignment
+├── LockActivity.java             # PIN lock screen
+├── ThemeEditorActivity.java      # Custom theme editor
+├── ViewerRegistry.java           # Shared viewer lifecycle coordination
+├── adapter/                      # RecyclerView adapters
+├── model/                        # Bookmark, drawer entry, reader state, theme models
+├── util/                         # Preferences, bookmarks, file utils, fonts, themes, cache manager
+└── view/                         # Custom TXT reader view
+```
 
-## Requirements
+## Build
 
-- Android 7.0 / API 24+
-- Android Studio with JDK 17
-- Android Gradle Plugin 8.13.1
-- Gradle wrapper included in the repository
-- Compile SDK 35
-- Target SDK 35
-- Language: Java
+1. Open the project root folder in Android Studio.
+2. Let Gradle sync.
+3. Install SDK Platform 35 if prompted.
+4. Build with Android Studio or command line.
 
-## Build from source
-
-1. Clone or download the repository.
-2. Open the repository root folder in Android Studio.
-   - Correct: the folder containing `settings.gradle`, `build.gradle`, `gradlew`, and `app/`.
-   - Wrong: opening only the `app/` folder.
-3. Let Android Studio sync Gradle.
-4. Install SDK Platform 35 if Android Studio asks for it.
-5. Build with **Build > Make Project** or generate an APK with **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
-
-Command-line build:
+Command line:
 
 ```bash
 ./gradlew assembleDebug
@@ -177,60 +173,22 @@ Windows:
 .\gradlew.bat assembleDebug
 ```
 
-Debug APK output after building locally:
+## Requirements
 
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
+- Android Studio with JDK 17.
+- Android Gradle Plugin 8.13.1.
+- `compileSdk 35`.
+- `targetSdk 35`.
+- `minSdk 24`.
+- Java source/target compatibility 17.
 
-Do not commit generated APKs to GitHub.
+## Privacy model
 
-## Project structure
-
-```text
-app/src/main/java/com/simpletext/reader/
-├── MainActivity.java              # Home recent files, folder browser, drawer, search, sort, file actions
-├── ReaderActivity.java            # TXT reader, themes, bookmarks, search, position jump
-├── PdfReaderActivity.java         # PDF page viewer
-├── DocumentPageActivity.java      # EPUB/Word document viewer
-├── SettingsActivity.java          # App settings
-├── BookmarkListActivity.java      # Bookmark list UI
-├── LockActivity.java              # PIN lock screen
-├── ThemeEditorActivity.java       # Custom theme editor
-├── adapter/                       # RecyclerView adapters
-├── model/                         # Data models
-├── util/                          # Preferences, bookmarks, files, fonts, themes, cache helpers
-├── view/                          # Custom reader view
-└── widget/                        # WebView and selection helpers
-```
-
-Correct Android source/resource locations:
-
-```text
-app/src/main/AndroidManifest.xml
-app/src/main/java/
-app/src/main/res/
-app/src/main/ic_launcher-playstore.png
-```
-
-The repository root should not contain duplicate Android source folders such as root-level `java/`, `res/`, `AndroidManifest.xml`, or `ic_launcher-playstore.png`.
-
-## Privacy
-
-TextView Reader is designed as an offline local reader.
-
-- No analytics SDK.
-- No advertising SDK.
-- No account system.
-- Reading history, bookmarks, settings, disposable cache metadata, and imported fonts stay local on the device unless the user manually exports, backs up, shares, or deletes them.
-
-See `PRIVACY.md` for details.
+TextView Reader is designed as an offline local reader. It does not include analytics, ads, accounts, cloud sync, or remote telemetry. Reading state, bookmarks, recent files, folder shortcuts, settings, and disposable cache metadata are stored locally on the device unless the user manually exports or shares them.
 
 ## Repository hygiene
 
-The repository should contain source files and public documentation only.
-
-Do not commit:
+Do not commit local or generated files:
 
 ```text
 .gradle/
@@ -254,7 +212,7 @@ captures/
 *.log
 ```
 
-See `.gitignore` and `GITHUB_UPLOAD_NOTES.md` before pushing or uploading a new package.
+Android source should stay under `app/src/main/`. Do not upload duplicate root-level Android folders such as `java/`, `res/`, or root `AndroidManifest.xml`.
 
 ## License
 

@@ -1,61 +1,83 @@
 # Changelog
 
+## 2.0.2 - 2026-05-09
+
+### Functional changes from 2.0.1
+
+- Increased the huge TXT preview-only threshold from **20 MB** to **32 MB**.
+  - This allows larger TXT files to stay in the fuller large-text path before falling back to preview-only mode.
+- Added user folder shortcuts.
+  - Long-press a folder in the file browser to add it as a drawer shortcut.
+  - User-added shortcuts appear in the drawer below the built-in storage entries.
+  - Long-press an added drawer shortcut to remove it.
+  - Long-press the same folder again in the file browser to remove its shortcut.
+- Improved drawer organization.
+  - Built-in entries remain available.
+  - User shortcuts are separated from recent folders.
+  - Recent folders no longer duplicate user-added shortcuts.
+  - Placeholder shortcut rows keep the drawer layout stable.
+- Improved drawer navigation responsiveness.
+  - Drawer entry navigation is queued until after the drawer close animation, reducing the perceived delay when opening heavy folders such as Downloads.
+- Added PDF reading-mode control.
+  - PDF can use horizontal page-slide mode.
+  - PDF can use vertical continuous reading mode.
+  - The selected PDF mode is saved in local preferences.
+- Added TXT page indicator alignment controls.
+  - Page indicator can be left, center, right, or hidden.
+  - Hidden mode keeps the reserved indicator row so TXT content does not jump upward.
+- Refined file search and file-type filtering.
+  - The search clear button appears only when there is typed search text.
+  - Selecting General/PDF/EPUB/Word without typed search no longer shows an unnecessary clear button.
+  - Empty type filtering on the Recent page filters the recent list locally instead of starting a broad storage scan.
+  - Returning from search/filter restores the prior home/folder location more reliably.
+- Improved sorting behavior.
+  - Folder sorting reloads the current directory instead of disturbing unrelated search roots.
+  - Recent and folder lists scroll back to the top after sort/filter/list refreshes.
+- Strengthened viewer lifecycle handling.
+  - Added shared viewer registration to reduce stacked viewer instances across TXT, PDF, EPUB, and Word transitions.
+  - TXT, PDF, and document viewers perform additional cleanup of callbacks, adapters, renderers, WebViews, and transient state.
+- Improved document/PDF page swipe behavior.
+  - Document page swipes better distinguish between page turns and internal page scrolling.
+  - PDF page animation supports horizontal and vertical direction depending on reading mode.
+
+### Documentation and repository updates
+
+- Updated `README.md` for version 2.0.2 and the new folder-shortcut, PDF-mode, TXT threshold, page-indicator, drawer, and search/filter behavior.
+- Updated `CHANGELOG.md` with this 2.0.2 comparison against 2.0.1.
+- Updated `PRIVACY.md` to mention locally stored folder shortcuts and generated cache metadata.
+- Updated `CONTRIBUTING.md`, `ANDROID_STUDIO_SETUP_FOR_BEGINNERS.md`, `BUILD_FIX_NOTES.md`, and `GITHUB_UPLOAD_NOTES.md` for the current package.
+- Updated Android version metadata to `versionCode 202` and `versionName "2.0.2"`.
+- Kept the MIT license under `Copyright (c) 2026 k1717 aka Delphinium`.
+- Cleaned the public source package by excluding `.idea/`, `.gradle/`, `app/build/`, root `build/`, `local.properties`, generated APK/AAB files, signing keys, `.env` files, and other private/generated files.
+
 ## 2.0.1 - 2026-05-07
 
 ### Final 2.0.1 source refresh
 
 - Kept the public release version at `versionName "2.0.1"` and `versionCode 201`.
-- Updated the package from the latest stable build while keeping the GitHub upload source-only and privacy-safe.
 - Added initial language behavior that follows the Android system locale until the user explicitly chooses English or Korean.
 - Added disposable TXT page/index cache bookkeeping for large TXT files.
-  - The cache records file path hash, file length, modified time, layout signature, last access time, and access count.
-  - Cleanup uses stale-entry removal plus LFU/LRU-style shrinking.
-  - Cleanup is limited to generated cache data under app cache storage.
-  - It does **not** delete bookmarks, reading history, or saved reading position.
 - Added `PageIndexCacheManager` and TXT reader integration for best-effort large-file cache access recording.
-- Updated `README.md` and instruction documents to describe the latest 2.0.1 behavior.
-
-### Documentation and release hygiene
-
-- Fixed and reformatted `README.md` so GitHub renders headings, lists, tables, code blocks, build instructions, UI map, and repository hygiene notes correctly.
-- Updated `CHANGELOG.md` with a proper 2.0.1 entry covering current reader, file-browser, cache, language, and documentation updates.
-- Updated `ANDROID_STUDIO_SETUP_FOR_BEGINNERS.md` for the current app behavior, first-test checklist, and correct project-root opening instructions.
-- Updated `BUILD_FIX_NOTES.md` with the current Gradle/SDK/JDK configuration and clean repository rules.
-- Updated `GITHUB_UPLOAD_NOTES.md` with the exact safe upload flow and warnings about GitHub web upload not deleting obsolete files.
-- Updated `PRIVACY.md` to describe local-only data, permissions, exported bookmark JSON, and the optional PIN-lock limitation.
-- Updated `CONTRIBUTING.md` to reflect the current app structure, viewer-stack behavior, cache-safety rules, and documentation expectations.
-- Kept the MIT license under `Copyright (c) 2026 k1717 aka Delphinium`.
-- Expanded `.gitignore` to exclude local IDE folders, Gradle caches, build outputs, APK/AAB files, signing material, environment/secrets files, logs, captures, and heap dumps.
-- Cleaned this public source package by excluding `.idea/`, `.gradle/`, `app/build/`, root `build/`, `local.properties`, generated APK/AAB files, signing keys, `.env` files, and other private/generated files.
+- Updated README and instruction documents to describe the 2.0.1 behavior.
 
 ### Main file browser
 
-- Home page recent files default to **recently read first** instead of alphabetical or numeric order.
+- Home page recent files default to recently read first.
 - Added a compact sort icon beside the file search field.
 - Sort control works on both the home recent-files page and normal folder browsing.
-- Added a separate recent-home sort preference so the recent page can keep **Recently read** order while folders use normal file sort modes.
+- Added a separate recent-home sort preference.
 - Kept drawer storage shortcuts fixed and made only recent-folder entries scrollable.
 - Cached external storage detection to reduce drawer rebuild overhead.
-- Improved main search and keyboard resize behavior.
 
 ### Reader and document viewer
 
-- Reused viewer activities with `singleTop` / `onNewIntent` handling to avoid repeated viewer stacks when opening a new file.
+- Reused viewer activities with `singleTop` / `onNewIntent` handling to avoid repeated viewer stacks.
 - Improved lifecycle cleanup for handlers, executor services, PDF bitmaps/renderers, WebView resources, and selection state.
-- Refined TXT/document selection handle drawables.
 - Kept Word/DOCX rendering on WebView after testing showed selectable-TextView rendering degraded document layout.
-- Improved DOCX/Word page behavior:
-  - long-line wrapping inside the page border;
-  - per-page vertical scrolling preserved;
-  - left/right swipe page movement;
-  - stale native selection handles cleaned after selected text scrolls away.
+- Improved DOCX/Word page behavior and left/right swipe page movement.
 
-### UI polish
+### Documentation and release hygiene
 
-- Continued cleanup of rounded dialog/menu styling.
-- Applied reader-theme colors across PDF/document viewer controls where applicable.
-- Updated the README with a first-use UI map showing where major functions are located.
-
-## Earlier development notes
-
-Earlier internal packages contained local Gradle/IDE/build artifacts and documentation drafts. The 2.0.1 package is the cleaned public source snapshot intended for GitHub upload.
+- Rebuilt the public documentation set with readable Markdown formatting.
+- Added repository hygiene guidance and privacy notes.
+- Expanded `.gitignore` for Android local/generated/private files.
