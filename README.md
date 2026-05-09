@@ -27,11 +27,6 @@ The project focuses on comfortable offline reading, fast local file browsing, re
 - Drawer navigation is more responsive because expensive folder navigation is queued until after the drawer closes.
 - Viewer lifecycle handling was tightened through shared viewer registration, reducing repeated stacked viewer instances when moving between TXT, PDF, EPUB, and Word viewers.
 
-### Documentation and package changes
-
-- README, changelog, privacy notes, build notes, contribution notes, and GitHub upload instructions were refreshed for the 2.0.2 source package.
-- The source zip excludes local/private/generated files such as Android Studio workspace state, Gradle caches, build outputs, APKs, local SDK paths, signing files, and secret files.
-
 ## Quick UI map
 
 | Area | What it does |
