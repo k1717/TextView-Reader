@@ -28,14 +28,10 @@ Thank you for improving TextView Reader.
 - Keep reader state, bookmarks, folder shortcuts, and file actions safe and predictable.
 - Folder shortcut removal must remove only the shortcut entry, never the folder or its files.
 - Viewer activities should continue using single-viewer reuse behavior where appropriate.
-- Cache cleanup must only affect generated/disposable cache data.
-- Cache cleanup must never delete bookmarks, reading history, saved reading position, folder shortcuts, or user documents.
+- Cache cleanup must only affect generated/disposable cache data. It must never delete bookmarks, reading history, saved reading position, folder shortcuts, or user documents.
 - Preserve Korean/Unicode text handling when touching decoding or rendering code.
 - Test TXT, PDF, EPUB, and Word paths when changing shared file-opening logic.
 - Test both PDF horizontal slide mode and vertical continuous mode when touching PDF gestures or rendering.
-- Test EPUB/Word search, double-tap reset, default-font behavior, and edge-swipe page turning when touching `DocumentPageActivity`.
-- Test TXT, EPUB, and Word font dialogs when touching font selection or custom font handling.
-- Test popup width/positioning on TXT, PDF, EPUB, and Word viewers when changing dialog helpers.
 - Test TXT page indicator left/center/right/hidden alignment when touching reader insets or status-bar behavior.
 
 ## Documentation expectations

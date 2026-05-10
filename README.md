@@ -2,7 +2,7 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.0.3**
+Current version: **2.0.4**
 
 ## Quick UI map
 
@@ -30,6 +30,7 @@ Current version: **2.0.3**
 - In vertical continuous mode, zoomed pages can be horizontally panned.
 - PDF popups use the same compact dialog width style as the TXT reader.
 - Bookmarks remain wider so long bookmark/file information is easier to read.
+- Returning from Settings/theme editing refreshes the PDF More popup theme instead of keeping stale colors.
 
 ### EPUB / Word reader
 
@@ -79,6 +80,7 @@ Current version: **2.0.3**
 - Improved continuous-mode blank-page recovery and render rebinding.
 - More stable popup/dialog sizing and positioning.
 - PDF slide-mode label refreshes while the More dialog is open.
+- PDF More dialog refreshes theme colors after returning from Settings or theme editing.
 - Bookmarks and file info.
 
 ### EPUB and Word reading
@@ -99,6 +101,8 @@ Current version: **2.0.3**
 - JSON-based bookmark storage.
 - Custom bookmark labels and excerpts.
 - Grouped bookmark list by file.
+- Bookmark folders default to collapsed on the main bookmark page.
+- Rounded, bordered bookmark edit dialogs with **Cancel**, **Clear memo**, and **Save** actions.
 - Export/import support.
 - Reading-position persistence per file.
 - Bookmark cleanup and cache cleanup are separate.
@@ -111,6 +115,7 @@ Current version: **2.0.3**
 - Font selection shared across TXT, EPUB, and Word where applicable.
 - EPUB/Word can preserve file-declared default fonts.
 - Dialogs and popup windows are theme-matched and sized consistently across viewers.
+- Viewer popups reload the current theme after returning from Settings/theme editing.
 
 ### Privacy
 
@@ -121,6 +126,7 @@ TextView Reader is intended as an offline local reader.
 - No account login.
 - No cloud sync backend.
 - No remote telemetry collection.
+- Public source packages exclude local IDE/build caches, generated APKs, signing files, and machine-specific configuration such as `local.properties`.
 
 See [`PRIVACY.md`](PRIVACY.md) for details.
 
@@ -187,4 +193,4 @@ Do not upload duplicate root-level Android folders such as `java/`, `res/`, or r
 
 ## Release notes
 
-See [`CHANGELOG.md`](CHANGELOG.md).
+See [`CHANGELOG.md`](CHANGELOG.md). For GitHub release text, see [`PATCHNOTES.md`](PATCHNOTES.md).

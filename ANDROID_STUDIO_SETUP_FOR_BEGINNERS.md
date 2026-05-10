@@ -1,88 +1,86 @@
-# Android Studio Setup for Beginners
+# TextView - Android Studio Beginner Setup
 
-This guide explains how to open and build TextView Reader.
+This project is a Java Android TXT reader prototype inspired by TekView.
+It uses continuous scrolling plus TekView-style tap paging:
 
-## 1. Open the correct folder
+- Tap top area: page up
+- Tap bottom area: page down
+- Tap middle area: show/hide controls
+- Volume up/down: page up/down if enabled in settings
 
-Open the repository root folder in Android Studio.
+## 1. Open the project
 
-Correct:
+1. Unzip this folder.
+2. Open Android Studio.
+3. Click **Open**.
+4. Select the unzipped project folder, not the `app` folder.
+   - Correct: `tekview-reader-v4-android-studio-ready`
+   - Wrong: `tekview-reader-v4-android-studio-ready/app`
+5. Wait for **Gradle Sync**.
 
-```text
-TextView-Reader/
-```
+## 2. Install missing SDK if Android Studio asks
 
-Do not open only:
+The project uses:
 
-```text
-TextView-Reader/app/
-```
+- compileSdk 35
+- targetSdk 35
+- minSdk 24
 
-## 2. Let Gradle sync
+If Android Studio says SDK Platform 35 is missing, click the install/fix link.
 
-Android Studio should start Gradle sync automatically.
-
-If it does not, click:
-
-```text
-File > Sync Project with Gradle Files
-```
-
-## 3. Install missing SDK components
-
-If Android Studio asks to install SDK Platform 35 or Build Tools, allow it.
-
-## 4. Check Java version
-
-Use JDK 17.
-
-In Android Studio:
-
-```text
-File > Settings > Build, Execution, Deployment > Build Tools > Gradle
-```
-
-Set Gradle JDK to a JDK 17 installation.
-
-## 5. Build the app
+## 3. Build a debug APK
 
 Use:
 
-```text
-Build > Make Project
-```
+- **Build > Make Project**
 
-or run:
+Then:
 
-```bash
-./gradlew assembleDebug
-```
+- **Build > Build Bundle(s) / APK(s) > Build APK(s)**
 
-## 6. Run on a device
+The debug APK should appear under:
 
-Connect an Android device or start an emulator, then press **Run**.
+`app/build/outputs/apk/debug/app-debug.apk`
 
-## Current version
+## 4. Run on your phone
 
-```text
-TextView Reader 2.0.3
-```
+1. Enable Developer Options on the phone.
+2. Enable USB Debugging.
+3. Connect by USB.
+4. In Android Studio, choose your phone from the device dropdown.
+5. Press the green Run button.
 
-## What not to upload to GitHub
+## 5. First test checklist
 
-Do not upload generated or local files:
+After the app installs:
 
-```text
-.gradle/
-.idea/
-build/
-app/build/
-local.properties
-*.apk
-*.aab
-*.jks
-*.keystore
-.env
-secrets.properties
-google-services.json
-```
+1. Give storage/all-files permission if prompted.
+2. Open a `.txt` file.
+3. Drag-scroll normally.
+4. Tap bottom area: text should jump one screen down.
+5. Tap top area: text should jump one screen up.
+6. Tap middle area: toolbar/bottom controls should hide/show.
+7. Add a bookmark.
+8. Close and reopen the file; position should restore.
+9. Try dark mode in Settings.
+
+## 6. Known prototype limitations
+
+This version is usable for testing, but not final:
+
+- Large TXT files are loaded into one TextView, so very large files may lag.
+- SAF opened files are copied to cache; the final app should bookmark original Uri values.
+- All-files storage permission is okay for sideload testing, but SAF-first design is better for public release.
+- Background image theme data exists but full rendering support is not final.
+- PIN lock is basic and not cryptographically secure.
+
+## 7. If Gradle fails
+
+Copy the exact first red error line and send it back. The common first failures are:
+
+- Missing SDK Platform 35
+- Gradle plugin update prompt
+- Missing Java/JDK setting
+- Resource compile issue
+
+Do not randomly change files before capturing the error.
