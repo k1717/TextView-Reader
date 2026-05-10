@@ -4,13 +4,13 @@
     <string name="add_bookmark">북마크 추가</string>
     <string name="add_current_bookmark">+ 현재 위치 북마크 추가</string>
     <string name="all_bookmarks">전체 북마크</string>
-    <string name="all_bookmarks_status">전체 북마크: 파일 %1$d개 / 북마크 %2$d개    현재: %3$d / %4$d쪽</string>
+    <string name="all_bookmarks_status">전체 북마크: 파일 %1$d개 / 북마크 %2$d개\n현재: %3$d / %4$d쪽</string>
     <string name="app_name">TextView</string>
     <string name="auto_save_position">읽던 위치 자동 저장</string>
     <string name="backup_description">북마크와 읽던 위치를 JSON으로 내보내기/가져오기합니다.</string>
     <string name="bookmark">북마크</string>
     <string name="bottom_page">페이지</string>
-    <string name="bookmark_folder_hint">파일 폴더 탭: 펼치기/접기    북마크 탭: 이동    길게 누름: 메모 수정</string>
+    <string name="bookmark_folder_hint">파일 폴더 탭: 펼치기/접기\n북마크 탭: 이동\n길게 누름: 메모 수정</string>
     <string name="bookmark_label">북마크 이름</string>
     <string name="bookmark_saved">북마크를 저장했습니다</string>
     <string name="bookmark_updated">북마크를 업데이트했습니다</string>
@@ -21,6 +21,7 @@
     <string name="change_pin">PIN 변경</string>
     <string name="characters">문자 수</string>
     <string name="clear">지우기</string>
+    <string name="clear_memo">메모 지우기</string>
     <string name="close">닫기</string>
     <string name="create">만들기</string>
     <string name="create_custom_reading_theme">사용자 읽기 테마 만들기</string>
@@ -224,4 +225,19 @@
     <string name="folder_shortcuts">바로가기</string>
     <string name="drawer_folders">폴더</string>
     <string name="page_status_align_hidden">표시 안 함</string>
+    <string name="clear_all">지우기</string>
+    <string name="clear_recent_files">최근 파일 전체 지우기</string>
+    <string name="clear_recent_files_confirm">홈 화면의 최근 본 파일 목록을 모두 지울까요? 파일이나 북마크는 삭제하지 않지만, 이 최근 항목들의 저장된 읽기 위치는 제거됩니다.</string>
+    <string name="recent_files_cleared">최근 파일을 지웠습니다</string>
+    <string name="no_recent_files_to_clear">지울 최근 파일이 없습니다</string>
+    <string name="clear_recent_folders">최근 폴더 전체 지우기</string>
+    <string name="clear_recent_folders_confirm">서랍의 최근 사용한 폴더를 모두 지울까요? 폴더나 바로가기는 삭제하지 않습니다.</string>
+    <string name="recent_folders_cleared">최근 폴더를 지웠습니다</string>
+    <string name="no_recent_folders_to_clear">지울 최근 폴더가 없습니다</string>
+    <string name="clear_recent_folder">최근 폴더 지우기</string>
+    <string name="clear_recent_folder_confirm">이 폴더를 최근 사용한 폴더에서 제거할까요?
+%1$s</string>
+    <string name="recent_folder_cleared">최근 폴더를 지웠습니다</string>
+    <string name="clear_from_recently_viewed">최근 본 파일에서 지우기</string>
+    <string name="recent_file_cleared">최근 파일을 지웠습니다</string>
 </resources>

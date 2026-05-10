@@ -4,13 +4,13 @@
     <string name="add_bookmark">Add Bookmark</string>
     <string name="add_current_bookmark">+ Save current position as bookmark</string>
     <string name="all_bookmarks">All Bookmarks</string>
-    <string name="all_bookmarks_status">All bookmarks: %1$d files / %2$d bookmarks    Current: Page %3$d / %4$d</string>
+    <string name="all_bookmarks_status">All bookmarks: %1$d files / %2$d bookmarks\nCurrent: Page %3$d / %4$d</string>
     <string name="app_name">TextView</string>
     <string name="auto_save_position">Auto-save Reading Position</string>
     <string name="backup_description">Export/import bookmarks and reading positions as JSON.</string>
     <string name="bookmark">Bookmark</string>
     <string name="bottom_page">Page</string>
-    <string name="bookmark_folder_hint">Tap file folder: expand/shrink    Tap bookmark: move    Long press: edit memo</string>
+    <string name="bookmark_folder_hint">Tap file folder: expand/shrink\nTap bookmark: move\nLong press: edit memo</string>
     <string name="bookmark_label">Bookmark label</string>
     <string name="bookmark_saved">Bookmark saved</string>
     <string name="bookmark_updated">Bookmark updated</string>
@@ -21,6 +21,7 @@
     <string name="change_pin">Change PIN</string>
     <string name="characters">Characters</string>
     <string name="clear">Clear</string>
+    <string name="clear_memo">Clear memo</string>
     <string name="close">Close</string>
     <string name="create">Create</string>
     <string name="create_custom_reading_theme">Create Custom Reading Theme</string>
@@ -224,4 +225,19 @@ Open a text, PDF, EPUB, or Word file to get started.</string>
     <string name="folder_shortcuts">Shortcuts</string>
     <string name="drawer_folders">Folders</string>
     <string name="page_status_align_hidden">Do not show</string>
+    <string name="clear_all">Clear</string>
+    <string name="clear_recent_files">Clear recent files</string>
+    <string name="clear_recent_files_confirm">Clear all recently viewed files from the home list? This does not delete files or bookmarks, but saved reading positions for these recent entries will be removed.</string>
+    <string name="recent_files_cleared">Recent files cleared</string>
+    <string name="no_recent_files_to_clear">No recent files to clear</string>
+    <string name="clear_recent_folders">Clear recent folders</string>
+    <string name="clear_recent_folders_confirm">Clear all recent folders from the drawer? This does not delete folders or shortcuts.</string>
+    <string name="recent_folders_cleared">Recent folders cleared</string>
+    <string name="no_recent_folders_to_clear">No recent folders to clear</string>
+    <string name="clear_recent_folder">Clear recent folder</string>
+    <string name="clear_recent_folder_confirm">Remove this folder from recent folders?
+%1$s</string>
+    <string name="recent_folder_cleared">Recent folder cleared</string>
+    <string name="clear_from_recently_viewed">Clear from recently viewed</string>
+    <string name="recent_file_cleared">Recent file cleared</string>
 </resources>

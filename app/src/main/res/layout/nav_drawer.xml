@@ -7,24 +7,50 @@
     android:fitsSystemWindows="true"
     android:orientation="vertical">
 
-    <!-- Scrollable top section: Recent folders only. -->
-    <TextView
-        android:id="@+id/drawer_recent_folders_title"
+    <!-- Top section: recent folders only. This area owns the flexible space. -->
+    <LinearLayout
+        android:id="@+id/drawer_recent_folders_header"
         android:layout_width="match_parent"
         android:layout_height="34dp"
         android:gravity="center_vertical"
+        android:orientation="horizontal"
         android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:text="@string/recent_folders"
-        android:textColor="?attr/colorOnSurfaceVariant"
-        android:textSize="11sp"
-        android:textStyle="bold"
-        android:letterSpacing="0.08" />
+        android:paddingEnd="8dp">
+
+        <TextView
+            android:id="@+id/drawer_recent_folders_title"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:text="@string/recent_folders"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08" />
+
+        <TextView
+            android:id="@+id/drawer_recent_folders_clear"
+            android:layout_width="64dp"
+            android:layout_height="match_parent"
+            android:background="@android:color/transparent"
+            android:gravity="center"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:text="@string/clear_all"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/drawer_storage_list"
         android:layout_width="match_parent"
-        android:layout_height="336dp"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:background="?attr/colorSurface"
         android:clipToPadding="false"
         android:nestedScrollingEnabled="true"
@@ -39,9 +65,15 @@
         android:layout_marginHorizontal="16dp"
         android:background="?attr/colorOutline" />
 
-    <!-- Scrollable middle section: Recent, Internal, SD, Downloads, added shortcuts. Java keeps this at 5 full rows and fills missing rows with shortcut placeholders. -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/drawer_fixed_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+
+    <!-- Bottom-adjacent shortcut zone: built-in storage shortcuts + user folder shortcuts. -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/drawer_shortcut_list"
         android:layout_width="match_parent"
         android:layout_height="240dp"
         android:background="?attr/colorSurface"
@@ -58,36 +90,31 @@
         android:layout_marginHorizontal="16dp"
         android:background="?attr/colorOutline" />
 
-    <!-- Flexible blank area lives outside the scrollable lists, so list borders never show partial/blank rows. -->
-    <Space
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-
     <!-- Bottom action buttons remain fixed. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/colorSurface"
         android:orientation="vertical"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp">
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp">
 
         <LinearLayout
             android:id="@+id/drawer_btn_open_file"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="42dp"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
             android:focusable="true"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="16dp">
+            android:paddingStart="20dp"
+            android:paddingEnd="16dp">
 
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:layout_marginEnd="24dp"
+                android:layout_marginEnd="20dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_open_file"
                 app:tint="?attr/colorOnSurfaceVariant" />
@@ -103,18 +130,19 @@
         <LinearLayout
             android:id="@+id/drawer_btn_bookmarks"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="42dp"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
             android:focusable="true"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="16dp">
+            android:paddingStart="20dp"
+            android:paddingEnd="16dp">
 
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:layout_marginEnd="24dp"
+                android:layout_marginEnd="20dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_bookmark"
                 app:tint="?attr/colorOnSurfaceVariant" />
@@ -130,18 +158,19 @@
         <LinearLayout
             android:id="@+id/drawer_btn_settings"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="42dp"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
             android:focusable="true"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="16dp">
+            android:paddingStart="20dp"
+            android:paddingEnd="16dp">
 
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:layout_marginEnd="24dp"
+                android:layout_marginEnd="20dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_settings"
                 app:tint="?attr/colorOnSurfaceVariant" />
