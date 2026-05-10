@@ -1,55 +1,64 @@
 # Build Fix Notes
 
-This source package uses a modern Android Gradle setup.
-
-## Current build configuration
+This project uses the modern Android Gradle setup:
 
 - Android Gradle Plugin: 8.13.1
-- Gradle wrapper: included
-- compileSdk: 35
-- targetSdk: 35
-- minSdk: 24
+- Gradle wrapper: 9.0.0
+- Compile SDK: 35
+- Target SDK: 35
+- Min SDK: 24
 - Java compatibility: 17
-- App versionName: 2.0.2
-- App versionCode: 202
 
-## Dependency style
+Current app version:
 
-The project uses the modern Gradle layout:
+```gradle
+versionCode 203
+versionName "2.0.3"
+```
 
-- root `build.gradle` with `plugins { ... }`;
-- `settings.gradle` with `pluginManagement` and `dependencyResolutionManagement`;
-- app dependencies in `app/build.gradle`.
+## Build
 
-This avoids older `buildscript { ... }` / `allprojects { ... }` repository configuration issues.
+Open the project root folder in Android Studio, then click **Sync Now**.
 
-## Build command
+If Android Studio asks to install SDK Platform 35 or Build Tools, click **Install**.
+
+Command-line build:
 
 ```bash
 ./gradlew assembleDebug
 ```
 
-Windows:
+## Common cleanup before committing
 
-```bat
-.\gradlew.bat assembleDebug
+Do not commit:
+
+```text
+.gradle/
+.idea/
+build/
+app/build/
+local.properties
+*.apk
+*.aab
+*.jks
+*.keystore
+.env
+secrets.properties
+google-services.json
 ```
 
-## Common Android Studio fixes
+## Project-root warning
 
-If Gradle sync fails because SDK Platform 35 is missing, install it from Android Studio's SDK Manager or accept the install prompt.
+Open the repository root folder. Do not open only the `app/` folder.
 
-If Android Studio opens the wrong folder, close the project and reopen the repository root folder containing `settings.gradle`.
+The correct root contains:
 
-If a stale generated file causes confusion, delete local `build/`, `app/build/`, and `.gradle/`, then sync again. Do not commit those folders.
-
-## 2.0.2-specific checks
-
-- Confirm `app/build.gradle` contains `versionName "2.0.2"` and `versionCode 202`.
-- Confirm huge TXT preview-only threshold is `32L * 1024L * 1024L` in `ReaderActivity`.
-- Confirm user folder shortcut strings are present in both English and Korean string resources.
-- Confirm the source package does not contain `local.properties`, `.idea/`, `.gradle/`, `build/`, `app/build/`, APKs, AABs, or signing keys.
-
-## Repository cleanliness
-
-Do not commit local or generated build files. Generated APKs, Gradle caches, Android Studio workspace files, local SDK paths, and signing files are excluded from the clean GitHub package.
+```text
+app/
+gradle/
+build.gradle
+settings.gradle
+gradle.properties
+gradlew
+gradlew.bat
+```

@@ -73,7 +73,7 @@ captures/
 9. Commit with a message such as:
 
 ```text
-Update TextView Reader 2.0.2 source
+Update TextView Reader 2.0.3 source
 ```
 
 ## Important limitation
@@ -97,25 +97,41 @@ Keep the correct copies under `app/src/main/`.
 
 Before uploading, confirm the package does not contain:
 
-- local username paths such as `C:\Users\...`;
+- local username paths from your computer;
 - Android Studio workspace files;
 - Gradle cache folders;
 - generated APK/AAB files;
-- local SDK path files;
-- signing keys;
-- secret/environment files.
+- local SDK paths;
+- keystores/signing keys;
+- `.env` files;
+- Firebase or secret configuration files;
+- generated logs or heap dumps.
 
-## Release notes summary for v2.0.2
+## Recommended release title
 
-Use this if GitHub asks for a short release description:
+```text
+TextView Reader 2.0.3
+```
+
+## Recommended release tag
+
+```text
+v2.0.3
+```
+
+## Functional release-note summary
 
 ```markdown
-## TextView Reader 2.0.2 — Functional changes from 2.0.1
+## TextView Reader 2.0.3 — Functional changes from 2.0.2
 
-- Increased huge TXT preview-only threshold from 20 MB to 32 MB.
-- Added user folder shortcuts: long-press a folder to add a drawer shortcut; long-press an added shortcut to remove it.
-- Added PDF horizontal slide / vertical continuous reading-mode toggle.
-- Added TXT page indicator alignment setting: left, center, right, or hidden.
-- Refined file search/type-filter behavior and drawer navigation responsiveness.
-- Strengthened viewer lifecycle handling to reduce stacked viewer instances.
+- Added EPUB/Word search as a bottom-bar Find button next to Next.
+- Matched EPUB/Word search input styling with the TXT reader custom cursor/selection-handle behavior.
+- Connected the TXT font selector structure to EPUB/Word.
+- Added Default font behavior for EPUB and Word files that declare their own fonts.
+- Removed unused EPUB/Word More-menu zoom buttons while preserving double-tap reset.
+- Improved EPUB/Word zoomed edge-swipe page turning.
+- Improved PDF vertical continuous mode blank-page recovery, zoom behavior, and horizontal panning.
+- Matched regular EPUB/Word/PDF popup widths to the TXT viewer style, excluding bookmark dialogs.
+- Fixed popup hard-landing and transparent-background regressions.
+- Improved the main sort dialog selection bubble placement.
 ```
