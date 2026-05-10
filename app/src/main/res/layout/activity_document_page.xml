@@ -75,6 +75,12 @@
                 android:drawableTop="@drawable/ic_bottom_arrow_right"
                 android:text="@string/next_page" />
             <TextView
+                android:id="@+id/btn_document_search"
+                style="@style/ReaderBottomButton"
+                android:drawableTop="@drawable/ic_bottom_search"
+                android:text="@string/find" />
+
+            <TextView
                 android:id="@+id/btn_page_move"
                 style="@style/ReaderBottomButton"
                 android:drawableTop="@drawable/ic_bottom_page"
