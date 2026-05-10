@@ -6,6 +6,8 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
@@ -2224,7 +2226,14 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         radio.setTextColor(fg);
         radio.setTextSize(16f);
         radio.setGravity(Gravity.CENTER_VERTICAL);
-        radio.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+
+        // Draw the radio circle as a normal compound drawable instead of using
+        // the platform button slot. The platform slot hugs the far-left edge on
+        // some devices; this keeps the bubble naturally inset inside the row.
+        radio.setButtonDrawable(null);
+        radio.setCompoundDrawablesWithIntrinsicBounds(makeSortRadioCircleDrawable(fg, line, panel), null, null, null);
+        radio.setCompoundDrawablePadding(dpToPx(12));
+        radio.setPadding(dpToPx(18), 0, dpToPx(14), 0);
 
         GradientDrawable rowBg = new GradientDrawable();
         rowBg.setColor(panel);
@@ -2232,19 +2241,39 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         rowBg.setStroke(Math.max(1, dpToPx(1)), line);
         radio.setBackground(rowBg);
 
-        int[][] states = new int[][] {
-                new int[] { android.R.attr.state_checked },
-                new int[] {}
-        };
-        int[] colors = new int[] { fg, fg };
-        radio.setButtonTintList(new android.content.res.ColorStateList(states, colors));
-
         RadioGroup.LayoutParams lp = new RadioGroup.LayoutParams(
                 RadioGroup.LayoutParams.MATCH_PARENT,
                 dpToPx(48));
         lp.setMargins(0, 0, 0, dpToPx(8));
         radio.setLayoutParams(lp);
         return radio;
+    }
+
+    private Drawable makeSortRadioCircleDrawable(int fg, int line, int panel) {
+        StateListDrawable states = new StateListDrawable();
+        states.addState(new int[] { android.R.attr.state_checked }, makeSortRadioCircle(true, fg, line, panel));
+        states.addState(new int[] {}, makeSortRadioCircle(false, fg, line, panel));
+        return states;
+    }
+
+    private Drawable makeSortRadioCircle(boolean checked, int fg, int line, int panel) {
+        GradientDrawable outer = new GradientDrawable();
+        outer.setShape(GradientDrawable.OVAL);
+        outer.setColor(Color.TRANSPARENT);
+        outer.setStroke(Math.max(1, dpToPx(2)), checked ? fg : line);
+        outer.setSize(dpToPx(20), dpToPx(20));
+
+        if (!checked) return outer;
+
+        GradientDrawable inner = new GradientDrawable();
+        inner.setShape(GradientDrawable.OVAL);
+        inner.setColor(fg);
+        inner.setSize(dpToPx(10), dpToPx(10));
+
+        LayerDrawable layer = new LayerDrawable(new Drawable[] { outer, inner });
+        int inset = dpToPx(5);
+        layer.setLayerInset(1, inset, inset, inset, inset);
+        return layer;
     }
 
     private void applyRoundedDialogWindow(@NonNull AlertDialog dialog) {

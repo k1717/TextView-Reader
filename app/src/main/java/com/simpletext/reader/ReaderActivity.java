@@ -90,6 +90,7 @@ public class ReaderActivity extends AppCompatActivity {
     private static final long LARGE_TEXT_FAST_OPEN_THRESHOLD_BYTES = 3L * 1024L * 1024L;
     private static final long HUGE_TEXT_PREVIEW_ONLY_THRESHOLD_BYTES = 32L * 1024L * 1024L;
     private static final int LARGE_TEXT_PREVIEW_BYTES = 768 * 1024;
+    private static final String FONT_OPTION_SYSTEM_CURRENT = "system_current";
 
     public static final String EXTRA_FILE_PATH = "file_path";
     public static final String EXTRA_FILE_URI = "file_uri";
@@ -619,11 +620,48 @@ public class ReaderActivity extends AppCompatActivity {
     }
 
     private GradientDrawable positionedReaderDialogBackground(int bgColor) {
+        // Fill only. The visible border is drawn as a foreground overlay below.
+        // Drawing the stroke in the background can lose the top rounded corner
+        // because half of the stroke is clipped by the rounded outline.
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(bgColor);
         drawable.setCornerRadius(dpToPx(16));
-        drawable.setStroke(dpToPx(2), strongDialogBorderColor(bgColor));
         return drawable;
+    }
+
+    private Drawable positionedReaderDialogBorderOverlay(int bgColor) {
+        final int borderColor = strongDialogBorderColor(bgColor);
+        return new Drawable() {
+            private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private final RectF rect = new RectF();
+
+            {
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(dpToPx(2));
+                paint.setColor(borderColor);
+            }
+
+            @Override
+            public void draw(Canvas canvas) {
+                Rect bounds = getBounds();
+                float half = paint.getStrokeWidth() / 2f;
+                rect.set(bounds.left + half, bounds.top + half,
+                        bounds.right - half, bounds.bottom - half);
+                canvas.drawRoundRect(rect, dpToPx(16) - half, dpToPx(16) - half, paint);
+            }
+
+            @Override public void setAlpha(int alpha) {
+                paint.setAlpha(alpha);
+            }
+
+            @Override public void setColorFilter(ColorFilter colorFilter) {
+                paint.setColorFilter(colorFilter);
+            }
+
+            @Override public int getOpacity() {
+                return PixelFormat.TRANSLUCENT;
+            }
+        };
     }
 
     private android.app.Dialog createPositionedReaderDialog(@NonNull View content,
@@ -662,17 +700,21 @@ public class ReaderActivity extends AppCompatActivity {
 
         FrameLayout outerFrame = new FrameLayout(this);
         outerFrame.setBackground(positionedReaderDialogBackground(bgColor));
+        // Draw the rounded border above the title/list contents. This restores the
+        // visible upper-left/upper-right rounded barrier on font dialogs even when
+        // the scroll list/header use their own opaque backgrounds.
+        outerFrame.setForeground(positionedReaderDialogBorderOverlay(bgColor));
         outerFrame.setClipToOutline(true);
         outerFrame.setClipChildren(true);
         outerFrame.setClipToPadding(true);
-        int borderPad = dpToPx(2);
+        int borderPad = dpToPx(3);
         outerFrame.setPadding(borderPad, borderPad, borderPad, borderPad);
 
         content.setBackgroundColor(Color.TRANSPARENT);
         if (content instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) content;
-            group.setClipChildren(false);
-            group.setClipToPadding(false);
+            group.setClipChildren(true);
+            group.setClipToPadding(true);
         }
 
         outerFrame.addView(content, new FrameLayout.LayoutParams(
@@ -1273,6 +1315,8 @@ public class ReaderActivity extends AppCompatActivity {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setBackgroundColor(Color.TRANSPARENT);
+        panel.setClipChildren(true);
+        panel.setClipToPadding(true);
 
         TextView title = makeReaderDialogTitle(getString(R.string.page_move), bubbleBg, bubbleFg);
         panel.addView(title, new LinearLayout.LayoutParams(
@@ -1435,6 +1479,7 @@ public class ReaderActivity extends AppCompatActivity {
 
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(Color.TRANSPARENT);
+        constrainDialogScrollArea(scroll, list);
         scroll.addView(list);
 
         final android.app.Dialog[] ref = new android.app.Dialog[1];
@@ -2578,6 +2623,8 @@ public class ReaderActivity extends AppCompatActivity {
                 0.85f,
                 360,
                 false);
+        panel.setClipChildren(true);
+        panel.setClipToPadding(true);
 
         seekbar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
@@ -2675,6 +2722,9 @@ public class ReaderActivity extends AppCompatActivity {
         options.add(new ReadingFontOption("default",
                 "System Sans (recommended)",
                 "시스템 산세리프 (추천)"));
+        options.add(new ReadingFontOption(FONT_OPTION_SYSTEM_CURRENT,
+                "Current system font",
+                "현재 시스템 글꼴"));
         options.add(new ReadingFontOption("korean_sans",
                 "Korean/System Sans",
                 "한글 산세리프"));
@@ -2699,11 +2749,19 @@ public class ReaderActivity extends AppCompatActivity {
 
         addUserFontOptions(options);
 
+
         String current = normalizeReadingFontValue(prefs != null ? prefs.getFontFamily() : "default");
         if (!isCuratedReadingFontValue(current) && !containsReadingFontOption(options, current)) {
-            options.add(new ReadingFontOption(current,
-                    "Installed/Custom: " + current,
-                    "설치/사용자 글꼴: " + current));
+            if (FontManager.isSystemFamilyValue(current)) {
+                String familyName = FontManager.getSystemFamilyName(current);
+                options.add(new ReadingFontOption(current,
+                        "Saved system font: " + familyName,
+                        "저장된 시스템 글꼴: " + familyName));
+            } else {
+                options.add(new ReadingFontOption(current,
+                        "Installed/Custom: " + current,
+                        "설치/사용자 글꼴: " + current));
+            }
         }
 
         return options.toArray(new ReadingFontOption[0]);
@@ -2723,8 +2781,8 @@ public class ReaderActivity extends AppCompatActivity {
                 String value = normalizeReadingFontValue(fontName);
                 if (isCuratedReadingFontValue(value) || containsReadingFontOption(options, value)) continue;
                 options.add(new ReadingFontOption(value,
-                        "Installed: " + fontName,
-                        "설치된 글꼴: " + fontName));
+                        "Installed system font: " + fontName,
+                        "설치된 시스템 글꼴: " + fontName));
             }
 
             // Keep manually provided font files available, but separate them from
@@ -2752,6 +2810,7 @@ public class ReaderActivity extends AppCompatActivity {
     private boolean isCuratedReadingFontValue(String value) {
         switch (normalizeReadingFontValue(value)) {
             case "default":
+            case "system_current":
             case "korean_sans":
             case "korean_serif":
             case "serif":
@@ -2773,7 +2832,10 @@ public class ReaderActivity extends AppCompatActivity {
     private String normalizeReadingFontValue(String fontName) {
         if (fontName == null || fontName.trim().isEmpty()) return "default";
 
-        switch (fontName) {
+        String trimmed = fontName.trim();
+        if (FontManager.isSystemFamilyValue(trimmed)) return trimmed;
+
+        switch (trimmed) {
             case "Default (Sans-serif)":
             case "DEFAULT":
                 return "default";
@@ -2784,6 +2846,7 @@ public class ReaderActivity extends AppCompatActivity {
             case "MONOSPACE":
                 return "monospace";
             case "default":
+            case "system_current":
             case "korean_sans":
             case "korean_serif":
             case "serif":
@@ -2791,9 +2854,9 @@ public class ReaderActivity extends AppCompatActivity {
             case "sans_medium":
             case "sans_condensed":
             case "sans_light":
-                return fontName;
+                return trimmed;
             default:
-                return fontName;
+                return trimmed;
         }
     }
 
@@ -2802,6 +2865,7 @@ public class ReaderActivity extends AppCompatActivity {
 
         switch (value) {
             case "default":
+            case "system_current":
                 return Typeface.DEFAULT;
             case "korean_sans":
                 // Android's system sans family uses the device CJK fallback chain,
@@ -2826,6 +2890,94 @@ public class ReaderActivity extends AppCompatActivity {
         }
     }
 
+    private void constrainDialogScrollArea(@NonNull View scrollContainer, @NonNull ViewGroup contentList) {
+        scrollContainer.setClipToOutline(false);
+        if (scrollContainer instanceof ScrollView) {
+            ScrollView scrollView = (ScrollView) scrollContainer;
+            scrollView.setClipToPadding(true);
+            scrollView.setFillViewport(false);
+            scrollView.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        }
+        if (scrollContainer instanceof ViewGroup) {
+            ViewGroup scrollGroup = (ViewGroup) scrollContainer;
+            scrollGroup.setClipChildren(true);
+            scrollGroup.setClipToPadding(true);
+        }
+
+        contentList.setClipChildren(true);
+        contentList.setClipToPadding(true);
+    }
+
+    private Drawable fontDialogHeaderBackground(int bgColor) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(bgColor);
+        float r = dpToPx(16);
+        drawable.setCornerRadii(new float[]{
+                r, r,   // top-left
+                r, r,   // top-right
+                0, 0,   // bottom-right
+                0, 0    // bottom-left
+        });
+        return drawable;
+    }
+
+    private View fontDialogHeaderSeparator(int bgColor) {
+        View separator = new View(this);
+        separator.setBackgroundColor(dialogActionPanelLineColor(bgColor));
+        separator.setClickable(false);
+        separator.setFocusable(false);
+        return separator;
+    }
+
+    private FrameLayout makeClippedDialogScrollFrame(@NonNull ScrollView scroll,
+                                                     @NonNull ViewGroup contentList,
+                                                     int bgColor) {
+        constrainDialogScrollArea(scroll, contentList);
+
+        FrameLayout clipFrame = new FrameLayout(this);
+        clipFrame.setBackgroundColor(bgColor);
+        clipFrame.setClipChildren(true);
+        clipFrame.setClipToPadding(true);
+        clipFrame.setOverScrollMode(View.OVER_SCROLL_NEVER);
+
+        scroll.setBackgroundColor(bgColor);
+        scroll.setFillViewport(false);
+        scroll.setClipChildren(true);
+        scroll.setClipToPadding(true);
+        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        scroll.setVerticalFadingEdgeEnabled(false);
+        scroll.setPadding(0, 0, 0, 0);
+
+        contentList.setBackgroundColor(bgColor);
+        contentList.setClipChildren(true);
+        contentList.setClipToPadding(true);
+        scroll.addView(contentList, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT,
+                ScrollView.LayoutParams.WRAP_CONTENT));
+
+        clipFrame.addView(scroll, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+
+        return clipFrame;
+    }
+
+    private void preserveFontDialogHeaderBarrier(@NonNull ViewGroup panel, @NonNull View scrollClip) {
+        // The font rows were bleeding over the fixed header because the dialog panel
+        // was allowed to draw children outside their own bounds. Keep clipping enabled
+        // on the panel and on the scroll viewport; the outer rounded frame/background is
+        // drawn by createPositionedReaderDialog(), so this does not cut the dialog border.
+        panel.setClipChildren(true);
+        panel.setClipToPadding(true);
+
+        scrollClip.setClipToOutline(false);
+        if (scrollClip instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) scrollClip;
+            group.setClipChildren(true);
+            group.setClipToPadding(true);
+        }
+    }
+
     private void showFontPickerDialog(ReadingFontOption[] fontOptions) {
         final int bg = readerDialogBgColor();
         final int fg = readerDialogTextColor(bg);
@@ -2833,11 +2985,28 @@ public class ReaderActivity extends AppCompatActivity {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setBackgroundColor(Color.TRANSPARENT);
+        panel.setClipChildren(true);
+        panel.setClipToPadding(true);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setBackground(fontDialogHeaderBackground(bg));
+        header.setClipChildren(true);
+        header.setClipToPadding(true);
 
         TextView title = makeReaderDialogTitle(getString(R.string.select_font), bg, fg);
-        panel.addView(title, new LinearLayout.LayoutParams(
+        title.setBackgroundColor(Color.TRANSPARENT);
+        title.setPadding(title.getPaddingLeft(), title.getPaddingTop(),
+                title.getPaddingRight(), dpToPx(18));
+        header.addView(title, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(header, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(fontDialogHeaderSeparator(bg), new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.max(1, dpToPx(1))));
 
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
@@ -2846,11 +3015,140 @@ public class ReaderActivity extends AppCompatActivity {
         list.setPadding(pad, dpToPx(8), pad, dpToPx(8));
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(Color.TRANSPARENT);
-        scroll.addView(list);
-        panel.addView(scroll, new LinearLayout.LayoutParams(
+        FrameLayout scrollClip = makeClippedDialogScrollFrame(scroll, list, bg);
+        panel.addView(scrollClip, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.min(dpToPx(360), getResources().getDisplayMetrics().heightPixels / 2)));
+
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setBackground(positionedActionPanelBackground(
+                dialogActionPanelFillColor(bg),
+                dialogActionPanelLineColor(bg)));
+        actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
+
+        TextView addFont = makeReaderDialogActionText(
+                localizedText("Add font", "글꼴 추가"),
+                fg,
+                Gravity.CENTER_VERTICAL | Gravity.START);
+        TextView cancel = makeReaderDialogActionText(getString(R.string.cancel), fg,
+                Gravity.CENTER_VERTICAL | Gravity.END);
+
+        actionRow.addView(addFont, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1f));
+        actionRow.addView(cancel, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1f));
+        panel.addView(actionRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(54)));
+
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                panel,
+                bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                88,
+                0.85f,
+                360,
+                false);
+        preserveFontDialogHeaderBarrier(panel, scrollClip);
+
+        String currentFont = normalizeReadingFontValue(prefs.getFontFamily());
+        for (ReadingFontOption option : fontOptions) {
+            String label = getReadingFontLabel(option);
+            if (option.value.equals(currentFont)) {
+                label = "✓ " + label;
+            }
+
+            TextView row = makeReaderActionRow(label, fg);
+            row.setOnClickListener(v -> {
+                dialog.dismiss();
+                prefs.setFontFamily(option.value);
+                applyPreferences();
+                updatePositionLabel();
+            });
+            list.addView(row);
+        }
+
+        addFont.setOnClickListener(v -> {
+            dialog.dismiss();
+            showAllSystemFontsDialog();
+        });
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+    }
+
+    private void showAllSystemFontsDialog() {
+        final int bg = readerDialogBgColor();
+        final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
+
+        List<String> fontNames = new ArrayList<>();
+        try {
+            FontManager fontManager = FontManager.getInstance();
+            fontManager.scanFontsSync(this);
+            fontNames.addAll(fontManager.getFontNames());
+        } catch (Throwable ignored) {
+            // Keep the dialog usable even if a device blocks one of the font paths.
+        }
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+        panel.setClipChildren(true);
+        panel.setClipToPadding(true);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setBackground(fontDialogHeaderBackground(bg));
+        header.setClipChildren(true);
+        header.setClipToPadding(true);
+
+        TextView title = makeReaderDialogTitle(
+                localizedText("All system fonts", "전체 시스템 글꼴"),
+                bg,
+                fg);
+        title.setBackgroundColor(Color.TRANSPARENT);
+        title.setPadding(title.getPaddingLeft(), title.getPaddingTop(),
+                title.getPaddingRight(), dpToPx(8));
+        header.addView(title, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView hint = makeReaderDialogLabel(
+                localizedText(
+                        "Select a font found from Android/system font folders.",
+                        "Android/시스템 글꼴 폴더에서 찾은 글꼴을 선택합니다."),
+                sub,
+                12f);
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(dpToPx(18), dpToPx(4), dpToPx(18), dpToPx(16));
+        hint.setBackgroundColor(Color.TRANSPARENT);
+        header.addView(hint, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(header, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(fontDialogHeaderSeparator(bg), new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.max(1, dpToPx(1))));
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setBackgroundColor(Color.TRANSPARENT);
+        int pad = dpToPx(14);
+        list.setPadding(pad, dpToPx(8), pad, dpToPx(8));
+
+        ScrollView scroll = new ScrollView(this);
+        FrameLayout scrollClip = makeClippedDialogScrollFrame(scroll, list, bg);
+        panel.addView(scrollClip, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.min(dpToPx(420), getResources().getDisplayMetrics().heightPixels / 2)));
 
         LinearLayout actionRow = new LinearLayout(this);
         actionRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -2876,28 +3174,48 @@ public class ReaderActivity extends AppCompatActivity {
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
                 88,
                 0.85f,
-                360,
+                460,
                 false);
+        preserveFontDialogHeaderBarrier(panel, scrollClip);
 
         String currentFont = normalizeReadingFontValue(prefs.getFontFamily());
-        for (ReadingFontOption option : fontOptions) {
-            String label = getReadingFontLabel(option);
-            if (option.value.equals(currentFont)) {
-                label = "✓ " + label;
-            }
+        if (fontNames.isEmpty()) {
+            TextView empty = makeReaderDialogLabel(
+                    localizedText("No readable system fonts found.", "읽을 수 있는 시스템 글꼴을 찾지 못했습니다."),
+                    sub,
+                    14f);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(dpToPx(12), dpToPx(16), dpToPx(12), dpToPx(16));
+            list.addView(empty, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT));
+        } else {
+            for (String fontName : fontNames) {
+                if (fontName == null || fontName.trim().isEmpty()) continue;
 
-            TextView row = makeReaderActionRow(label, fg);
-            row.setOnClickListener(v -> {
-                dialog.dismiss();
-                prefs.setFontFamily(option.value);
-                applyPreferences();
-                updatePositionLabel();
-            });
-            list.addView(row);
+                String value = normalizeReadingFontValue(fontName);
+                String label = fontName;
+                if (value.equals(currentFont)) {
+                    label = "✓ " + label;
+                }
+
+                TextView row = makeReaderActionRow(label, fg);
+                row.setOnClickListener(v -> {
+                    dialog.dismiss();
+                    prefs.setFontFamily(value);
+                    applyPreferences();
+                    updatePositionLabel();
+                });
+                list.addView(row);
+            }
         }
 
         cancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
+    }
+
+    private String localizedText(String english, String korean) {
+        return "ko".equalsIgnoreCase(Locale.getDefault().getLanguage()) ? korean : english;
     }
 
     // --- Go To / Search ---

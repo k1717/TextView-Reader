@@ -2,6 +2,7 @@ package com.simpletext.reader;
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -9,6 +10,8 @@ import android.os.Bundle;
 import android.annotation.SuppressLint;
 import android.text.InputType;
 import android.view.MenuItem;
+import android.view.Gravity;
+import android.view.ViewGroup;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
@@ -20,8 +23,10 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -39,6 +44,7 @@ import com.simpletext.reader.model.ReaderState;
 import com.simpletext.reader.model.Theme;
 import com.simpletext.reader.util.BookmarkManager;
 import com.simpletext.reader.util.FileUtils;
+import com.simpletext.reader.util.FontManager;
 import com.simpletext.reader.util.PrefsManager;
 import com.simpletext.reader.util.ThemeManager;
 
@@ -50,11 +56,13 @@ import org.w3c.dom.NodeList;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLDecoder;
 import java.text.DateFormat;
 import java.util.Date;
+import java.util.Enumeration;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -89,6 +97,9 @@ public class DocumentPageActivity extends AppCompatActivity {
     private static final String LOCAL_HOST = "tekview.local";
     private static final String EPUB_PREFIX = "/epub/";
     private static final String WORD_PREFIX = "/word/";
+    private static final String FONT_PREFIX = "/font/";
+    private static final String DOCUMENT_FONT_DEFAULT = "document_default";
+    private static final String FONT_OPTION_SYSTEM_CURRENT = "system_current";
     private static final int WORD_PARAGRAPHS_PER_PAGE = 28;
 
     private Toolbar toolbar;
@@ -97,6 +108,7 @@ public class DocumentPageActivity extends AppCompatActivity {
     private TextView pageStatus;
     private TextView prevButton;
     private TextView nextButton;
+    private TextView searchButton;
     private TextView pageButton;
     private TextView bookmarkButton;
     private TextView moreButton;
@@ -126,9 +138,23 @@ public class DocumentPageActivity extends AppCompatActivity {
     private GestureDetector documentGestureDetector;
     private int armedDocumentEdgeDirection = 0;
     private long armedDocumentEdgeTimeMs = 0L;
+    private boolean wordGestureStartedAtLeftEdge = true;
+    private boolean wordGestureStartedAtRightEdge = true;
     private volatile boolean wordSelectionActive = false;
     private volatile boolean activityDestroyed = false;
     private int loadGeneration = 0;
+    private File selectedDocumentFontFile = null;
+    private boolean epubHasDocumentFont = false;
+    private boolean wordHasDocumentFont = false;
+    private String wordDefaultFontFamily = null;
+    private String documentFontOverride = null;
+    private String activeDocumentSearchQuery = "";
+    private int activeDocumentSearchPage = -1;
+    private int activeDocumentSearchOrdinal = 0;
+    private int activeDocumentSearchCountOnPage = 0;
+    private int activeDocumentSearchTotal = 0;
+    private boolean documentSearchSelectLastAfterCount = false;
+    private TextView documentSearchStatusView = null;
     private final Runnable checkWordSelectionAfterScrollRunnable = this::checkWordSelectionAfterScroll;
     private final Runnable releasePageTurnRunnable = () -> pageTurnInFlight = false;
     private final Map<String, String> wordRelationships = new LinkedHashMap<>();
@@ -187,6 +213,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         pageStatus = findViewById(R.id.document_page_status);
         prevButton = findViewById(R.id.btn_prev_page);
         nextButton = findViewById(R.id.btn_next_page);
+        searchButton = findViewById(R.id.btn_document_search);
         pageButton = findViewById(R.id.btn_page_move);
         bookmarkButton = findViewById(R.id.btn_bookmarks);
         moreButton = findViewById(R.id.btn_more);
@@ -305,7 +332,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
         if (webView != null) webView.setBackgroundColor(readerBg);
         if (pageStatus != null) pageStatus.setTextColor(readerFg);
-        TextView[] buttons = {prevButton, nextButton, pageButton, bookmarkButton, moreButton};
+        TextView[] buttons = {prevButton, nextButton, searchButton, pageButton, bookmarkButton, moreButton};
         for (TextView b : buttons) {
             if (b == null) continue;
             b.setTextColor(readerFg);
@@ -319,6 +346,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         activityDestroyed = true;
         loadGeneration++;
         saveReadingState();
+        clearDocumentSearchState(true);
         destroyDocumentWebView();
         closeResourceZip();
         pages.clear();
@@ -387,6 +415,22 @@ public class DocumentPageActivity extends AppCompatActivity {
         webView.setHapticFeedbackEnabled(true);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.addJavascriptInterface(new WordSelectionBridge(), "TekviewSelectionBridge");
+        webView.setFindListener((activeMatchOrdinal, numberOfMatches, isDoneCounting) -> {
+            if (!isDoneCounting) return;
+            activeDocumentSearchPage = currentPage;
+            activeDocumentSearchCountOnPage = Math.max(0, numberOfMatches);
+            activeDocumentSearchOrdinal = numberOfMatches > 0 ? Math.max(1, activeMatchOrdinal + 1) : 0;
+
+            if (documentSearchSelectLastAfterCount && numberOfMatches > 0 && webView != null) {
+                documentSearchSelectLastAfterCount = false;
+                webView.post(() -> {
+                    if (!activityDestroyed && webView != null) webView.findNext(false);
+                });
+                return;
+            }
+
+            updateDocumentSearchStatus(documentSearchStatusView);
+        });
         webView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
             if ("Word".equals(docType) && Math.abs(scrollY - oldScrollY) > dpToPx(1)) {
                 webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
@@ -405,6 +449,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                 super.onPageFinished(view, url);
                 if (progressBar != null) progressBar.setVisibility(View.GONE);
                 installWordSelectionCleanupScript();
+                applyDocumentSearchHighlightAfterPageLoad();
                 runDocumentSlideInAnimation();
             }
         });
@@ -417,6 +462,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         nextButton.setOnClickListener(v -> {
             if (currentPage < pages.size() - 1) showPage(currentPage + 1, 1);
         });
+        if (searchButton != null) searchButton.setOnClickListener(v -> showDocumentSearchDialog());
         if (pageButton != null) pageButton.setOnClickListener(v -> showGoToPageDialog());
         bookmarkButton.setOnClickListener(v -> showBookmarksDialog());
         if (moreButton != null) {
@@ -449,6 +495,8 @@ public class DocumentPageActivity extends AppCompatActivity {
                     wordSwipeStartY = event.getY();
                     wordSwipeTriggered = false;
                     wordSwipeMovedEnoughForParentDisallow = false;
+                    wordGestureStartedAtLeftEdge = !webView.canScrollHorizontally(-1);
+                    wordGestureStartedAtRightEdge = !webView.canScrollHorizontally(1);
                     webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
                     webView.removeCallbacks(releasePageTurnRunnable);
                     return false;
@@ -500,6 +548,8 @@ public class DocumentPageActivity extends AppCompatActivity {
     private void resetWordSwipeTracking() {
         wordSwipeTriggered = false;
         wordSwipeMovedEnoughForParentDisallow = false;
+        wordGestureStartedAtLeftEdge = true;
+        wordGestureStartedAtRightEdge = true;
         if (webView != null && webView.getParent() != null) {
             webView.getParent().requestDisallowInterceptTouchEvent(false);
         }
@@ -523,11 +573,14 @@ public class DocumentPageActivity extends AppCompatActivity {
         float absY = Math.abs(dy);
         long duration = event.getEventTime() - event.getDownTime();
 
-        float threshold = Math.max(dpToPx(34), webView.getWidth() * 0.075f);
+        // Slightly lighter than before so zoomed Word/EPUB pages do not feel
+        // like they need multiple hard swipes. The edge rule below still prevents
+        // accidental page turns while the WebView can pan horizontally.
+        float threshold = Math.max(dpToPx(28), webView.getWidth() * 0.06f);
         if (!(absX >= threshold
-                && absX > absY * 1.45f
-                && absY <= dpToPx(64)
-                && duration <= 750)) {
+                && absX > absY * 1.28f
+                && absY <= dpToPx(78)
+                && duration <= 850)) {
             return false;
         }
 
@@ -545,8 +598,29 @@ public class DocumentPageActivity extends AppCompatActivity {
             return false;
         }
 
+        // If this is a fresh gesture that already started at the matching WebView
+        // edge, allow page turn immediately. This keeps the first swipe from
+        // jumping while panning to the edge, but avoids needing another arm+turn
+        // cycle after the user is already resting at that edge.
+        if ((direction > 0 && wordGestureStartedAtRightEdge)
+                || (direction < 0 && wordGestureStartedAtLeftEdge)) {
+            return true;
+        }
+
         long now = event.getEventTime();
-        if (armedDocumentEdgeDirection == direction && now - armedDocumentEdgeTimeMs <= 900L) {
+
+        // When the WebView is zoomed/expanded and the user reaches the horizontal
+        // edge, do not turn the document page during the same drag. The old logic
+        // could arm the edge on one ACTION_MOVE and then satisfy the armed-edge
+        // condition on a later ACTION_MOVE from the same finger gesture, which made
+        // the Word viewer jump to the next/previous page instead of stopping at the
+        // WebView edge. Only a fresh gesture that starts after the edge was armed is
+        // allowed to turn the page.
+        boolean armedFromPreviousGesture = armedDocumentEdgeTimeMs > 0L
+                && armedDocumentEdgeTimeMs < event.getDownTime();
+        if (armedDocumentEdgeDirection == direction
+                && armedFromPreviousGesture
+                && now - armedDocumentEdgeTimeMs <= 600L) {
             return true;
         }
 
@@ -607,23 +681,26 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
     private void showMoreDialog() {
+        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
         LinearLayout box = makeDialogBox();
         box.addView(makeDialogTitle(getString(R.string.more)));
-        addDialogAction(box, getString(R.string.zoom_out), () -> changeDocumentZoom(-10));
-        addDialogAction(box, getString(R.string.zoom_in), () -> changeDocumentZoom(10));
-        addDialogAction(box, getString(R.string.reset_zoom), this::resetDocumentZoom);
-        addDialogDivider(box);
-        addDialogAction(box, getString(R.string.settings), () -> startActivity(new Intent(this, SettingsActivity.class)));
-        addDialogAction(box, getString(R.string.file_info), this::showFileInfoDialog);
-        showCustomDialog(box, getString(R.string.close), true);
-    }
-
-    private void toggleDoubleTapDocumentZoom() {
-        resetDocumentZoom();
-    }
-
-    private void changeDocumentZoom(int delta) {
-        resetDocumentZoom();
+        box.addView(makeDialogActionRow(getString(R.string.font), () -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+            showDocumentFontDialog();
+        }));
+        box.addView(makeDialogActionRow(getString(R.string.settings), () -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+            startActivity(new Intent(this, SettingsActivity.class));
+        }));
+        box.addView(makeDialogActionRow(getString(R.string.file_info), () -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+            showFileInfoDialog();
+        }));
+        addDialogBottomActions(box, getString(R.string.close), () -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+        });
+        dialogRef[0] = createStablePositionedDialog(box, 34, false, false);
+        dialogRef[0].show();
     }
 
     private void resetDocumentZoom() {
@@ -634,6 +711,980 @@ public class DocumentPageActivity extends AppCompatActivity {
             webView.zoomOut();
         }
         clearDocumentEdgeArm();
+    }
+
+    private void showDocumentFontDialog() {
+        showDocumentFontPickerDialog(getReadingFontOptions());
+    }
+
+    private void showDocumentFontPickerDialog(List<ReadingFontOption> fontOptions) {
+        final int bg = dialogBg();
+        final int fg = dialogFg();
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+        panel.setClipChildren(true);
+        panel.setClipToPadding(true);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setBackground(fontDialogHeaderBackground(bg));
+        header.setClipChildren(true);
+        header.setClipToPadding(true);
+
+        TextView title = makeDocumentFontDialogTitle(getString(R.string.select_font), bg, fg);
+        title.setBackgroundColor(Color.TRANSPARENT);
+        title.setPadding(title.getPaddingLeft(), title.getPaddingTop(),
+                title.getPaddingRight(), dpToPx(18));
+        header.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(header, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(fontDialogHeaderSeparator(bg), new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.max(1, dpToPx(1))));
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setBackgroundColor(Color.TRANSPARENT);
+        int pad = dpToPx(14);
+        list.setPadding(pad, dpToPx(8), pad, dpToPx(8));
+
+        ScrollView scroll = new ScrollView(this);
+        FrameLayout scrollClip = makeClippedDialogScrollFrame(scroll, list, bg);
+        panel.addView(scrollClip, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.min(dpToPx(360), getResources().getDisplayMetrics().heightPixels / 2)));
+
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setBackground(positionedActionPanelBackground(
+                dialogActionPanelFillColor(bg),
+                dialogActionPanelLineColor(bg)));
+        actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
+
+        TextView addFont = makeDocumentDialogActionText(
+                localizedText("Add font", "글꼴 추가"),
+                fg,
+                Gravity.CENTER_VERTICAL | Gravity.START);
+        TextView cancel = makeDocumentDialogActionText(getString(R.string.cancel), fg,
+                Gravity.CENTER_VERTICAL | Gravity.END);
+
+        actionRow.addView(addFont, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1f));
+        actionRow.addView(cancel, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1f));
+        panel.addView(fontDialogBottomSeparator(bg), new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.max(1, dpToPx(1))));
+        panel.addView(actionRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(54)));
+
+        android.app.Dialog dialog = createDocumentFontDialog(panel, 460);
+        preserveFontDialogHeaderBarrier(panel, scrollClip);
+
+        String currentFont = currentDocumentFontSelection();
+        for (ReadingFontOption option : fontOptions) {
+            String label = getReadingFontLabel(option);
+            if (option.value.equals(currentFont)) {
+                label = "✓ " + label;
+            }
+
+            TextView row = makeDocumentFontActionRow(label, fg);
+            row.setOnClickListener(v -> {
+                dialog.dismiss();
+                setDocumentFontSelection(option.value);
+            });
+            list.addView(row);
+        }
+
+        addFont.setOnClickListener(v -> {
+            dialog.dismiss();
+            showAllDocumentFontsDialog();
+        });
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+    }
+
+    private void showAllDocumentFontsDialog() {
+        final int bg = dialogBg();
+        final int fg = dialogFg();
+        final int sub = dialogSub();
+
+        List<String> fontNames = new ArrayList<>();
+        try {
+            FontManager fontManager = FontManager.getInstance();
+            fontManager.scanFontsSync(this);
+            fontNames.addAll(fontManager.getFontNames());
+        } catch (Throwable ignored) {
+            // Keep the dialog usable even if a device blocks one of the font paths.
+        }
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+        panel.setClipChildren(true);
+        panel.setClipToPadding(true);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setBackground(fontDialogHeaderBackground(bg));
+        header.setClipChildren(true);
+        header.setClipToPadding(true);
+
+        TextView title = makeDocumentFontDialogTitle(
+                localizedText("All system fonts", "전체 시스템 글꼴"),
+                bg,
+                fg);
+        title.setBackgroundColor(Color.TRANSPARENT);
+        title.setPadding(title.getPaddingLeft(), title.getPaddingTop(),
+                title.getPaddingRight(), dpToPx(8));
+        header.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView hint = makeDocumentDialogLabel(
+                localizedText(
+                        "Select a font found from Android/system font folders.",
+                        "Android/시스템 글꼴 폴더에서 찾은 글꼴을 선택합니다."),
+                sub,
+                12f);
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(dpToPx(18), dpToPx(4), dpToPx(18), dpToPx(16));
+        hint.setBackgroundColor(Color.TRANSPARENT);
+        header.addView(hint, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(header, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(fontDialogHeaderSeparator(bg), new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.max(1, dpToPx(1))));
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setBackgroundColor(Color.TRANSPARENT);
+        int pad = dpToPx(14);
+        list.setPadding(pad, dpToPx(8), pad, dpToPx(8));
+
+        ScrollView scroll = new ScrollView(this);
+        FrameLayout scrollClip = makeClippedDialogScrollFrame(scroll, list, bg);
+        panel.addView(scrollClip, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.min(dpToPx(420), getResources().getDisplayMetrics().heightPixels / 2)));
+
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setBackground(positionedActionPanelBackground(
+                dialogActionPanelFillColor(bg),
+                dialogActionPanelLineColor(bg)));
+        actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
+
+        TextView cancel = makeDocumentDialogActionText(getString(R.string.cancel), fg,
+                Gravity.CENTER_VERTICAL | Gravity.END);
+        actionRow.addView(cancel, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1f));
+        panel.addView(fontDialogBottomSeparator(bg), new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.max(1, dpToPx(1))));
+        panel.addView(actionRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(54)));
+
+        android.app.Dialog dialog = createDocumentFontDialog(panel, 460);
+        preserveFontDialogHeaderBarrier(panel, scrollClip);
+
+        String currentFont = currentDocumentFontSelection();
+        if (fontNames.isEmpty()) {
+            TextView empty = makeDocumentDialogLabel(
+                    localizedText("No readable system fonts found.", "읽을 수 있는 시스템 글꼴을 찾지 못했습니다."),
+                    sub,
+                    14f);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(dpToPx(12), dpToPx(16), dpToPx(12), dpToPx(16));
+            list.addView(empty, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT));
+        } else {
+            for (String fontName : fontNames) {
+                if (fontName == null || fontName.trim().isEmpty()) continue;
+
+                String value = normalizeReadingFontValue(fontName);
+                String label = fontName;
+                if (value.equals(currentFont)) {
+                    label = "✓ " + label;
+                }
+
+                TextView row = makeDocumentFontActionRow(label, fg);
+                row.setOnClickListener(v -> {
+                    dialog.dismiss();
+                    setDocumentFontSelection(value);
+                });
+                list.addView(row);
+            }
+        }
+
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+    }
+
+    private boolean shouldOfferDocumentDefaultFont() {
+        return ("EPUB".equals(docType) && epubHasDocumentFont)
+                || ("Word".equals(docType) && wordHasDocumentFont);
+    }
+
+    private String currentDocumentFontSelection() {
+        if (DOCUMENT_FONT_DEFAULT.equals(documentFontOverride)) return DOCUMENT_FONT_DEFAULT;
+        if (documentFontOverride != null && !documentFontOverride.trim().isEmpty()) {
+            return normalizeReadingFontValue(documentFontOverride);
+        }
+        if (shouldOfferDocumentDefaultFont()) return DOCUMENT_FONT_DEFAULT;
+        return normalizeReadingFontValue(prefs != null ? prefs.getFontFamily() : "default");
+    }
+
+    private void setDocumentFontSelection(String value) {
+        if (DOCUMENT_FONT_DEFAULT.equals(value)) {
+            documentFontOverride = DOCUMENT_FONT_DEFAULT;
+        } else {
+            String normalized = normalizeReadingFontValue(value);
+            documentFontOverride = normalized;
+            if (prefs != null) prefs.setFontFamily(normalized);
+        }
+        refreshCurrentDocumentFont();
+    }
+
+    private void constrainDialogScrollArea(@NonNull View scrollContainer, @NonNull ViewGroup contentList) {
+        scrollContainer.setClipToOutline(false);
+        if (scrollContainer instanceof ScrollView) {
+            ScrollView scrollView = (ScrollView) scrollContainer;
+            scrollView.setClipToPadding(true);
+            scrollView.setFillViewport(false);
+            scrollView.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        }
+        if (scrollContainer instanceof ViewGroup) {
+            ViewGroup scrollGroup = (ViewGroup) scrollContainer;
+            scrollGroup.setClipChildren(true);
+            scrollGroup.setClipToPadding(true);
+        }
+        contentList.setClipChildren(true);
+        contentList.setClipToPadding(true);
+    }
+
+    private Drawable fontDialogHeaderBackground(int bgColor) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(bgColor);
+        float r = dpToPx(16);
+        drawable.setCornerRadii(new float[]{
+                r, r,
+                r, r,
+                0, 0,
+                0, 0
+        });
+        return drawable;
+    }
+
+    private View fontDialogHeaderSeparator(int bgColor) {
+        View separator = new View(this);
+        separator.setBackgroundColor(dialogActionPanelLineColor(bgColor));
+        separator.setClickable(false);
+        separator.setFocusable(false);
+        return separator;
+    }
+
+    private FrameLayout makeClippedDialogScrollFrame(@NonNull ScrollView scroll,
+                                                     @NonNull ViewGroup contentList,
+                                                     int bgColor) {
+        constrainDialogScrollArea(scroll, contentList);
+
+        FrameLayout clipFrame = new FrameLayout(this);
+        clipFrame.setBackgroundColor(bgColor);
+        clipFrame.setClipChildren(true);
+        clipFrame.setClipToPadding(true);
+        clipFrame.setOverScrollMode(View.OVER_SCROLL_NEVER);
+
+        scroll.setBackgroundColor(bgColor);
+        scroll.setFillViewport(false);
+        scroll.setClipChildren(true);
+        scroll.setClipToPadding(true);
+        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        scroll.setVerticalFadingEdgeEnabled(false);
+        scroll.setPadding(0, 0, 0, 0);
+
+        contentList.setBackgroundColor(bgColor);
+        contentList.setClipChildren(true);
+        contentList.setClipToPadding(true);
+        scroll.addView(contentList, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT,
+                ScrollView.LayoutParams.WRAP_CONTENT));
+
+        clipFrame.addView(scroll, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        return clipFrame;
+    }
+
+    private void preserveFontDialogHeaderBarrier(@NonNull ViewGroup panel, @NonNull View scrollClip) {
+        panel.setClipChildren(true);
+        panel.setClipToPadding(true);
+        scrollClip.setClipToOutline(false);
+        if (scrollClip instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) scrollClip;
+            group.setClipChildren(true);
+            group.setClipToPadding(true);
+        }
+    }
+
+    private TextView makeDocumentFontDialogTitle(String text, int bgColor, int fgColor) {
+        TextView title = new TextView(this);
+        title.setText(text);
+        title.setTextColor(fgColor);
+        title.setTextSize(22f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(dpToPx(18), dpToPx(18), dpToPx(18), dpToPx(14));
+        return title;
+    }
+
+    private TextView makeDocumentDialogLabel(String text, int color, float sp) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextColor(color);
+        tv.setTextSize(sp);
+        tv.setLineSpacing(0f, 1.05f);
+        return tv;
+    }
+
+    private TextView makeDocumentDialogActionText(String text, int fgColor, int gravity) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextColor(fgColor);
+        tv.setTextSize(16f);
+        tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        tv.setGravity(gravity);
+        tv.setSingleLine(true);
+        tv.setPadding(0, 0, 0, 0);
+        return tv;
+    }
+
+    private TextView makeDocumentFontActionRow(String text, int fgColor) {
+        TextView row = new TextView(this);
+        row.setText(text);
+        row.setTextColor(fgColor);
+        row.setTextSize(16f);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(dialogPanel());
+        bg.setCornerRadius(dpToPx(10));
+        row.setBackground(bg);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(48));
+        lp.setMargins(0, 0, 0, dpToPx(8));
+        row.setLayoutParams(lp);
+        return row;
+    }
+
+    private GradientDrawable positionedActionPanelBackground(int fill, int line) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(fill);
+        // Keep the rounded lower panel fill, but do not draw a stroke around it.
+        // A full stroke creates the unwanted bottom-edge barrier on the font dialogs.
+        float r = dpToPx(16);
+        drawable.setCornerRadii(new float[]{
+                0, 0,
+                0, 0,
+                r, r,
+                r, r
+        });
+        return drawable;
+    }
+
+    private View fontDialogBottomSeparator(int bgColor) {
+        View separator = new View(this);
+        separator.setBackgroundColor(dialogActionPanelLineColor(bgColor));
+        separator.setClickable(false);
+        separator.setFocusable(false);
+        return separator;
+    }
+
+    private int dialogActionPanelFillColor(int bgColor) {
+        return dialogPanel();
+    }
+
+    private int dialogActionPanelLineColor(int bgColor) {
+        return readerLine;
+    }
+
+    private android.app.Dialog createDocumentFontDialog(@NonNull View content, int maxWidthDp) {
+        return createStablePositionedDialog(content, 88, false, false);
+    }
+
+    private void positionFontDialogForThumbReach(@NonNull androidx.appcompat.app.AlertDialog dialog, int maxWidthDp) {
+        if (dialog.getWindow() == null) return;
+        android.view.Window window = dialog.getWindow();
+        window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
+        lp.copyFrom(window.getAttributes());
+        lp.width = txtReaderDialogWidthPx();
+        lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
+        lp.y = dpToPx(88);
+        window.setAttributes(lp);
+    }
+
+    private TextView makeDialogActionRow(String text, Runnable action) {
+        TextView row = new TextView(this);
+        row.setText(text);
+        row.setTextColor(dialogFg());
+        row.setTextSize(16f);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(dialogPanel());
+        bg.setCornerRadius(dpToPx(10));
+        row.setBackground(bg);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(48));
+        lp.setMargins(0, 0, 0, dpToPx(8));
+        row.setLayoutParams(lp);
+        row.setOnClickListener(v -> action.run());
+        return row;
+    }
+
+    private void refreshCurrentDocumentFont() {
+        clearDocumentEdgeArm();
+        if (!pages.isEmpty() && currentPage >= 0 && currentPage < pages.size()) {
+            showPage(currentPage, 0);
+        }
+    }
+
+    private static final class ReadingFontOption {
+        final String value;
+        final String englishLabel;
+        final String koreanLabel;
+
+        ReadingFontOption(String value, String englishLabel, String koreanLabel) {
+            this.value = value;
+            this.englishLabel = englishLabel;
+            this.koreanLabel = koreanLabel;
+        }
+    }
+
+    private List<ReadingFontOption> getReadingFontOptions() {
+        List<ReadingFontOption> options = new ArrayList<>();
+        if (shouldOfferDocumentDefaultFont()) {
+            options.add(new ReadingFontOption(DOCUMENT_FONT_DEFAULT, "Default font", "기본 글꼴"));
+        }
+        options.add(new ReadingFontOption("default", "System Sans (recommended)", "시스템 산세리프 (추천)"));
+        options.add(new ReadingFontOption(FONT_OPTION_SYSTEM_CURRENT, "Current system font", "현재 시스템 글꼴"));
+        options.add(new ReadingFontOption("korean_sans", "Korean/System Sans", "한글 산세리프"));
+        options.add(new ReadingFontOption("korean_serif", "Korean/System Serif", "한글 명조/세리프"));
+        options.add(new ReadingFontOption("serif", "Serif", "세리프"));
+        options.add(new ReadingFontOption("monospace", "Monospace", "고정폭"));
+        options.add(new ReadingFontOption("sans_medium", "Sans Medium", "산세리프 미디엄"));
+        options.add(new ReadingFontOption("sans_condensed", "Sans Condensed", "산세리프 압축"));
+        options.add(new ReadingFontOption("sans_light", "Sans Light", "산세리프 라이트"));
+        addDocumentUserFontOptions(options);
+
+        String current = currentDocumentFontSelection();
+        if (!DOCUMENT_FONT_DEFAULT.equals(current) && !isCuratedReadingFontValue(current) && !containsReadingFontOption(options, current)) {
+            if (FontManager.isSystemFamilyValue(current)) {
+                String familyName = FontManager.getSystemFamilyName(current);
+                options.add(new ReadingFontOption(current,
+                        "Saved system font: " + familyName,
+                        "저장된 시스템 글꼴: " + familyName));
+            } else {
+                options.add(new ReadingFontOption(current,
+                        "Installed/Custom: " + current,
+                        "설치/사용자 글꼴: " + current));
+            }
+        }
+        return options;
+    }
+
+    private void addDocumentUserFontOptions(@NonNull List<ReadingFontOption> options) {
+        try {
+            FontManager fontManager = FontManager.getInstance();
+            if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
+
+            for (String fontName : fontManager.getSystemInstalledFontNames()) {
+                if (fontName == null || fontName.trim().isEmpty()) continue;
+                String value = normalizeReadingFontValue(fontName);
+                if (isCuratedReadingFontValue(value) || containsReadingFontOption(options, value)) continue;
+                options.add(new ReadingFontOption(value,
+                        "Installed system font: " + fontName,
+                        "설치된 시스템 글꼴: " + fontName));
+            }
+
+            for (String fontName : fontManager.getUserFontNames()) {
+                if (fontName == null || fontName.trim().isEmpty()) continue;
+                String value = normalizeReadingFontValue(fontName);
+                if (isCuratedReadingFontValue(value) || containsReadingFontOption(options, value)) continue;
+                options.add(new ReadingFontOption(value,
+                        "Font file: " + fontName,
+                        "글꼴 파일: " + fontName));
+            }
+        } catch (Throwable ignored) {
+            // Font scanning should not block the Word/EPUB More menu.
+        }
+    }
+
+    private boolean containsReadingFontOption(@NonNull List<ReadingFontOption> options, String value) {
+        for (ReadingFontOption option : options) {
+            if (option.value.equals(value)) return true;
+        }
+        return false;
+    }
+
+    private boolean isCuratedReadingFontValue(String value) {
+        switch (normalizeReadingFontValue(value)) {
+            case "default":
+            case DOCUMENT_FONT_DEFAULT:
+            case "system_current":
+            case "korean_sans":
+            case "korean_serif":
+            case "serif":
+            case "monospace":
+            case "sans_medium":
+            case "sans_condensed":
+            case "sans_light":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private String getReadingFontLabel(@NonNull ReadingFontOption option) {
+        return localizedText(option.englishLabel, option.koreanLabel);
+    }
+
+    private String normalizeReadingFontValue(String fontName) {
+        if (fontName == null || fontName.trim().isEmpty()) return "default";
+        String trimmed = fontName.trim();
+        if (FontManager.isSystemFamilyValue(trimmed)) return trimmed;
+        switch (trimmed) {
+            case "Default (Sans-serif)":
+            case "DEFAULT":
+                return "default";
+            case "Serif":
+            case "SERIF":
+                return "serif";
+            case "Monospace":
+            case "MONOSPACE":
+                return "monospace";
+            case "default":
+            case DOCUMENT_FONT_DEFAULT:
+            case "system_current":
+            case "korean_sans":
+            case "korean_serif":
+            case "serif":
+            case "monospace":
+            case "sans_medium":
+            case "sans_condensed":
+            case "sans_light":
+                return trimmed;
+            default:
+                return trimmed;
+        }
+    }
+
+    private String buildDocumentFontCss() {
+        selectedDocumentFontFile = null;
+        String value = currentDocumentFontSelection();
+        if (DOCUMENT_FONT_DEFAULT.equals(value)) {
+            if ("Word".equals(docType)) return wordDefaultFontRule();
+            return "";
+        }
+        String fallback = documentFontFallbackCss(value);
+        String family = fallback;
+        String filePath = resolveDocumentFontFilePath(value);
+        if (filePath != null) {
+            selectedDocumentFontFile = new File(filePath);
+            family = "'TekviewSelectedDocumentFont', " + fallback;
+            return "@font-face{font-family:'TekviewSelectedDocumentFont';src:url('https://" + LOCAL_HOST + FONT_PREFIX + "selected');}" +
+                    documentFontRule(family);
+        }
+        if (FontManager.isSystemFamilyValue(value)) {
+            String name = FontManager.getSystemFamilyName(value);
+            if (!name.isEmpty()) family = "'" + cssQuote(name) + "', " + fallback;
+        } else if (!isCuratedReadingFontValue(value)) {
+            family = "'" + cssQuote(value) + "', " + fallback;
+        }
+        return documentFontRule(family);
+    }
+
+    private String documentFontRule(String family) {
+        return "body,.page,p,div,span,td,th,li,pre{font-family:" + family + " !important;}";
+    }
+
+    private String wordDefaultFontRule() {
+        if (wordDefaultFontFamily == null || wordDefaultFontFamily.trim().isEmpty()) return "";
+        String family = "'" + cssQuote(wordDefaultFontFamily.trim()) + "', " + wordFontFallbackFamily(wordDefaultFontFamily);
+        return "body,.page,p,div,span,td,th,li,pre{font-family:" + family + ";}";
+    }
+
+    private String wordFontFallbackFamily(String family) {
+        String lower = family == null ? "" : family.toLowerCase(Locale.US);
+        if (lower.contains("serif") || lower.contains("명조") || lower.contains("times") || lower.contains("batang")) {
+            return "serif";
+        }
+        if (lower.contains("mono") || lower.contains("courier") || lower.contains("consolas")) {
+            return "monospace";
+        }
+        return "sans-serif";
+    }
+
+    private String documentFontFallbackCss(String value) {
+        switch (normalizeReadingFontValue(value)) {
+            case "serif":
+            case "korean_serif":
+                return "serif";
+            case "monospace":
+                return "monospace";
+            case "sans_medium":
+                return "'sans-serif-medium', sans-serif";
+            case "sans_condensed":
+                return "'sans-serif-condensed', sans-serif";
+            case "sans_light":
+                return "'sans-serif-light', sans-serif";
+            case "default":
+            case DOCUMENT_FONT_DEFAULT:
+            case "system_current":
+            case "korean_sans":
+            default:
+                return "sans-serif";
+        }
+    }
+
+    private String resolveDocumentFontFilePath(String value) {
+        if (isCuratedReadingFontValue(value) || FontManager.isSystemFamilyValue(value)) return null;
+        try {
+            FontManager fontManager = FontManager.getInstance();
+            if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
+            String path = fontManager.getFontPathForName(value);
+            if (path != null && new File(path).isFile()) return path;
+        } catch (Throwable ignored) {
+            // Fall back to CSS family name if the font file is not directly readable.
+        }
+        return null;
+    }
+
+    private WebResourceResponse interceptSelectedDocumentFont() {
+        File fontFile = selectedDocumentFontFile;
+        if (fontFile == null || !fontFile.isFile()) return null;
+        try {
+            return new WebResourceResponse(
+                    mimeForPath(fontFile.getName()),
+                    "UTF-8",
+                    new FileInputStream(fontFile));
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private String cssQuote(String text) {
+        if (text == null) return "";
+        return text.replace("\\", "\\\\").replace("'", "\\'");
+    }
+
+    private String localizedText(String english, String korean) {
+        return "ko".equalsIgnoreCase(Locale.getDefault().getLanguage()) ? korean : english;
+    }
+
+
+    private void showDocumentSearchDialog() {
+        final int bg = dialogBg();
+        final int fg = dialogFg();
+        final int sub = dialogSub();
+
+        LinearLayout titleBox = new LinearLayout(this);
+        titleBox.setOrientation(LinearLayout.HORIZONTAL);
+        titleBox.setGravity(Gravity.CENTER_VERTICAL);
+        titleBox.setPadding(dpToPx(22), dpToPx(18), dpToPx(22), dpToPx(8));
+        titleBox.setBackgroundColor(Color.TRANSPARENT);
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.find_in_text));
+        title.setTextColor(fg);
+        title.setTextSize(20f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        titleBox.addView(title, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f));
+
+        TextView matchStatus = new TextView(this);
+        matchStatus.setText("0 / 0");
+        matchStatus.setTextColor(sub);
+        matchStatus.setTextSize(12f);
+        matchStatus.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        titleBox.addView(matchStatus, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        documentSearchStatusView = matchStatus;
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(Color.TRANSPARENT);
+        box.setPadding(dpToPx(24), dpToPx(12), dpToPx(24), dpToPx(8));
+
+        EditText input = makeDialogInput(getString(R.string.search_text_hint));
+        String rememberedQuery = activeDocumentSearchQuery;
+        if ((rememberedQuery == null || rememberedQuery.isEmpty()) && prefs != null) {
+            rememberedQuery = prefs.getLastReaderSearchQuery();
+        }
+        if (rememberedQuery == null) rememberedQuery = "";
+        input.setText(rememberedQuery);
+        if (!rememberedQuery.isEmpty()) {
+            input.setSelection(input.getText().length());
+            activeDocumentSearchTotal = countDocumentMatches(rememberedQuery);
+            updateDocumentSearchStatus(matchStatus);
+        }
+        box.addView(input, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(52)));
+
+        TextView hint = new TextView(this);
+        hint.setText(getString(R.string.search_hint_multiple));
+        hint.setTextColor(sub);
+        hint.setTextSize(12f);
+        hint.setGravity(Gravity.START);
+        hint.setPadding(0, dpToPx(6), 0, dpToPx(8));
+        box.addView(hint, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        buttons.setGravity(Gravity.CENTER);
+        buttons.setPadding(0, dpToPx(8), 0, 0);
+
+        TextView prevButton = makeDocumentSearchDialogButton(getString(R.string.find_previous), fg);
+        TextView closeButton = makeDocumentSearchDialogButton(getString(R.string.close), fg);
+        TextView nextButton = makeDocumentSearchDialogButton(getString(R.string.find_next), fg);
+
+        buttons.addView(prevButton, new LinearLayout.LayoutParams(0, dpToPx(44), 1f));
+        buttons.addView(closeButton, new LinearLayout.LayoutParams(0, dpToPx(44), 1f));
+        buttons.addView(nextButton, new LinearLayout.LayoutParams(0, dpToPx(44), 1f));
+        box.addView(buttons, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout panel = makeDialogBox();
+        panel.setPadding(0, 0, 0, dpToPx(8));
+        panel.addView(titleBox, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(box, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        android.app.Dialog dialog = createStablePositionedDialog(panel, 88, true, false);
+
+        prevButton.setOnClickListener(v -> performDocumentSearchMove(
+                input.getText() != null ? input.getText().toString() : "", false, matchStatus));
+        nextButton.setOnClickListener(v -> performDocumentSearchMove(
+                input.getText() != null ? input.getText().toString() : "", true, matchStatus));
+        closeButton.setOnClickListener(v -> dialog.dismiss());
+
+        input.setOnEditorActionListener((v, actionId, event) -> {
+            performDocumentSearchMove(input.getText() != null ? input.getText().toString() : "", true, matchStatus);
+            return true;
+        });
+
+        dialog.setOnDismissListener(d -> {
+            if (prefs != null) {
+                prefs.setLastReaderSearchQuery(input.getText() != null ? input.getText().toString() : "");
+            }
+            documentSearchStatusView = null;
+            clearDocumentSearchState(true);
+        });
+        dialog.show();
+    }
+
+    private TextView makeDocumentSearchDialogButton(String label, int fg) {
+        TextView button = new TextView(this);
+        button.setText(label);
+        button.setTextColor(fg);
+        button.setTextSize(14f);
+        button.setGravity(Gravity.CENTER);
+        button.setPadding(dpToPx(4), 0, dpToPx(4), 0);
+        button.setBackgroundColor(Color.TRANSPARENT);
+        return button;
+    }
+
+    private void performDocumentSearchMove(String rawQuery, boolean forward, TextView matchStatus) {
+        String query = rawQuery == null ? "" : rawQuery.trim();
+        if (query.isEmpty()) {
+            if (prefs != null) prefs.setLastReaderSearchQuery("");
+            clearDocumentSearchState(true);
+            if (matchStatus != null) matchStatus.setText("0 / 0");
+            Toast.makeText(this, getString(R.string.enter_search_text), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        activeDocumentSearchTotal = countDocumentMatches(query);
+        if (activeDocumentSearchTotal <= 0) {
+            activeDocumentSearchQuery = query;
+            activeDocumentSearchPage = -1;
+            activeDocumentSearchOrdinal = 0;
+            activeDocumentSearchCountOnPage = 0;
+            if (prefs != null) prefs.setLastReaderSearchQuery(query);
+            clearWebViewDocumentMatches();
+            if (matchStatus != null) matchStatus.setText("0 / 0");
+            Toast.makeText(this, getString(R.string.not_found), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        boolean queryChanged = !query.equalsIgnoreCase(activeDocumentSearchQuery == null ? "" : activeDocumentSearchQuery);
+        activeDocumentSearchQuery = query;
+        if (prefs != null) prefs.setLastReaderSearchQuery(query);
+
+        if (queryChanged || activeDocumentSearchPage != currentPage || activeDocumentSearchCountOnPage <= 0) {
+            if (pageContainsDocumentQuery(currentPage, query)) {
+                applyDocumentSearchHighlight(query, forward);
+                updateDocumentSearchStatus(matchStatus);
+                return;
+            }
+        } else {
+            boolean canMoveWithinPage = forward
+                    ? activeDocumentSearchOrdinal < activeDocumentSearchCountOnPage
+                    : activeDocumentSearchOrdinal > 1;
+            if (canMoveWithinPage && webView != null) {
+                webView.findNext(forward);
+                return;
+            }
+        }
+
+        int target = findNextDocumentSearchPage(query, currentPage, forward);
+        if (target >= 0) {
+            activeDocumentSearchPage = target;
+            showPage(target, Integer.compare(target, currentPage));
+            documentSearchSelectLastAfterCount = !forward;
+            updateDocumentSearchStatus(matchStatus);
+        } else {
+            Toast.makeText(this, getString(R.string.not_found), Toast.LENGTH_SHORT).show();
+            updateDocumentSearchStatus(matchStatus);
+        }
+    }
+
+    private void applyDocumentSearchHighlightAfterPageLoad() {
+        if (webView == null || activeDocumentSearchQuery == null || activeDocumentSearchQuery.trim().isEmpty()) return;
+        if (!pageContainsDocumentQuery(currentPage, activeDocumentSearchQuery)) {
+            clearWebViewDocumentMatches();
+            updateDocumentSearchStatus(documentSearchStatusView);
+            return;
+        }
+        webView.postDelayed(() -> {
+            if (!activityDestroyed) applyDocumentSearchHighlight(activeDocumentSearchQuery, !documentSearchSelectLastAfterCount);
+        }, 60);
+    }
+
+    private void applyDocumentSearchHighlight(String query, boolean forward) {
+        if (webView == null || query == null || query.trim().isEmpty()) return;
+        activeDocumentSearchPage = currentPage;
+        documentSearchSelectLastAfterCount = !forward;
+        webView.clearMatches();
+        webView.findAllAsync(query);
+    }
+
+    private int findNextDocumentSearchPage(String query, int fromPage, boolean forward) {
+        if (pages.isEmpty() || query == null || query.trim().isEmpty()) return -1;
+        int count = pages.size();
+        for (int step = 1; step <= count; step++) {
+            int idx = forward
+                    ? (fromPage + step) % count
+                    : (fromPage - step + count) % count;
+            if (pageContainsDocumentQuery(idx, query)) return idx;
+        }
+        return -1;
+    }
+
+    private boolean pageContainsDocumentQuery(int pageIndex, String query) {
+        if (pageIndex < 0 || pageIndex >= pages.size() || query == null || query.trim().isEmpty()) return false;
+        String text = htmlToText(pages.get(pageIndex).html).toLowerCase(Locale.ROOT);
+        return text.contains(query.trim().toLowerCase(Locale.ROOT));
+    }
+
+    private int countDocumentMatches(String query) {
+        if (query == null || query.trim().isEmpty()) return 0;
+        String needle = query.trim().toLowerCase(Locale.ROOT);
+        int total = 0;
+        for (Page page : pages) {
+            total += countOccurrencesIgnoreCase(htmlToText(page.html), needle);
+        }
+        return total;
+    }
+
+    private int countDocumentMatchesBeforePage(String query, int pageIndex) {
+        if (query == null || query.trim().isEmpty()) return 0;
+        String needle = query.trim().toLowerCase(Locale.ROOT);
+        int total = 0;
+        for (int i = 0; i < Math.min(pageIndex, pages.size()); i++) {
+            total += countOccurrencesIgnoreCase(htmlToText(pages.get(i).html), needle);
+        }
+        return total;
+    }
+
+    private int countOccurrencesIgnoreCase(String text, String lowerNeedle) {
+        if (text == null || lowerNeedle == null || lowerNeedle.isEmpty()) return 0;
+        String haystack = text.toLowerCase(Locale.ROOT);
+        int total = 0;
+        int pos = 0;
+        while ((pos = haystack.indexOf(lowerNeedle, pos)) >= 0) {
+            total++;
+            pos += Math.max(1, lowerNeedle.length());
+        }
+        return total;
+    }
+
+    private void updateDocumentSearchStatus(TextView matchStatus) {
+        if (matchStatus == null) return;
+        if (activeDocumentSearchQuery == null || activeDocumentSearchQuery.trim().isEmpty()) {
+            matchStatus.setText("0 / 0");
+            return;
+        }
+        if (activeDocumentSearchTotal <= 0) {
+            activeDocumentSearchTotal = countDocumentMatches(activeDocumentSearchQuery);
+        }
+        int pageOrdinal = Math.max(0, activeDocumentSearchOrdinal);
+        int globalOrdinal = pageOrdinal > 0
+                ? countDocumentMatchesBeforePage(activeDocumentSearchQuery, currentPage) + pageOrdinal
+                : 0;
+        matchStatus.setText(String.format(Locale.getDefault(), "%d / %d", globalOrdinal, Math.max(0, activeDocumentSearchTotal)));
+    }
+
+    private void clearDocumentSearchState(boolean clearWebView) {
+        activeDocumentSearchQuery = "";
+        activeDocumentSearchPage = -1;
+        activeDocumentSearchOrdinal = 0;
+        activeDocumentSearchCountOnPage = 0;
+        activeDocumentSearchTotal = 0;
+        documentSearchSelectLastAfterCount = false;
+        if (clearWebView) clearWebViewDocumentMatches();
+    }
+
+    private void clearWebViewDocumentMatches() {
+        if (webView == null) return;
+        try {
+            webView.clearMatches();
+        } catch (Throwable ignored) {
+            // WebView search cleanup should not crash the viewer.
+        }
     }
 
     private void showFileInfoDialog() {
@@ -647,7 +1698,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             addInfoRow(box, getString(R.string.file_info_modified), DateFormat.getDateTimeInstance().format(new Date(localFile.lastModified())));
         }
         addInfoRow(box, getString(R.string.bottom_page), String.format(Locale.getDefault(), "%d / %d", currentPage + 1, pages.size()));
-        showCustomDialog(box, getString(R.string.close));
+        showCustomDialog(box, getString(R.string.close), true);
     }
 
     private void showGoToPageDialog() {
@@ -703,26 +1754,32 @@ public class DocumentPageActivity extends AppCompatActivity {
             }
         });
 
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this).create();
-        dialog.setView(box);
-        dialog.setOnShowListener(d -> {
-            styleDialogWindow(dialog);
-            addDialogBottomActions(box, getString(R.string.go), () -> {
-                try {
-                    int target = Integer.parseInt(input.getText().toString().trim());
-                    if (target < 1 || target > pages.size()) {
-                        Toast.makeText(this, getString(R.string.page_range_error, pages.size()), Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    showPage(target - 1, Integer.compare(target - 1, currentPage));
-                    dialog.dismiss();
-                } catch (Exception ignored) {
-                    Toast.makeText(this, getString(R.string.invalid_page_number), Toast.LENGTH_SHORT).show();
+        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
+        addDialogBottomActions(box, getString(R.string.go), () -> {
+            try {
+                int target = Integer.parseInt(input.getText().toString().trim());
+                if (target < 1 || target > pages.size()) {
+                    Toast.makeText(this, getString(R.string.page_range_error, pages.size()), Toast.LENGTH_SHORT).show();
+                    return;
                 }
-            });
+                showPage(target - 1, Integer.compare(target - 1, currentPage));
+                if (dialogRef[0] != null) dialogRef[0].dismiss();
+            } catch (Exception ignored) {
+                Toast.makeText(this, getString(R.string.invalid_page_number), Toast.LENGTH_SHORT).show();
+            }
         });
-        dialog.show();
-        positionPageDialogForThumbReach(dialog);
+        dialogRef[0] = createStablePositionedDialog(box, 74, true, false);
+        dialogRef[0].show();
+    }
+
+    private int txtReaderDialogWidthPx() {
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        return Math.max(dpToPx(220), Math.min(Math.round(screenWidth * 0.85f), dpToPx(460)));
+    }
+
+    private int legacyBookmarkDialogWidthPx() {
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        return Math.min(screenWidth - dpToPx(14), dpToPx(460));
     }
 
     private void positionPageDialogForThumbReach(@NonNull androidx.appcompat.app.AlertDialog dialog) {
@@ -731,8 +1788,20 @@ public class DocumentPageActivity extends AppCompatActivity {
         window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
         android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
         lp.copyFrom(window.getAttributes());
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        lp.width = Math.min(screenWidth - dpToPx(14), dpToPx(460));
+        lp.width = txtReaderDialogWidthPx();
+        lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
+        lp.y = dpToPx(74);
+        window.setAttributes(lp);
+        window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    }
+
+    private void positionBookmarkDialogForThumbReach(@NonNull androidx.appcompat.app.AlertDialog dialog) {
+        if (dialog.getWindow() == null) return;
+        android.view.Window window = dialog.getWindow();
+        window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
+        android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
+        lp.copyFrom(window.getAttributes());
+        lp.width = legacyBookmarkDialogWidthPx();
         lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
         lp.y = dpToPx(74);
         window.setAttributes(lp);
@@ -771,7 +1840,12 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
     private EditText makeDialogInput(String hint) {
-        EditText input = new EditText(this);
+        int overlay = !isDarkColor(dialogBg())
+                ? R.style.ThemeOverlay_SimpleText_ReaderDialogLight
+                : R.style.ThemeOverlay_SimpleText_ReaderDialogDark;
+        android.view.ContextThemeWrapper themed = new android.view.ContextThemeWrapper(this, overlay);
+
+        EditText input = new EditText(themed);
         input.setSingleLine(true);
         input.setHint(hint);
         input.setTextColor(dialogFg());
@@ -782,7 +1856,23 @@ public class DocumentPageActivity extends AppCompatActivity {
         bg.setCornerRadius(dpToPx(8));
         bg.setStroke(Math.max(1, dpToPx(1)), readerLine);
         input.setBackground(bg);
+        tintDocumentDialogEditHandles(input);
         return input;
+    }
+
+    private void tintDocumentDialogEditHandles(EditText input) {
+        if (input == null) return;
+
+        boolean lightDialog = !isDarkColor(dialogBg());
+        int accent = lightDialog ? Color.rgb(34, 34, 34) : Color.WHITE;
+        input.setHighlightColor(blendColors(dialogBg(), accent, lightDialog ? 0.24f : 0.42f));
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            GradientDrawable cursor = new GradientDrawable();
+            cursor.setColor(accent);
+            cursor.setSize(Math.max(2, dpToPx(2)), dpToPx(28));
+            input.setTextCursorDrawable(cursor);
+        }
     }
 
     private void tintSeekBar(SeekBar seekBar) {
@@ -791,23 +1881,6 @@ public class DocumentPageActivity extends AppCompatActivity {
         seekBar.setThumbTintList(android.content.res.ColorStateList.valueOf(accent));
         seekBar.setProgressTintList(android.content.res.ColorStateList.valueOf(accent));
         seekBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(track));
-    }
-
-    private void addDialogAction(LinearLayout box, String text, Runnable action) {
-        TextView row = new TextView(this);
-        row.setText(text);
-        row.setTextColor(dialogFg());
-        row.setTextSize(16f);
-        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        row.setPadding(dpToPx(14), 0, dpToPx(14), 0);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(dialogPanel());
-        bg.setCornerRadius(dpToPx(10));
-        row.setBackground(bg);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(48));
-        lp.setMargins(0, 0, 0, dpToPx(8));
-        box.addView(row, lp);
-        row.setOnClickListener(v -> action.run());
     }
 
     private void addInfoRow(LinearLayout box, String label, String value) {
@@ -822,27 +1895,62 @@ public class DocumentPageActivity extends AppCompatActivity {
         box.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
     }
 
-    private void addDialogDivider(LinearLayout box) {
-        View line = new View(this);
-        line.setBackgroundColor(readerLine);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Math.max(1, dpToPx(1)));
-        lp.setMargins(0, dpToPx(4), 0, dpToPx(10));
-        box.addView(line, lp);
-    }
-
     private void showCustomDialog(LinearLayout box, String closeText) {
         showCustomDialog(box, closeText, false);
     }
 
     private void showCustomDialog(LinearLayout box, String closeText, boolean oneHandLower) {
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this).create();
-        dialog.setView(box);
-        dialog.setOnShowListener(d -> {
-            styleDialogWindow(dialog);
-            addDialogBottomActions(box, closeText, dialog::dismiss);
+        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
+        addDialogBottomActions(box, closeText, () -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
         });
-        dialog.show();
-        if (oneHandLower) positionMoreDialogForThumbReach(dialog);
+        dialogRef[0] = createStablePositionedDialog(box, oneHandLower ? 34 : 74, false, false);
+        dialogRef[0].show();
+    }
+
+    private android.app.Dialog createStablePositionedDialog(@NonNull View content,
+                                                             int yDp,
+                                                             boolean adjustResize,
+                                                             boolean legacyBookmarkWidth) {
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        dialog.setCanceledOnTouchOutside(true);
+
+        FrameLayout outerFrame = new FrameLayout(this);
+        outerFrame.setBackgroundColor(Color.TRANSPARENT);
+        outerFrame.setClipChildren(true);
+        outerFrame.setClipToPadding(true);
+
+        // Keep the content view's own rounded/background drawable.
+        // Do not force it transparent here; the dialog window/background is already transparent
+        // so clearing this background makes the popup body invisible.
+        if (content instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) content;
+            group.setClipChildren(true);
+            group.setClipToPadding(true);
+        }
+        outerFrame.addView(content, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT));
+        dialog.setContentView(outerFrame);
+
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
+            lp.copyFrom(window.getAttributes());
+            lp.width = legacyBookmarkWidth ? legacyBookmarkDialogWidthPx() : txtReaderDialogWidthPx();
+            lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
+            lp.y = dpToPx(yDp);
+            lp.dimAmount = 0.16f;
+            window.setAttributes(lp);
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            if (adjustResize) {
+                window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+            }
+        }
+        return dialog;
     }
 
     private void positionMoreDialogForThumbReach(@NonNull androidx.appcompat.app.AlertDialog dialog) {
@@ -851,8 +1959,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
         android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
         lp.copyFrom(window.getAttributes());
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        lp.width = Math.min(screenWidth - dpToPx(16), dpToPx(460));
+        lp.width = txtReaderDialogWidthPx();
         lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
         lp.y = dpToPx(34);
         window.setAttributes(lp);
@@ -889,6 +1996,11 @@ public class DocumentPageActivity extends AppCompatActivity {
         closeResourceZip();
         pages.clear();
         wordRelationships.clear();
+        epubHasDocumentFont = false;
+        wordHasDocumentFont = false;
+        wordDefaultFontFamily = null;
+        documentFontOverride = null;
+        clearDocumentSearchState(false);
 
         executor.execute(() -> {
             try {
@@ -974,6 +2086,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                 "body,.page,p,div,span,td,th,li{max-width:100%;overflow-wrap:anywhere;word-break:break-word;}" +
                 "img,svg,video,.word-img,.textbox,table{max-width:100%;}" +
                 "pre{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;}" +
+                buildDocumentFontCss() +
                 "</style>";
         if (html == null) return css;
         int head = html.toLowerCase(Locale.US).indexOf("</head>");
@@ -1152,7 +2265,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
         androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this).create();
-        dialog.setView(box);
+        dialog.setView(box, 0, 0, 0, 0);
 
         final Runnable[] refreshRef = new Runnable[1];
         refreshRef[0] = () -> {
@@ -1191,10 +2304,9 @@ public class DocumentPageActivity extends AppCompatActivity {
             }
         });
 
+        styleDialogWindow(dialog);
+        positionBookmarkDialogForThumbReach(dialog);
         dialog.show();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        }
         refreshRef[0].run();
     }
 
@@ -1270,6 +2382,7 @@ public class DocumentPageActivity extends AppCompatActivity {
     private void loadEpubPages(File file) throws Exception {
         closeResourceZip();
         resourceZip = new ZipFile(file);
+        epubHasDocumentFont = detectEpubDeclaredFont(resourceZip);
         List<String> spine = findEpubSpinePaths(resourceZip);
         if (spine.isEmpty()) spine = findEpubHtmlEntries(resourceZip);
 
@@ -1283,11 +2396,162 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
     }
 
+
+    private boolean detectEpubDeclaredFont(@NonNull ZipFile zip) {
+        try {
+            Enumeration<? extends ZipEntry> entries = zip.entries();
+            int scanned = 0;
+            while (entries.hasMoreElements() && scanned < 160) {
+                ZipEntry entry = entries.nextElement();
+                if (entry == null || entry.isDirectory()) continue;
+                String name = entry.getName();
+                if (name == null) continue;
+                String lower = name.toLowerCase(Locale.US);
+                if (!(lower.endsWith(".css") || lower.endsWith(".html") || lower.endsWith(".xhtml") || lower.endsWith(".htm"))) {
+                    continue;
+                }
+                scanned++;
+                String text = readZipEntryString(zip, entry);
+                if (text == null) continue;
+                String compact = text.toLowerCase(Locale.US);
+                if (compact.contains("@font-face") || compact.contains("font-family")) {
+                    return true;
+                }
+            }
+        } catch (Throwable ignored) {
+            // If detection fails, fall back to normal TextView Reader font handling.
+        }
+        return false;
+    }
+
+    private String detectWordDefaultFontFamily(@NonNull ZipFile zip) {
+        String fromStyles = detectWordDefaultFontFromStyles(zip);
+        if (fromStyles != null && !fromStyles.trim().isEmpty()) return fromStyles.trim();
+
+        String fromDocument = detectWordFirstDeclaredFont(zip);
+        if (fromDocument != null && !fromDocument.trim().isEmpty()) return fromDocument.trim();
+
+        String fromFontTable = detectWordFirstFontTableName(zip);
+        if (fromFontTable != null && !fromFontTable.trim().isEmpty()) return fromFontTable.trim();
+        return null;
+    }
+
+    private String detectWordDefaultFontFromStyles(@NonNull ZipFile zip) {
+        try {
+            ZipEntry styles = zip.getEntry("word/styles.xml");
+            if (styles == null) return null;
+            Document stylesDoc;
+            try (InputStream is = zip.getInputStream(styles)) {
+                stylesDoc = secureDocumentBuilder().parse(is);
+            }
+
+            Node docDefaults = firstNodeByLocalName(stylesDoc, "docDefaults");
+            String font = firstFontFamilyUnderNode(docDefaults);
+            if (font != null) return font;
+
+            Node normalStyle = findWordStyleById(stylesDoc, "Normal");
+            font = firstFontFamilyUnderNode(normalStyle);
+            if (font != null) return font;
+        } catch (Throwable ignored) {
+            // Fall back to scanning document/fontTable entries.
+        }
+        return null;
+    }
+
+    private Node findWordStyleById(@NonNull Document stylesDoc, @NonNull String styleId) {
+        NodeList styles = stylesDoc.getElementsByTagNameNS("*", "style");
+        if (styles.getLength() == 0) styles = stylesDoc.getElementsByTagName("w:style");
+        if (styles.getLength() == 0) styles = stylesDoc.getElementsByTagName("style");
+        for (int i = 0; i < styles.getLength(); i++) {
+            Node style = styles.item(i);
+            String id = attr(style, "w:styleId", "styleId");
+            if (styleId.equalsIgnoreCase(id)) return style;
+        }
+        return null;
+    }
+
+    private String detectWordFirstDeclaredFont(@NonNull ZipFile zip) {
+        try {
+            ZipEntry documentXml = zip.getEntry("word/document.xml");
+            if (documentXml == null) return null;
+            Document doc;
+            try (InputStream is = zip.getInputStream(documentXml)) {
+                doc = secureDocumentBuilder().parse(is);
+            }
+            return firstFontFamilyUnderNode(doc.getDocumentElement());
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private String detectWordFirstFontTableName(@NonNull ZipFile zip) {
+        try {
+            ZipEntry fontTable = zip.getEntry("word/fontTable.xml");
+            if (fontTable == null) return null;
+            Document fontDoc;
+            try (InputStream is = zip.getInputStream(fontTable)) {
+                fontDoc = secureDocumentBuilder().parse(is);
+            }
+            NodeList fonts = fontDoc.getElementsByTagNameNS("*", "font");
+            if (fonts.getLength() == 0) fonts = fontDoc.getElementsByTagName("w:font");
+            if (fonts.getLength() == 0) fonts = fontDoc.getElementsByTagName("font");
+            for (int i = 0; i < fonts.getLength(); i++) {
+                String name = sanitizeWordFontName(attr(fonts.item(i), "w:name", "name"));
+                if (name != null) return name;
+            }
+        } catch (Throwable ignored) {
+            // Missing fontTable is normal for simple DOCX files.
+        }
+        return null;
+    }
+
+    private String firstFontFamilyUnderNode(Node root) {
+        if (root == null) return null;
+        if ("rFonts".equals(root.getLocalName()) || "w:rFonts".equals(root.getNodeName())) {
+            String font = wordFontFromRFonts(root);
+            if (font != null) return font;
+        }
+        NodeList nodes = root.getChildNodes();
+        for (int i = 0; i < nodes.getLength(); i++) {
+            String font = firstFontFamilyUnderNode(nodes.item(i));
+            if (font != null) return font;
+        }
+        return null;
+    }
+
+    private String wordFontFromRFonts(Node rFonts) {
+        String font = sanitizeWordFontName(attr(rFonts, "w:ascii", "ascii"));
+        if (font != null) return font;
+        font = sanitizeWordFontName(attr(rFonts, "w:hAnsi", "hAnsi"));
+        if (font != null) return font;
+        font = sanitizeWordFontName(attr(rFonts, "w:eastAsia", "eastAsia"));
+        if (font != null) return font;
+        font = sanitizeWordFontName(attr(rFonts, "w:cs", "cs"));
+        if (font != null) return font;
+        font = sanitizeWordFontName(attr(rFonts, "w:asciiTheme", "asciiTheme"));
+        if (font != null) return font;
+        font = sanitizeWordFontName(attr(rFonts, "w:hAnsiTheme", "hAnsiTheme"));
+        if (font != null) return font;
+        font = sanitizeWordFontName(attr(rFonts, "w:eastAsiaTheme", "eastAsiaTheme"));
+        if (font != null) return font;
+        return sanitizeWordFontName(attr(rFonts, "w:cstheme", "cstheme"));
+    }
+
+    private String sanitizeWordFontName(String name) {
+        if (name == null) return null;
+        String trimmed = name.trim();
+        if (trimmed.isEmpty()) return null;
+        if (trimmed.startsWith("+") || trimmed.toLowerCase(Locale.US).contains("theme")) return null;
+        return trimmed;
+    }
+
     private void loadWordPages(File file) throws Exception {
         closeResourceZip();
         resourceZip = new ZipFile(file);
         wordRelationships.clear();
         loadWordRelationships(resourceZip);
+        wordDefaultFontFamily = detectWordDefaultFontFamily(resourceZip);
+        wordHasDocumentFont = wordDefaultFontFamily != null && !wordDefaultFontFamily.trim().isEmpty();
         ZipEntry documentXml = resourceZip.getEntry("word/document.xml");
         if (documentXml == null) throw new IOException("Unsupported Word file");
 
@@ -1339,10 +2603,16 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
     private WebResourceResponse interceptLocalResource(Uri uri) {
-        if (uri == null || resourceZip == null) return null;
+        if (uri == null) return null;
         if (!LOCAL_HOST.equalsIgnoreCase(uri.getHost())) return null;
         String path = uri.getPath();
         if (path == null) return null;
+
+        if (path.startsWith(FONT_PREFIX)) {
+            return interceptSelectedDocumentFont();
+        }
+
+        if (resourceZip == null) return null;
 
         String zipPath;
         if (path.startsWith(EPUB_PREFIX)) {
@@ -1378,7 +2648,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         if (html == null) html = "";
         String css = "<style>" +
                 "html,body{margin:0;padding:0;background:#121212;color:#e8eaed;}" +
-                "body{font-family:serif;line-height:1.55;padding:22px;box-sizing:border-box;}" +
+                "body{line-height:1.55;padding:22px;box-sizing:border-box;}" +
                 "img,svg,video{max-width:100%;height:auto;}" +
                 "a{color:#8ab4f8;}" +
                 "pre{white-space:pre-wrap;}" +

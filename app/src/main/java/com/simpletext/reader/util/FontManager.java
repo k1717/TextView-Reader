@@ -19,6 +19,7 @@ import java.util.concurrent.Executors;
  */
 public class FontManager {
     private static final String TAG = "FontManager";
+    public static final String SYSTEM_FAMILY_PREFIX = "system_family:";
     private static FontManager instance;
 
     private final Map<String, String> fontPaths = new HashMap<>(); // displayName -> path
@@ -27,11 +28,15 @@ public class FontManager {
     private final List<String> systemInstalledFontNames = new ArrayList<>();
     private boolean scanned = false;
 
-    // Built-in Android font directories. These are scanned only so already-saved
-    // font values still resolve, but they are not exposed as a huge picker list.
+    // Built-in Android font directories. These are scanned for the optional
+    // full system-font picker opened from the Add font button.
     private static final String[] BUILT_IN_FONT_DIRS = {
             "/system/fonts",
-            "/system/font"
+            "/system/font",
+            "/product/fonts",
+            "/system_ext/fonts",
+            "/vendor/fonts",
+            "/odm/fonts"
     };
 
     // OS/user-installed font locations used by some Android/Samsung builds.
@@ -186,6 +191,10 @@ public class FontManager {
         return names;
     }
 
+    public List<String> getAllSystemFontNames() {
+        return getFontNames();
+    }
+
     public List<String> getSystemInstalledFontNames() {
         List<String> names = new ArrayList<>(systemInstalledFontNames);
         Collections.sort(names, String::compareToIgnoreCase);
@@ -198,12 +207,36 @@ public class FontManager {
         return names;
     }
 
+    public static String toSystemFamilyValue(String familyName) {
+        if (familyName == null) return SYSTEM_FAMILY_PREFIX;
+        return SYSTEM_FAMILY_PREFIX + familyName.trim();
+    }
+
+    public static boolean isSystemFamilyValue(String value) {
+        return value != null && value.startsWith(SYSTEM_FAMILY_PREFIX);
+    }
+
+    public static String getSystemFamilyName(String value) {
+        if (!isSystemFamilyValue(value)) return "";
+        return value.substring(SYSTEM_FAMILY_PREFIX.length()).trim();
+    }
+
     /**
      * Get Typeface for a font name.
      */
     public Typeface getTypeface(String fontName) {
         if (fontName == null || fontName.equals("default") || fontName.equals("DEFAULT")) {
             return Typeface.DEFAULT;
+        }
+
+        if (isSystemFamilyValue(fontName)) {
+            String familyName = getSystemFamilyName(fontName);
+            if (familyName.isEmpty()) return Typeface.DEFAULT;
+            try {
+                return Typeface.create(familyName, Typeface.NORMAL);
+            } catch (Throwable ignored) {
+                return Typeface.DEFAULT;
+            }
         }
 
         String path = fontPaths.get(fontName);
@@ -236,6 +269,30 @@ public class FontManager {
     }
 
     public boolean isScanned() { return scanned; }
+
+    /**
+     * Return the backing font file path for a scanned/imported font name.
+     * Built-in logical families such as DEFAULT/SERIF/MONOSPACE return null
+     * because WebView can address those through CSS family names directly.
+     */
+    public String getFontPathForName(String fontName) {
+        if (fontName == null || fontName.trim().isEmpty()) return null;
+        if (isSystemFamilyValue(fontName)) return null;
+
+        String path = fontPaths.get(fontName);
+        if (path == null) path = fontName;
+        if (path == null) return null;
+
+        switch (path) {
+            case "DEFAULT":
+            case "SERIF":
+            case "MONOSPACE":
+                return null;
+            default:
+                File file = new File(path);
+                return file.isFile() ? file.getAbsolutePath() : null;
+        }
+    }
 
     /**
      * Copy a font file to the app's internal font directory.
