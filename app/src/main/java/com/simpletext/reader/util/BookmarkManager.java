@@ -1,8 +1,6 @@
 package com.simpletext.reader.util;
 
 import android.content.Context;
-import android.util.Log;
-
 import com.simpletext.reader.model.Bookmark;
 import com.simpletext.reader.model.ReaderState;
 
@@ -43,7 +41,6 @@ import java.util.Map;
  * }
  */
 public class BookmarkManager {
-    private static final String TAG = "BookmarkManager";
     private static final String BOOKMARKS_FILE = "bookmarks.json";
     private static final String STATES_FILE = "reading_states.json";
     private static final int FORMAT_VERSION = 1;
@@ -139,6 +136,14 @@ public class BookmarkManager {
     }
 
     /**
+     * Clear all recent-file entries / saved reading states without touching bookmarks.
+     */
+    public void clearReadingStates() {
+        readingStates.clear();
+        saveReadingStates();
+    }
+
+    /**
      * Get recently read files, sorted by last read time (most recent first).
      */
     public List<ReaderState> getRecentFiles(int limit) {
@@ -178,7 +183,7 @@ public class BookmarkManager {
 
             return root.toString(2); // pretty-printed for readability
         } catch (JSONException e) {
-            Log.e(TAG, "Export failed", e);
+            // Do not write user file paths or local document/font names to release Logcat.
             return "{}";
         }
     }
@@ -234,7 +239,7 @@ public class BookmarkManager {
                 saveReadingStates();
             }
         } catch (JSONException e) {
-            Log.e(TAG, "Import failed", e);
+            // Do not write user file paths or local document/font names to release Logcat.
         }
     }
 
@@ -292,7 +297,7 @@ public class BookmarkManager {
                 }
             }
         } catch (JSONException e) {
-            Log.e(TAG, "Failed to load bookmarks", e);
+            // Do not write user file paths or local document/font names to release Logcat.
         }
     }
 
@@ -307,7 +312,7 @@ public class BookmarkManager {
             root.put("bookmarks", arr);
             writeFile(BOOKMARKS_FILE, root.toString(2));
         } catch (JSONException e) {
-            Log.e(TAG, "Failed to save bookmarks", e);
+            // Do not write user file paths or local document/font names to release Logcat.
         }
     }
 
@@ -327,7 +332,7 @@ public class BookmarkManager {
                 }
             }
         } catch (JSONException e) {
-            Log.e(TAG, "Failed to load reading states", e);
+            // Do not write user file paths or local document/font names to release Logcat.
         }
     }
 
@@ -342,7 +347,7 @@ public class BookmarkManager {
             root.put("states", statesObj);
             writeFile(STATES_FILE, root.toString(2));
         } catch (JSONException e) {
-            Log.e(TAG, "Failed to save reading states", e);
+            // Do not write user file paths or local document/font names to release Logcat.
         }
     }
 
@@ -359,7 +364,7 @@ public class BookmarkManager {
             }
             return sb.toString();
         } catch (Exception e) {
-            Log.e(TAG, "Failed to read " + fileName, e);
+            // Do not write user file paths or local document/font names to release Logcat.
             return null;
         }
     }
@@ -370,7 +375,7 @@ public class BookmarkManager {
                 new FileOutputStream(file), StandardCharsets.UTF_8)) {
             writer.write(content);
         } catch (Exception e) {
-            Log.e(TAG, "Failed to write " + fileName, e);
+            // Do not write user file paths or local document/font names to release Logcat.
         }
     }
 }

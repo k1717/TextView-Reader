@@ -100,10 +100,15 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private View browserSection;
     private RecyclerView recentRecyclerView;
     private TextView recentEmptyText;
+    private TextView recentClearAllButton;
     private RecyclerView drawerFixedList;
     private RecyclerView drawerStorageList;
+    private RecyclerView drawerShortcutList;
+    private View drawerRecentFoldersHeader;
     private TextView drawerRecentFoldersTitle;
+    private TextView drawerRecentFoldersClearButton;
     private DrawerEntryAdapter drawerFixedEntryAdapter;
+    private DrawerEntryAdapter drawerShortcutEntryAdapter;
     private DrawerEntryAdapter drawerEntryAdapter;
     private FileAdapter recentAdapter;
     private EditText fileSearchInput;
@@ -227,6 +232,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         browserSection = findViewById(R.id.main_content_container);
         recentRecyclerView = findViewById(R.id.recent_list);
         recentEmptyText = findViewById(R.id.recent_empty_text);
+        recentClearAllButton = findViewById(R.id.recent_clear_all);
 
         fileAdapter = new FileAdapter();
         fileAdapter.setListener(this);
@@ -241,6 +247,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         recentRecyclerView.setAdapter(recentAdapter);
 
         bookmarkManager = BookmarkManager.getInstance(this);
+        setupRecentHeaderActions();
 
         setupDrawerStorageList();
         setupDrawerBottomActions();
@@ -400,6 +407,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
         fileSearchExecutor.shutdownNow();
         super.onDestroy();
+    }
+
+    private void setupRecentHeaderActions() {
+        if (recentClearAllButton != null) {
+            recentClearAllButton.setOnClickListener(v -> showClearAllRecentFilesDialog());
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -670,6 +683,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         fileSearchGeneration.incrementAndGet();
         searchMode = false;
 
+        // Leaving a file-type-filter result returns to the normal folder/recent view.
+        // The content becomes the full "All" list, so the chip state must also return
+        // to All instead of leaving General/PDF/EPUB/Word visually selected.
+        activeFileFilter = FILTER_ALL;
+        updateFileTypeChips();
+
         File target = searchReturnDirectory;
         if (!searchReturnToHome
                 && target != null
@@ -828,9 +847,13 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private void setupDrawerStorageList() {
         drawerFixedList = findViewById(R.id.drawer_fixed_list);
         drawerStorageList = findViewById(R.id.drawer_storage_list);
+        drawerShortcutList = findViewById(R.id.drawer_shortcut_list);
+        drawerRecentFoldersHeader = findViewById(R.id.drawer_recent_folders_header);
         drawerRecentFoldersTitle = findViewById(R.id.drawer_recent_folders_title);
+        drawerRecentFoldersClearButton = findViewById(R.id.drawer_recent_folders_clear);
 
         drawerFixedEntryAdapter = new DrawerEntryAdapter();
+        drawerShortcutEntryAdapter = new DrawerEntryAdapter();
         drawerEntryAdapter = new DrawerEntryAdapter();
 
         if (drawerFixedList != null) {
@@ -842,13 +865,24 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             drawerStorageList.setLayoutManager(new LinearLayoutManager(this));
             drawerStorageList.setAdapter(drawerEntryAdapter);
         }
+        if (drawerShortcutList != null) {
+            drawerShortcutList.setLayoutManager(new LinearLayoutManager(this));
+            drawerShortcutList.setAdapter(drawerShortcutEntryAdapter);
+            drawerShortcutList.setNestedScrollingEnabled(true);
+        }
 
         DrawerEntryAdapter.OnEntryClickListener clickListener = this::queueDrawerNavigation;
         DrawerEntryAdapter.OnEntryLongClickListener longClickListener = this::handleDrawerEntryLongClick;
         drawerFixedEntryAdapter.setListener(clickListener);
+        drawerShortcutEntryAdapter.setListener(clickListener);
         drawerEntryAdapter.setListener(clickListener);
         drawerFixedEntryAdapter.setLongClickListener(longClickListener);
+        drawerShortcutEntryAdapter.setLongClickListener(longClickListener);
         drawerEntryAdapter.setLongClickListener(longClickListener);
+
+        if (drawerRecentFoldersClearButton != null) {
+            drawerRecentFoldersClearButton.setOnClickListener(v -> showClearAllRecentFoldersDialog());
+        }
 
         rebuildDrawerStorageEntries();
     }
@@ -856,7 +890,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private void rebuildDrawerStorageEntries() {
         List<DrawerEntry> fixedEntries = new ArrayList<>();
 
-        // Middle storage shortcuts: scrollable list capped to 3 full rows.
+        // Built-in storage shortcuts belong to the bottom-adjacent shortcut zone.
         fixedEntries.add(new DrawerEntry(
                 DrawerEntry.ACTION_RECENT,
                 R.drawable.ic_recent,
@@ -894,53 +928,91 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                     downloads.getAbsolutePath()));
         }
 
-        // User-added folder shortcuts are in the middle scrollable section,
-        // directly below Downloads, and can be removed by long-press.
-        addShortcutFolderEntries(fixedEntries);
-        addShortcutPlaceholderRows(fixedEntries);
+        // Bottom-adjacent shortcut zone: built-in storage shortcuts plus user-added folder shortcuts.
+        // This zone is independent from the recent-folder list and is pinned directly above
+        // File Open / Bookmarks / Settings. It keeps five visible rows and scrolls internally
+        // instead of growing when more shortcuts are added.
+        List<DrawerEntry> shortcutEntries = new ArrayList<>(fixedEntries);
+        addShortcutFolderEntries(shortcutEntries);
+        addShortcutPlaceholderRows(shortcutEntries);
 
         List<DrawerEntry> recentFolderEntries = new ArrayList<>();
         addRecentFolderEntries(recentFolderEntries);
 
         if (drawerEntryAdapter != null) drawerEntryAdapter.setEntries(recentFolderEntries);
-        if (drawerFixedEntryAdapter != null) drawerFixedEntryAdapter.setEntries(fixedEntries);
+        if (drawerFixedEntryAdapter != null) drawerFixedEntryAdapter.setEntries(new ArrayList<>());
+        if (drawerShortcutEntryAdapter != null) drawerShortcutEntryAdapter.setEntries(shortcutEntries);
 
         if (drawerStorageList != null) {
-            // Top recent-folder area: show only full rows, capped at 7.
             applyRecentFolderListHeight(drawerStorageList, recentFolderEntries.size());
         }
         if (drawerFixedList != null) {
-            // Middle storage/shortcut area is always 5 full rows.
-            // Missing shortcut rows are represented by placeholder entries instead of blank space.
-            android.view.ViewGroup.LayoutParams lp = drawerFixedList.getLayoutParams();
-            if (lp != null) {
-                lp.height = dpToPx(5 * 48);
-                drawerFixedList.setLayoutParams(lp);
-            }
-            drawerFixedList.setVisibility(View.VISIBLE);
+            applyFixedRowListHeight(drawerFixedList, 0, 0);
+        }
+        if (drawerShortcutList != null) {
+            applyFixedRowListHeight(drawerShortcutList, shortcutEntries.size(), 5);
+        }
+        if (drawerRecentFoldersHeader != null) {
+            // Keep the Recent folders header anchored even after clearing the list.
+            // Only the clear action disappears so the title position/shape does not jump.
+            drawerRecentFoldersHeader.setVisibility(View.VISIBLE);
         }
         if (drawerRecentFoldersTitle != null) {
-            drawerRecentFoldersTitle.setVisibility(recentFolderEntries.isEmpty() ? View.GONE : View.VISIBLE);
-            if (!recentFolderEntries.isEmpty()) {
-                drawerRecentFoldersTitle.setText(R.string.recent_folders);
-            }
+            drawerRecentFoldersTitle.setText(R.string.recent_folders);
+        }
+        if (drawerRecentFoldersClearButton != null) {
+            drawerRecentFoldersClearButton.setVisibility(recentFolderEntries.isEmpty() ? View.INVISIBLE : View.VISIBLE);
         }
     }
 
-    private void applyRecentFolderListHeight(@NonNull RecyclerView list, int itemCount) {
+
+    private void applyFixedRowListHeight(@NonNull RecyclerView list, int itemCount, int maxRows) {
         android.view.ViewGroup.LayoutParams lp = list.getLayoutParams();
         if (lp == null) return;
 
-        final int maxRecentFolderRows = 7;
-        int rows = Math.max(0, Math.min(itemCount, maxRecentFolderRows));
+        int rows = Math.max(0, Math.min(itemCount, maxRows));
         lp.height = rows <= 0 ? 0 : dpToPx(rows * 48);
         list.setLayoutParams(lp);
         list.setVisibility(rows <= 0 ? View.GONE : View.VISIBLE);
+        list.setNestedScrollingEnabled(itemCount > maxRows);
+        list.setOverScrollMode(itemCount > maxRows
+                ? View.OVER_SCROLL_IF_CONTENT_SCROLLS
+                : View.OVER_SCROLL_NEVER);
+        list.setVerticalScrollBarEnabled(itemCount > maxRows);
+    }
+
+    private void applyRecentFolderListHeight(@NonNull RecyclerView list, int itemCount) {
+        android.view.ViewGroup.LayoutParams rawLp = list.getLayoutParams();
+        if (rawLp == null) return;
+
+        if (rawLp instanceof LinearLayout.LayoutParams) {
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) rawLp;
+            lp.height = 0;
+            lp.weight = 1f;
+            list.setLayoutParams(lp);
+        } else {
+            rawLp.height = 0;
+            list.setLayoutParams(rawLp);
+        }
+
+        // Keep this flexible list visible even when it is empty. It acts as the
+        // spacer above the bottom shortcut zone, so Recent/Internal/External/
+        // Downloads and user folder shortcuts stay attached to the bottom buttons
+        // instead of floating under the recent-folder section.
+        list.setVisibility(View.VISIBLE);
+        list.setNestedScrollingEnabled(true);
+        list.setOverScrollMode(itemCount > 0
+                ? View.OVER_SCROLL_IF_CONTENT_SCROLLS
+                : View.OVER_SCROLL_NEVER);
+        list.setVerticalScrollBarEnabled(itemCount > 0);
     }
 
     private void addShortcutPlaceholderRows(@NonNull List<DrawerEntry> entries) {
-        final int middleDrawerRows = 5;
-        int missing = Math.max(0, middleDrawerRows - entries.size());
+        // The bottom shortcut/storage zone is a fixed-height scrollable window.
+        // Keep five visible rows so it stays attached above File Open / Bookmarks /
+        // Settings, but never let added shortcuts expand the drawer vertically.
+        final int visibleShortcutRows = 5;
+        int missing = Math.max(0, visibleShortcutRows - entries.size());
         for (int i = 0; i < missing; i++) {
             entries.add(new DrawerEntry(
                     DrawerEntry.ACTION_FOLDER_SHORTCUT,
@@ -1007,6 +1079,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             File folder = new File(path);
             if (!folder.exists() || !folder.isDirectory() || !folder.canRead()) continue;
             if (isBuiltInDrawerPath(folder.getAbsolutePath())) continue;
+            if (prefs != null && prefs.isRecentFolderHidden(folder.getAbsolutePath())) continue;
             if (prefs != null && prefs.isFolderShortcut(folder.getAbsolutePath())) continue;
             String name = folder.getName();
             if (name.isEmpty()) name = folder.getAbsolutePath();
@@ -1187,6 +1260,42 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
+    private int txtReaderDialogWidthPx() {
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        return Math.max(dpToPx(220), Math.min(Math.round(screenWidth * 0.85f), dpToPx(460)));
+    }
+
+    private android.app.Dialog createStableBottomDialog(@NonNull View content, int yPx, float dimAmount) {
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        dialog.setCanceledOnTouchOutside(true);
+
+        android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
+        frame.setBackgroundColor(Color.TRANSPARENT);
+        frame.setClipChildren(true);
+        frame.setClipToPadding(true);
+        frame.addView(content, new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT));
+        dialog.setContentView(frame);
+
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+            window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
+            lp.copyFrom(window.getAttributes());
+            lp.width = txtReaderDialogWidthPx();
+            lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
+            lp.y = yPx;
+            lp.dimAmount = dimAmount;
+            window.setAttributes(lp);
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
+        return dialog;
+    }
+
     private void queueDrawerNavigation(@NonNull DrawerEntry entry) {
         pendingDrawerNavigationEntry = entry;
         drawerNavigationPending = true;
@@ -1242,6 +1351,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private boolean handleDrawerEntryLongClick(@NonNull DrawerEntry entry) {
         if (entry.getActionType() == DrawerEntry.ACTION_FOLDER_SHORTCUT && entry.getPath() != null) {
             showShortcutRemoveDialog(new File(entry.getPath()));
+            return true;
+        }
+        if (entry.getActionType() == DrawerEntry.ACTION_RECENT_FOLDER && entry.getPath() != null) {
+            showRecentFolderClearDialog(new File(entry.getPath()));
             return true;
         }
         return false;
@@ -1300,7 +1413,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        final AlertDialog[] ref = new AlertDialog[1];
+        final android.app.Dialog[] ref = new android.app.Dialog[1];
         addFileOpsRow(box, getString(R.string.remove_shortcut), danger, panel, () -> {
             if (ref[0] != null) ref[0].dismiss();
             removeFolderShortcut(folder);
@@ -1318,19 +1431,150 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         cancelLp.setMargins(0, dpToPx(4), 0, 0);
         box.addView(cancel, cancelLp);
 
-        AlertDialog dialog = new AlertDialog.Builder(this).create();
+        android.app.Dialog dialog = createStableBottomDialog(box, dpToPx(74), 0.22f);
         ref[0] = dialog;
-        dialog.setView(box);
-        dialog.setOnShowListener(d -> {
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawable(
-                        new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-                android.view.WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
-                lp.dimAmount = 0.22f;
-                dialog.getWindow().setAttributes(lp);
-                dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+    }
+
+    private void showClearAllRecentFilesDialog() {
+        if (bookmarkManager == null || bookmarkManager.getRecentFiles(Integer.MAX_VALUE).isEmpty()) {
+            Toast.makeText(this, getString(R.string.no_recent_files_to_clear), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        showSimpleDangerDialog(
+                getString(R.string.clear_recent_files),
+                getString(R.string.clear_recent_files_confirm),
+                getString(R.string.clear_recent_files),
+                () -> {
+                    if (bookmarkManager != null) bookmarkManager.clearReadingStates();
+                    loadRecentFiles();
+                    rebuildDrawerStorageEntries();
+                    Toast.makeText(this, getString(R.string.recent_files_cleared), Toast.LENGTH_SHORT).show();
+                });
+    }
+
+    private void showClearAllRecentFoldersDialog() {
+        List<String> visibleRecentFolders = collectVisibleRecentFolderPaths();
+        if (visibleRecentFolders.isEmpty()) {
+            Toast.makeText(this, getString(R.string.no_recent_folders_to_clear), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        showSimpleDangerDialog(
+                getString(R.string.clear_recent_folders),
+                getString(R.string.clear_recent_folders_confirm),
+                getString(R.string.clear_recent_folders),
+                () -> {
+                    if (prefs != null) prefs.clearRecentFolders(visibleRecentFolders);
+                    rebuildDrawerStorageEntries();
+                    Toast.makeText(this, getString(R.string.recent_folders_cleared), Toast.LENGTH_SHORT).show();
+                });
+    }
+
+    private void showRecentFolderClearDialog(@NonNull File folder) {
+        showSimpleDangerDialog(
+                getString(R.string.clear_recent_folder),
+                getString(R.string.clear_recent_folder_confirm, folder.getAbsolutePath()),
+                getString(R.string.clear_recent_folder),
+                () -> {
+                    if (prefs != null) prefs.removeRecentFolder(folder.getAbsolutePath());
+                    rebuildDrawerStorageEntries();
+                    Toast.makeText(this, getString(R.string.recent_folder_cleared), Toast.LENGTH_SHORT).show();
+                });
+    }
+
+    private List<String> collectVisibleRecentFolderPaths() {
+        List<String> result = new ArrayList<>();
+        if (bookmarkManager == null && prefs == null) return result;
+
+        LinkedHashSet<String> recentPaths = new LinkedHashSet<>();
+        String lastDirectory = prefs != null ? prefs.getLastDirectory() : null;
+        if (lastDirectory != null && !lastDirectory.trim().isEmpty()) recentPaths.add(lastDirectory.trim());
+
+        if (prefs != null) recentPaths.addAll(prefs.getRecentFolders(64));
+
+        if (bookmarkManager != null) {
+            for (ReaderState state : bookmarkManager.getRecentFiles(200)) {
+                File file = new File(state.getFilePath());
+                File parent = file.isDirectory() ? file : file.getParentFile();
+                if (parent != null) recentPaths.add(parent.getAbsolutePath());
             }
+        }
+
+        for (String path : recentPaths) {
+            if (path == null || path.trim().isEmpty()) continue;
+            File folder = new File(path.trim());
+            if (!folder.exists() || !folder.isDirectory() || !folder.canRead()) continue;
+            if (isBuiltInDrawerPath(folder.getAbsolutePath())) continue;
+            if (prefs != null && prefs.isRecentFolderHidden(folder.getAbsolutePath())) continue;
+            if (prefs != null && prefs.isFolderShortcut(folder.getAbsolutePath())) continue;
+            result.add(folder.getAbsolutePath());
+            if (result.size() >= 10) break;
+        }
+        return result;
+    }
+
+    private void showSimpleDangerDialog(@NonNull String titleText,
+                                        @NonNull String messageText,
+                                        @NonNull String actionText,
+                                        @NonNull Runnable action) {
+        final boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
+        final int bg = dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255);
+        final int panel = dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245);
+        final int fg = dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36);
+        final int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104);
+        final int danger = dark ? Color.rgb(255, 170, 170) : Color.rgb(176, 0, 32);
+        final int line = dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dpToPx(18), dpToPx(16), dpToPx(18), dpToPx(10));
+        GradientDrawable bgShape = new GradientDrawable();
+        bgShape.setColor(bg);
+        bgShape.setCornerRadius(dpToPx(18));
+        bgShape.setStroke(Math.max(1, dpToPx(1)), line);
+        box.setBackground(bgShape);
+
+        TextView title = new TextView(this);
+        title.setText(titleText);
+        title.setTextColor(fg);
+        title.setTextSize(21f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setPadding(dpToPx(6), 0, dpToPx(6), dpToPx(8));
+        box.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView message = new TextView(this);
+        message.setText(messageText);
+        message.setTextColor(sub);
+        message.setTextSize(14f);
+        message.setLineSpacing(dpToPx(2), 1.0f);
+        message.setPadding(dpToPx(6), 0, dpToPx(6), dpToPx(14));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        final android.app.Dialog[] ref = new android.app.Dialog[1];
+        addFileOpsRow(box, actionText, danger, panel, () -> {
+            if (ref[0] != null) ref[0].dismiss();
+            action.run();
         });
+
+        TextView cancel = new TextView(this);
+        cancel.setText(getString(R.string.cancel));
+        cancel.setTextColor(sub);
+        cancel.setTextSize(16f);
+        cancel.setGravity(Gravity.CENTER);
+        cancel.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        cancel.setPadding(dpToPx(12), 0, dpToPx(12), 0);
+        LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(50));
+        cancelLp.setMargins(0, dpToPx(4), 0, 0);
+        box.addView(cancel, cancelLp);
+
+        android.app.Dialog dialog = createStableBottomDialog(box, dpToPx(74), 0.22f);
+        ref[0] = dialog;
         cancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
     }
@@ -1426,6 +1670,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (recentTitle != null) {
             recentTitle.setBackgroundColor(bg);
             recentTitle.setTextColor(fg);
+        }
+        if (recentClearAllButton != null) {
+            recentClearAllButton.setTextColor(sub);
+        }
+        if (drawerRecentFoldersClearButton != null) {
+            drawerRecentFoldersClearButton.setTextColor(sub);
         }
         if (searchBar != null) {
             searchBar.setBackgroundColor(bg);
@@ -1635,6 +1885,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (recentEmptyText != null) {
             recentEmptyText.setVisibility(recentFiles.isEmpty() ? View.VISIBLE : View.GONE);
         }
+        if (recentClearAllButton != null) {
+            boolean hasAnyRecent = bookmarkManager != null && !bookmarkManager.getRecentFiles(Integer.MAX_VALUE).isEmpty();
+            recentClearAllButton.setVisibility(hasAnyRecent ? View.VISIBLE : View.INVISIBLE);
+        }
     }
 
     @Override public void onFileClick(@NonNull File file) {
@@ -1730,9 +1984,18 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         title.setPadding(dpToPx(6), 0, dpToPx(6), dpToPx(14));
         box.addView(title, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        final AlertDialog[] ref = new AlertDialog[1];
+        final android.app.Dialog[] ref = new android.app.Dialog[1];
         if (!file.isDirectory()) {
             addFileOpsRow(box, getString(R.string.open), fg, panel, () -> { if (ref[0] != null) ref[0].dismiss(); openFile(file); });
+            if (homeMode && bookmarkManager != null && bookmarkManager.getReadingState(file.getAbsolutePath()) != null) {
+                addFileOpsRow(box, getString(R.string.clear_from_recently_viewed), fg, panel, () -> {
+                    if (ref[0] != null) ref[0].dismiss();
+                    bookmarkManager.deleteReadingState(file.getAbsolutePath());
+                    loadRecentFiles();
+                    rebuildDrawerStorageEntries();
+                    Toast.makeText(this, getString(R.string.recent_file_cleared), Toast.LENGTH_SHORT).show();
+                });
+            }
         } else if (!isBuiltInDrawerPath(file.getAbsolutePath())) {
             boolean shortcut = prefs != null && prefs.isFolderShortcut(file.getAbsolutePath());
             addFileOpsRow(box,
@@ -1762,18 +2025,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         cancelLp.setMargins(0, dpToPx(4), 0, 0);
         box.addView(cancel, cancelLp);
 
-        AlertDialog dialog = new AlertDialog.Builder(this).create();
+        android.app.Dialog dialog = createStableBottomDialog(box, dpToPx(74), 0.22f);
         ref[0] = dialog;
-        dialog.setView(box);
-        dialog.setOnShowListener(d -> {
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-                android.view.WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
-                lp.dimAmount = 0.22f;
-                dialog.getWindow().setAttributes(lp);
-                dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            }
-        });
         cancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
     }
@@ -2339,13 +2592,30 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             return;
         }
 
-        // 2. Search results return to home first.
+        // 2. If only a file-type filter is active, Back should return the chips and
+        // content to All instead of showing the exit toast from the home/recent page.
+        if (activeFileFilter != FILTER_ALL) {
+            activeFileFilter = FILTER_ALL;
+            updateFileTypeChips();
+            if (searchMode) {
+                restorePreSearchLocation();
+            } else if (homeMode) {
+                loadRecentFiles();
+            } else if (currentDirectory != null && currentDirectory.exists() && currentDirectory.isDirectory()) {
+                loadDirectory(currentDirectory);
+            } else {
+                restoreAllFilterLocation();
+            }
+            return;
+        }
+
+        // 3. Search results return to home first.
         if (searchMode) {
             restorePreSearchLocation();
             return;
         }
 
-        // 3. If browsing, navigate up. When at the storage root, drop back to home.
+        // 4. If browsing, navigate up. When at the storage root, drop back to home.
         if (!homeMode) {
             if (currentDirectory != null && !isRootStorage(currentDirectory)) {
                 File parent = currentDirectory.getParentFile();
@@ -2359,7 +2629,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             return;
         }
 
-        // 4. From home: special "return to viewer" behavior, or double-tap-back to exit.
+        // 5. From home: special "return to viewer" behavior, or double-tap-back to exit.
         if (returnToViewerMode) {
             finish();
             return;

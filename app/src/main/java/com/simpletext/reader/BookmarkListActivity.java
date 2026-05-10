@@ -18,10 +18,8 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.Button;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -164,58 +162,6 @@ public class BookmarkListActivity extends AppCompatActivity
         };
     }
 
-    private void forceDialogButtonPanelBackground(AlertDialog dialog, int bgColor) {
-        if (dialog == null) return;
-
-        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-        Button negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
-        Button neutral = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
-
-        Button first = positive != null ? positive : (negative != null ? negative : neutral);
-        if (first == null) return;
-
-        View panel = first.getParent() instanceof View ? (View) first.getParent() : null;
-        if (panel == null) return;
-
-        int lineColor = blendColors(bgColor, readableTextColorForBackground(bgColor), 0.34f);
-        int panelFill = blendColors(bgColor, readableTextColorForBackground(bgColor),
-                isLightColor(bgColor) ? 0.025f : 0.040f);
-
-        panel.setBackground(actionPanelBackground(panelFill, lineColor));
-        panel.setPadding(dpToPx(12), dpToPx(6), dpToPx(12), dpToPx(6));
-        panel.setMinimumHeight(dpToPx(50));
-        panel.setClipToOutline(false);
-
-        if (panel instanceof ViewGroup) {
-            ((ViewGroup) panel).setClipChildren(false);
-            ((ViewGroup) panel).setClipToPadding(false);
-        }
-    }
-
-    private void styleDialogButton(Button button, int textColor, int bgColor) {
-        if (button == null) return;
-
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            button.setBackgroundTintList(null);
-        }
-        button.setStateListAnimator(null);
-        button.setTextColor(textColor);
-        button.setBackgroundColor(Color.TRANSPARENT);
-        button.setAllCaps(false);
-        button.setMinWidth(dpToPx(72));
-        button.setMinimumWidth(dpToPx(72));
-        button.setMinHeight(dpToPx(40));
-        button.setMinimumHeight(dpToPx(40));
-        button.setPadding(dpToPx(14), 0, dpToPx(14), 0);
-
-        android.view.ViewGroup.LayoutParams rawLp = button.getLayoutParams();
-        if (rawLp instanceof LinearLayout.LayoutParams) {
-            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) rawLp;
-            lp.setMargins(dpToPx(2), 0, dpToPx(2), 0);
-            button.setLayoutParams(lp);
-        }
-    }
-
     private void showBookmarkDeleteConfirm(Bookmark bookmark) {
         boolean dark = isDarkUi();
 
@@ -223,19 +169,28 @@ public class BookmarkListActivity extends AppCompatActivity
         int bg = blendColors(baseBg, dark ? Color.WHITE : Color.BLACK, dark ? 0.12f : 0.06f);
         int fg = readableTextColorForBackground(bg);
         int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(75, 75, 75);
-        int border = blendColors(bg, fg, 0.48f);
+        int deleteColor = isLightColor(bg) ? Color.rgb(125, 45, 45) : Color.rgb(255, 175, 175);
+
+        LinearLayout dialogPanel = new LinearLayout(this);
+        dialogPanel.setOrientation(LinearLayout.VERTICAL);
+        dialogPanel.setBackgroundColor(Color.TRANSPARENT);
+
+        dialogPanel.addView(makeBookmarkDialogTitle(getString(R.string.delete_bookmark), fg),
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(bg);
-        box.setPadding(dpToPx(22), dpToPx(12), dpToPx(22), dpToPx(8));
+        box.setBackgroundColor(Color.TRANSPARENT);
+        box.setPadding(dpToPx(22), dpToPx(12), dpToPx(22), dpToPx(10));
 
         TextView message = new TextView(this);
         message.setText(bookmark.getFileName() + "\n\n" + bookmark.getDisplayText());
         message.setTextColor(fg);
         message.setTextSize(14f);
         message.setLineSpacing(0f, 1.15f);
-        message.setPadding(0, dpToPx(4), 0, dpToPx(8));
+        message.setPadding(0, dpToPx(4), 0, dpToPx(10));
         box.addView(message, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -244,46 +199,31 @@ public class BookmarkListActivity extends AppCompatActivity
         warning.setText(getString(R.string.delete_this_bookmark));
         warning.setTextColor(sub);
         warning.setTextSize(13f);
+        warning.setPadding(0, 0, 0, dpToPx(2));
         box.addView(warning, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
+        dialogPanel.addView(box, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        TextView title = new TextView(this);
-        title.setText(getString(R.string.delete_bookmark));
-        title.setTextColor(fg);
-        title.setTextSize(20f);
-        title.setGravity(Gravity.CENTER_VERTICAL);
-        title.setPadding(dpToPx(22), dpToPx(18), dpToPx(22), dpToPx(8));
-        title.setBackgroundColor(bg);
+        LinearLayout actions = makeBookmarkDialogActionRow(bg, fg);
+        TextView cancel = makeBookmarkDialogActionText(getString(R.string.cancel), sub, Gravity.CENTER);
+        TextView delete = makeBookmarkDialogActionText(getString(R.string.delete), deleteColor, Gravity.CENTER);
+        actions.addView(cancel, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        actions.addView(delete, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        dialogPanel.addView(actions, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setCustomTitle(title)
-                .setView(box)
-                .setPositiveButton(getString(R.string.delete), (d, w) -> {
-                    bookmarkManager.deleteBookmark(bookmark.getId());
-                    loadBookmarks();
-                })
-                .setNegativeButton(getString(R.string.cancel), null)
-                .create();
-
-        dialog.setOnShowListener(d -> {
-            if (dialog.getWindow() != null) {
-                GradientDrawable drawable = new GradientDrawable();
-                drawable.setColor(bg);
-                drawable.setCornerRadius(dpToPx(4));
-                drawable.setStroke(Math.max(1, dpToPx(1)), border);
-                dialog.getWindow().setBackgroundDrawable(drawable);
-                dialog.getWindow().getDecorView().setBackground(drawable);
-
-                android.view.WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
-                lp.dimAmount = 0.14f;
-                dialog.getWindow().setAttributes(lp);
-                dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            }
-            forceDialogButtonPanelBackground(dialog, bg);
-            int deleteColor = isLightColor(bg) ? Color.rgb(95, 35, 35) : Color.rgb(255, 170, 170);
-            styleDialogButton(dialog.getButton(AlertDialog.BUTTON_POSITIVE), deleteColor, bg);
-            styleDialogButton(dialog.getButton(AlertDialog.BUTTON_NEGATIVE), sub, bg);
+        android.app.Dialog dialog = createBookmarkDialog(dialogPanel, bg);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        delete.setOnClickListener(v -> {
+            bookmarkManager.deleteBookmark(bookmark.getId());
+            loadBookmarks();
+            dialog.dismiss();
         });
         dialog.show();
     }
@@ -312,6 +252,14 @@ public class BookmarkListActivity extends AppCompatActivity
 
         recyclerView = findViewById(R.id.bookmark_recycler);
         emptyText = findViewById(R.id.empty_text);
+
+        // Keep the all-bookmarks page expansion/collapse as responsive as the
+        // in-viewer bookmark windows. The default item animator made folder
+        // open/close feel sluggish and visually jumpy.
+        recyclerView.setItemAnimator(null);
+        recyclerView.setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(8));
+        recyclerView.setClipToPadding(false);
+
         applyBookmarkPageThemeAndInsets();
 
         bookmarkManager = BookmarkManager.getInstance(this);
@@ -345,11 +293,11 @@ public class BookmarkListActivity extends AppCompatActivity
         } else {
             emptyText.setVisibility(View.GONE);
             recyclerView.setVisibility(View.VISIBLE);
+            // Keep main bookmark folders collapsed by default. Users can expand only
+            // the folders they need, which keeps the all-bookmarks page compact.
             if (!didInitialBookmarkExpansion) {
                 didInitialBookmarkExpansion = true;
-                for (Bookmark b : bookmarks) {
-                    if (b.getFilePath() != null) expandedFolders.add(b.getFilePath());
-                }
+                expandedFolders.clear();
             }
             adapter.setBookmarks(bookmarks, expandedFolders, null);
         }
@@ -364,27 +312,7 @@ public class BookmarkListActivity extends AppCompatActivity
 
     @Override
     public void onBookmarkClick(Bookmark bookmark) {
-        File file = new File(bookmark.getFilePath());
-        if (!file.exists()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + bookmark.getFilePath(), Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        Intent intent;
-        if (FileUtils.isPdfFile(file.getName())) {
-            intent = new Intent(this, PdfReaderActivity.class);
-            intent.putExtra(PdfReaderActivity.EXTRA_FILE_PATH, bookmark.getFilePath());
-            intent.putExtra(PdfReaderActivity.EXTRA_JUMP_TO_PAGE, bookmark.getCharPosition());
-        } else if (FileUtils.isEpubFile(file.getName()) || FileUtils.isWordFile(file.getName())) {
-            intent = new Intent(this, DocumentPageActivity.class);
-            intent.putExtra(DocumentPageActivity.EXTRA_FILE_PATH, bookmark.getFilePath());
-            intent.putExtra(DocumentPageActivity.EXTRA_JUMP_TO_PAGE, bookmark.getCharPosition());
-        } else {
-            intent = new Intent(this, ReaderActivity.class);
-            intent.putExtra(ReaderActivity.EXTRA_FILE_PATH, bookmark.getFilePath());
-            intent.putExtra(ReaderActivity.EXTRA_JUMP_TO_POSITION, bookmark.getCharPosition());
-        }
-        startActivity(intent);
+        openBookmarkTarget(bookmark);
     }
 
     @Override
@@ -392,56 +320,253 @@ public class BookmarkListActivity extends AppCompatActivity
         showBookmarkDeleteConfirm(bookmark);
     }
 
+    private int bookmarkDialogCornerRadiusPx() {
+        return dpToPx(24);
+    }
+
+    private int bookmarkDialogBorderColor(int bgColor) {
+        int fg = readableTextColorForBackground(bgColor);
+        return blendColors(bgColor, fg, isLightColor(bgColor) ? 0.58f : 0.78f);
+    }
+
+    private GradientDrawable bookmarkDialogFillBackground(int bgColor) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(bgColor);
+        drawable.setCornerRadius(bookmarkDialogCornerRadiusPx());
+        return drawable;
+    }
+
+    private Drawable bookmarkDialogBorderOverlay(int bgColor) {
+        final int borderColor = bookmarkDialogBorderColor(bgColor);
+        return new Drawable() {
+            private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private final android.graphics.RectF rect = new android.graphics.RectF();
+
+            {
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(dpToPx(2));
+                paint.setColor(borderColor);
+            }
+
+            @Override
+            public void draw(Canvas canvas) {
+                android.graphics.Rect bounds = getBounds();
+                float half = paint.getStrokeWidth() / 2f;
+                rect.set(bounds.left + half, bounds.top + half,
+                        bounds.right - half, bounds.bottom - half);
+                float radius = Math.max(0f, bookmarkDialogCornerRadiusPx() - half);
+                canvas.drawRoundRect(rect, radius, radius, paint);
+            }
+
+            @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); }
+            @Override public void setColorFilter(ColorFilter colorFilter) { paint.setColorFilter(colorFilter); }
+            @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+        };
+    }
+
+    private TextView makeBookmarkDialogTitle(String text, int fgColor) {
+        TextView title = new TextView(this);
+        title.setText(text);
+        title.setTextColor(fgColor);
+        title.setTextSize(20f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        title.setPadding(dpToPx(22), dpToPx(18), dpToPx(22), dpToPx(8));
+        title.setBackgroundColor(Color.TRANSPARENT);
+        return title;
+    }
+
+    private TextView makeBookmarkDialogActionText(String label, int textColor, int gravity) {
+        TextView button = new TextView(this);
+        button.setText(label);
+        button.setTextColor(textColor);
+        button.setTextSize(16f);
+        button.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        button.setGravity(gravity);
+        button.setBackgroundColor(Color.TRANSPARENT);
+        button.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+        return button;
+    }
+
+    private LinearLayout makeBookmarkDialogActionRow(int bgColor, int fgColor) {
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        actions.setBackground(actionPanelBackground(
+                blendColors(bgColor, fgColor, isLightColor(bgColor) ? 0.025f : 0.040f),
+                blendColors(bgColor, fgColor, 0.34f)));
+        actions.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+        return actions;
+    }
+
+    private android.app.Dialog createBookmarkDialog(@NonNull View content, int bgColor) {
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        dialog.setCanceledOnTouchOutside(true);
+
+        android.widget.FrameLayout outerFrame = new android.widget.FrameLayout(this);
+        outerFrame.setBackground(bookmarkDialogFillBackground(bgColor));
+        outerFrame.setForeground(bookmarkDialogBorderOverlay(bgColor));
+        outerFrame.setClipToOutline(true);
+        outerFrame.setClipChildren(true);
+        outerFrame.setClipToPadding(true);
+
+        content.setBackgroundColor(Color.TRANSPARENT);
+        if (content instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) content;
+            group.setClipChildren(true);
+            group.setClipToPadding(true);
+        }
+
+        outerFrame.addView(content, new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT));
+        dialog.setContentView(outerFrame);
+        configureBookmarkDialogWindow(dialog);
+        dialog.setOnShowListener(d -> configureBookmarkDialogWindow(dialog));
+        return dialog;
+    }
+
+    private void configureBookmarkDialogWindow(@NonNull android.app.Dialog dialog) {
+        android.view.Window window = dialog.getWindow();
+        if (window == null) return;
+
+        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
+        lp.copyFrom(window.getAttributes());
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        lp.width = Math.min(screenWidth - dpToPx(28), dpToPx(460));
+        lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
+        lp.y = dpToPx(74);
+        lp.dimAmount = 0.16f;
+        window.setAttributes(lp);
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        window.setWindowAnimations(0);
+        window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    }
+
     @Override
     public void onBookmarkEdit(Bookmark bookmark) {
-        EditText input = new EditText(this);
-        input.setText(bookmark.getLabel());
-        input.setHint(getString(R.string.bookmark_label));
+        boolean dark = isDarkUi();
 
-        new AlertDialog.Builder(this)
-                .setTitle(getString(R.string.edit_bookmark))
-                .setView(input)
-                .setPositiveButton(getString(R.string.save), (d, w) -> {
-                    bookmark.setLabel(input.getText().toString().trim());
-                    bookmarkManager.updateBookmark(bookmark);
-                    loadBookmarks();
-                })
-                .setNegativeButton(getString(R.string.cancel), null)
-                .show();
+        int baseBg = dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
+        int bg = blendColors(baseBg, dark ? Color.WHITE : Color.BLACK, dark ? 0.12f : 0.06f);
+        int fg = readableTextColorForBackground(bg);
+        int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(75, 75, 75);
+        int border = blendColors(bg, fg, 0.48f);
+        int panel = blendColors(bg, fg, dark ? 0.12f : 0.06f);
+
+        LinearLayout dialogPanel = new LinearLayout(this);
+        dialogPanel.setOrientation(LinearLayout.VERTICAL);
+        dialogPanel.setBackgroundColor(Color.TRANSPARENT);
+
+        dialogPanel.addView(makeBookmarkDialogTitle(getString(R.string.edit_bookmark_memo), fg),
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(Color.TRANSPARENT);
+        box.setPadding(dpToPx(22), dpToPx(12), dpToPx(22), dpToPx(10));
+
+        TextView message = new TextView(this);
+        message.setText(bookmark.getFileName() + "\n\n" + bookmark.getDisplayText());
+        message.setTextColor(sub);
+        message.setTextSize(13f);
+        message.setLineSpacing(0f, 1.15f);
+        message.setPadding(0, 0, 0, dpToPx(10));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setText(bookmark.getLabel());
+        input.setHint(getString(R.string.optional_memo));
+        input.setSelectAllOnFocus(true);
+        input.setTextColor(fg);
+        input.setHintTextColor(sub);
+        input.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+        GradientDrawable inputBg = new GradientDrawable();
+        inputBg.setColor(panel);
+        inputBg.setCornerRadius(dpToPx(12));
+        inputBg.setStroke(Math.max(1, dpToPx(1)), border);
+        input.setBackground(inputBg);
+        box.addView(input, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(52)));
+        dialogPanel.addView(box, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actions = makeBookmarkDialogActionRow(bg, fg);
+
+        TextView cancel = makeBookmarkDialogActionText(getString(R.string.cancel), sub, Gravity.CENTER);
+        TextView clear = makeBookmarkDialogActionText(getString(R.string.clear_memo), sub, Gravity.CENTER);
+        TextView save = makeBookmarkDialogActionText(getString(R.string.save), fg, Gravity.CENTER);
+        actions.addView(cancel, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        actions.addView(clear, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        actions.addView(save, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        dialogPanel.addView(actions, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        android.app.Dialog dialog = createBookmarkDialog(dialogPanel, bg);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        clear.setOnClickListener(v -> {
+            bookmark.setLabel("");
+            bookmarkManager.updateBookmark(bookmark);
+            loadBookmarks();
+            dialog.dismiss();
+        });
+        save.setOnClickListener(v -> {
+            bookmark.setLabel(input.getText().toString().trim());
+            bookmarkManager.updateBookmark(bookmark);
+            loadBookmarks();
+            dialog.dismiss();
+        });
+        dialog.show();
     }
 
     private void openBookmarkTarget(@NonNull Bookmark bookmark) {
         String path = bookmark.getFilePath();
         if (path == null || path.trim().isEmpty()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.file_not_found_prefix) + "(missing path)", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        File target = new File(path);
+        File target = new File(path.trim());
         if (!target.exists()) {
             Toast.makeText(this, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_SHORT).show();
             return;
         }
 
         Intent intent;
-        String lowerName = target.getName().toLowerCase(java.util.Locale.ROOT);
-        if (lowerName.endsWith(".pdf")) {
+        String targetPath = target.getAbsolutePath();
+        String name = target.getName();
+        if (FileUtils.isPdfFile(name)) {
             intent = new Intent(this, PdfReaderActivity.class);
-            intent.putExtra(PdfReaderActivity.EXTRA_FILE_PATH, target.getAbsolutePath());
-        } else if (lowerName.endsWith(".epub") || lowerName.endsWith(".doc") || lowerName.endsWith(".docx")) {
+            intent.putExtra(PdfReaderActivity.EXTRA_FILE_PATH, targetPath);
+            intent.putExtra(PdfReaderActivity.EXTRA_JUMP_TO_PAGE, bookmark.getCharPosition());
+        } else if (FileUtils.isEpubFile(name) || FileUtils.isWordFile(name)) {
             intent = new Intent(this, DocumentPageActivity.class);
-            intent.putExtra(DocumentPageActivity.EXTRA_FILE_PATH, target.getAbsolutePath());
+            intent.putExtra(DocumentPageActivity.EXTRA_FILE_PATH, targetPath);
+            intent.putExtra(DocumentPageActivity.EXTRA_JUMP_TO_PAGE, bookmark.getCharPosition());
         } else {
             intent = new Intent(this, ReaderActivity.class);
-            intent.putExtra(ReaderActivity.EXTRA_FILE_PATH, target.getAbsolutePath());
+            intent.putExtra(ReaderActivity.EXTRA_FILE_PATH, targetPath);
+            intent.putExtra(ReaderActivity.EXTRA_JUMP_TO_POSITION, bookmark.getCharPosition());
+            intent.putExtra(ReaderActivity.EXTRA_JUMP_DISPLAY_PAGE, bookmark.getPageNumber());
+            intent.putExtra(ReaderActivity.EXTRA_JUMP_TOTAL_PAGES, bookmark.getTotalPages());
         }
-
-        intent.putExtra(ReaderActivity.EXTRA_JUMP_TO_POSITION, bookmark.getCharPosition());
-        intent.putExtra(ReaderActivity.EXTRA_JUMP_DISPLAY_PAGE, bookmark.getPageNumber());
-        intent.putExtra(ReaderActivity.EXTRA_JUMP_TOTAL_PAGES, bookmark.getTotalPages());
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);
     }
+
 
 
     @Override

@@ -1,12 +1,9 @@
 package com.simpletext.reader.util;
 
 import android.content.Context;
-import android.util.Log;
-
 import com.simpletext.reader.model.Theme;
 
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -23,7 +20,6 @@ import java.util.List;
  * Manages reading themes (built-in + custom).
  */
 public class ThemeManager {
-    private static final String TAG = "ThemeManager";
     private static final String THEMES_FILE = "custom_themes.json";
 
     private static ThemeManager instance;
@@ -45,7 +41,23 @@ public class ThemeManager {
         return instance;
     }
 
-    public List<Theme> getAllThemes() {
+    /**
+     * Re-read theme state that can be changed by another Activity before a viewer
+     * resumes. This prevents viewer popups from using a stale cached theme after
+     * returning from Settings or the theme editor.
+     */
+    public synchronized void reloadFromStorage() {
+        loadCustomThemes();
+        syncActiveThemeIdFromPrefs();
+    }
+
+    private void syncActiveThemeIdFromPrefs() {
+        activeThemeId = PrefsManager.getInstance(context)
+                .getPrefs().getString("active_theme_id", "dark");
+    }
+
+    public synchronized List<Theme> getAllThemes() {
+        syncActiveThemeIdFromPrefs();
         List<Theme> all = new ArrayList<>();
         for (Theme t : Theme.BUILT_IN_THEMES) {
             all.add(t);
@@ -54,7 +66,8 @@ public class ThemeManager {
         return all;
     }
 
-    public Theme getActiveTheme() {
+    public synchronized Theme getActiveTheme() {
+        syncActiveThemeIdFromPrefs();
         for (Theme t : Theme.BUILT_IN_THEMES) {
             if (t.getId().equals(activeThemeId)) return t;
         }
@@ -64,18 +77,18 @@ public class ThemeManager {
         return Theme.LIGHT;
     }
 
-    public void setActiveTheme(String themeId) {
+    public synchronized void setActiveTheme(String themeId) {
         this.activeThemeId = themeId;
         PrefsManager.getInstance(context).getPrefs().edit()
-                .putString("active_theme_id", themeId).apply();
+                .putString("active_theme_id", themeId).commit();
     }
 
-    public void addCustomTheme(Theme theme) {
+    public synchronized void addCustomTheme(Theme theme) {
         customThemes.add(theme);
         saveCustomThemes();
     }
 
-    public void updateCustomTheme(Theme theme) {
+    public synchronized void updateCustomTheme(Theme theme) {
         for (int i = 0; i < customThemes.size(); i++) {
             if (customThemes.get(i).getId().equals(theme.getId())) {
                 customThemes.set(i, theme);
@@ -85,7 +98,7 @@ public class ThemeManager {
         }
     }
 
-    public void deleteCustomTheme(String themeId) {
+    public synchronized void deleteCustomTheme(String themeId) {
         customThemes.removeIf(t -> t.getId().equals(themeId));
         if (activeThemeId.equals(themeId)) {
             setActiveTheme("light");
@@ -112,7 +125,7 @@ public class ThemeManager {
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "Failed to load custom themes", e);
+            // Do not write user file paths or local document/font names to release Logcat.
         }
     }
 
@@ -131,7 +144,7 @@ public class ThemeManager {
                 writer.write(root.toString(2));
             }
         } catch (Exception e) {
-            Log.e(TAG, "Failed to save custom themes", e);
+            // Do not write user file paths or local document/font names to release Logcat.
         }
     }
 }

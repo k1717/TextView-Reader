@@ -2,6 +2,12 @@ package com.simpletext.reader;
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Canvas;
+import android.graphics.ColorFilter;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -237,6 +243,7 @@ public class DocumentPageActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        ThemeManager.getInstance(this).reloadFromStorage();
         if (webView != null) {
             webView.onResume();
             webView.resumeTimers();
@@ -681,6 +688,8 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
     private void showMoreDialog() {
+        ThemeManager.getInstance(this).reloadFromStorage();
+        resolveReaderThemeColors();
         final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
         LinearLayout box = makeDialogBox();
         box.addView(makeDialogTitle(getString(R.string.more)));
@@ -795,11 +804,9 @@ public class DocumentPageActivity extends AppCompatActivity {
         String currentFont = currentDocumentFontSelection();
         for (ReadingFontOption option : fontOptions) {
             String label = getReadingFontLabel(option);
-            if (option.value.equals(currentFont)) {
-                label = "✓ " + label;
-            }
+            boolean selected = option.value.equals(currentFont);
 
-            TextView row = makeDocumentFontActionRow(label, fg);
+            TextView row = makeDocumentFontActionRow(label, fg, selected);
             row.setOnClickListener(v -> {
                 dialog.dismiss();
                 setDocumentFontSelection(option.value);
@@ -924,11 +931,9 @@ public class DocumentPageActivity extends AppCompatActivity {
 
                 String value = normalizeReadingFontValue(fontName);
                 String label = fontName;
-                if (value.equals(currentFont)) {
-                    label = "✓ " + label;
-                }
+                boolean selected = value.equals(currentFont);
 
-                TextView row = makeDocumentFontActionRow(label, fg);
+                TextView row = makeDocumentFontActionRow(label, fg, selected);
                 row.setOnClickListener(v -> {
                     dialog.dismiss();
                     setDocumentFontSelection(value);
@@ -986,13 +991,9 @@ public class DocumentPageActivity extends AppCompatActivity {
     private Drawable fontDialogHeaderBackground(int bgColor) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(bgColor);
-        float r = dpToPx(16);
-        drawable.setCornerRadii(new float[]{
-                r, r,
-                r, r,
-                0, 0,
-                0, 0
-        });
+        // The outer font-dialog frame owns the rounded corners/border. Making
+        // the header rectangular prevents the visible double-border/blended edge.
+        drawable.setCornerRadius(0f);
         return drawable;
     }
 
@@ -1080,15 +1081,34 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
     private TextView makeDocumentFontActionRow(String text, int fgColor) {
+        return makeDocumentFontActionRow(text, fgColor, false);
+    }
+
+    private TextView makeDocumentFontActionRow(String text, int fgColor, boolean selected) {
         TextView row = new TextView(this);
         row.setText(text);
         row.setTextColor(fgColor);
         row.setTextSize(16f);
+        row.setTypeface(selected ? android.graphics.Typeface.DEFAULT_BOLD : android.graphics.Typeface.DEFAULT);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+        // Keep the rounded row background but remove the radio/circle icon.
+        // This matches the intended TXT/EPUB/Word font picker style.
+        row.setPadding(dpToPx(18), 0, dpToPx(18), 0);
+        row.setCompoundDrawables(null, null, null, null);
+        row.setCompoundDrawablePadding(0);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(dialogPanel());
+        int panel = dialogPanel();
+        boolean darkPanel = isDarkColor(panel);
+        int normalFill = blendColors(panel, fgColor, darkPanel ? 0.055f : 0.035f);
+        int selectedFill = blendColors(panel, fgColor, darkPanel ? 0.120f : 0.075f);
+        int normalStroke = blendColors(panel, fgColor, darkPanel ? 0.130f : 0.100f);
+        int selectedStroke = blendColors(panel, fgColor, darkPanel ? 0.420f : 0.360f);
+
+        // Keep every font row as a rounded card. Selection is indicated only by
+        // stronger text weight and outline; no radio/circle icon is used.
+        bg.setColor(selected ? selectedFill : normalFill);
         bg.setCornerRadius(dpToPx(10));
+        bg.setStroke(Math.max(1, dpToPx(1)), selected ? selectedStroke : normalStroke);
         row.setBackground(bg);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1101,15 +1121,9 @@ public class DocumentPageActivity extends AppCompatActivity {
     private GradientDrawable positionedActionPanelBackground(int fill, int line) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(fill);
-        // Keep the rounded lower panel fill, but do not draw a stroke around it.
-        // A full stroke creates the unwanted bottom-edge barrier on the font dialogs.
-        float r = dpToPx(16);
-        drawable.setCornerRadii(new float[]{
-                0, 0,
-                0, 0,
-                r, r,
-                r, r
-        });
+        // Let the outer rounded frame clip the bottom corners. This removes the
+        // extra color-blend strip between the border and the bottom action row.
+        drawable.setCornerRadius(0f);
         return drawable;
     }
 
@@ -1122,15 +1136,96 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
     private int dialogActionPanelFillColor(int bgColor) {
-        return dialogPanel();
+        // Keep the bottom action panel the same color as the main font dialog.
+        // A separate panel color created a visible blended strip near the bottom border.
+        return bgColor;
     }
 
     private int dialogActionPanelLineColor(int bgColor) {
         return readerLine;
     }
 
+    private Drawable fontDialogOuterBackground(int bgColor) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(bgColor);
+        drawable.setCornerRadius(dpToPx(16));
+        return drawable;
+    }
+
+    private Drawable fontDialogOuterBorderOverlay(int bgColor) {
+        final int borderColor = dialogActionPanelLineColor(bgColor);
+        final float strokeWidth = Math.max(1f, dpToPx(1));
+        final float radius = dpToPx(16);
+        return new Drawable() {
+            private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            private final RectF rect = new RectF();
+
+            {
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(strokeWidth);
+                paint.setColor(borderColor);
+            }
+
+            @Override
+            public void draw(Canvas canvas) {
+                Rect bounds = getBounds();
+                float half = strokeWidth / 2f;
+                rect.set(bounds.left + half, bounds.top + half,
+                        bounds.right - half, bounds.bottom - half);
+                canvas.drawRoundRect(rect, Math.max(0f, radius - half),
+                        Math.max(0f, radius - half), paint);
+            }
+
+            @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); }
+            @Override public void setColorFilter(ColorFilter colorFilter) { paint.setColorFilter(colorFilter); }
+            @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+        };
+    }
+
     private android.app.Dialog createDocumentFontDialog(@NonNull View content, int maxWidthDp) {
-        return createStablePositionedDialog(content, 88, false, false);
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        dialog.setCanceledOnTouchOutside(true);
+
+        final int bg = dialogBg();
+
+        FrameLayout outerFrame = new FrameLayout(this);
+        outerFrame.setBackground(fontDialogOuterBackground(bg));
+        outerFrame.setForeground(fontDialogOuterBorderOverlay(bg));
+        outerFrame.setClipChildren(true);
+        outerFrame.setClipToPadding(true);
+        outerFrame.setClipToOutline(true);
+        outerFrame.setPadding(0, 0, 0, 0);
+
+        content.setBackgroundColor(Color.TRANSPARENT);
+        if (content instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) content;
+            group.setClipChildren(true);
+            group.setClipToPadding(true);
+        }
+
+        outerFrame.addView(content, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT));
+
+        dialog.setContentView(outerFrame);
+
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
+            lp.copyFrom(window.getAttributes());
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            int cappedWidth = Math.min(Math.round(screenWidth * 0.85f), dpToPx(maxWidthDp));
+            lp.width = Math.max(dpToPx(220), cappedWidth);
+            lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
+            lp.y = dpToPx(88);
+            lp.dimAmount = 0.16f;
+            window.setAttributes(lp);
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+        return dialog;
     }
 
     private void positionFontDialogForThumbReach(@NonNull androidx.appcompat.app.AlertDialog dialog, int maxWidthDp) {
@@ -2201,6 +2296,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         title.setTextColor(fg);
         title.setTextSize(22f);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setGravity(android.view.Gravity.CENTER);
         title.setPadding(0, 0, 0, dpToPx(12));
         box.addView(title, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -2209,6 +2305,9 @@ public class DocumentPageActivity extends AppCompatActivity {
         TextView currentInfo = new TextView(this);
         currentInfo.setTextColor(blendColors(bg, fg, 0.76f));
         currentInfo.setTextSize(12f);
+        currentInfo.setGravity(android.view.Gravity.CENTER);
+        currentInfo.setSingleLine(false);
+        currentInfo.setLineSpacing(0f, 1.08f);
         currentInfo.setPadding(0, 0, 0, dpToPx(10));
         box.addView(currentInfo, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -2230,9 +2329,22 @@ public class DocumentPageActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
+        TextView hint = new TextView(this);
+        hint.setText(getString(R.string.bookmark_folder_hint));
+        hint.setTextColor(blendColors(bg, fg, 0.76f));
+        hint.setTextSize(12f);
+        hint.setGravity(android.view.Gravity.CENTER);
+        hint.setSingleLine(false);
+        hint.setLineSpacing(0f, 1.08f);
+        hint.setPadding(0, dpToPx(8), 0, dpToPx(6));
+        box.addView(hint, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
         RecyclerView rv = new RecyclerView(this);
         rv.setLayoutManager(new LinearLayoutManager(this));
         rv.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        rv.setItemAnimator(null);
         rv.setBackgroundColor(Color.TRANSPARENT);
         rv.setPadding(0, dpToPx(8), 0, 0);
         rv.setClipToPadding(false);
@@ -2264,8 +2376,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this).create();
-        dialog.setView(box, 0, 0, 0, 0);
+        android.app.Dialog dialog = createStablePositionedDialog(box, 74, false, true);
 
         final Runnable[] refreshRef = new Runnable[1];
         refreshRef[0] = () -> {
@@ -2304,70 +2415,134 @@ public class DocumentPageActivity extends AppCompatActivity {
             }
         });
 
-        styleDialogWindow(dialog);
-        positionBookmarkDialogForThumbReach(dialog);
         dialog.show();
         refreshRef[0].run();
     }
 
     private void navigateToBookmark(@NonNull Bookmark b) {
-        File target = new File(b.getFilePath());
-        if (!target.exists()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + b.getFilePath(), Toast.LENGTH_LONG).show();
+        String path = b.getFilePath();
+        if (path == null || path.trim().isEmpty()) {
+            Toast.makeText(this, getString(R.string.file_not_found_prefix) + "(missing path)", Toast.LENGTH_LONG).show();
             return;
         }
-        if (b.getFilePath().equals(filePath)) {
+
+        File target = new File(path.trim());
+        if (!target.exists()) {
+            Toast.makeText(this, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (path.equals(filePath) || target.getAbsolutePath().equals(filePath)) {
             showPage(b.getCharPosition(), Integer.compare(b.getCharPosition(), currentPage));
             return;
         }
         Intent intent;
+        String targetPath = target.getAbsolutePath();
         if (FileUtils.isPdfFile(target.getName())) {
             intent = new Intent(this, PdfReaderActivity.class);
-            intent.putExtra(PdfReaderActivity.EXTRA_FILE_PATH, b.getFilePath());
+            intent.putExtra(PdfReaderActivity.EXTRA_FILE_PATH, targetPath);
             intent.putExtra(PdfReaderActivity.EXTRA_JUMP_TO_PAGE, b.getCharPosition());
         } else if (FileUtils.isEpubFile(target.getName()) || FileUtils.isWordFile(target.getName())) {
             intent = new Intent(this, DocumentPageActivity.class);
-            intent.putExtra(DocumentPageActivity.EXTRA_FILE_PATH, b.getFilePath());
+            intent.putExtra(DocumentPageActivity.EXTRA_FILE_PATH, targetPath);
             intent.putExtra(DocumentPageActivity.EXTRA_JUMP_TO_PAGE, b.getCharPosition());
         } else {
             intent = new Intent(this, ReaderActivity.class);
-            intent.putExtra(ReaderActivity.EXTRA_FILE_PATH, b.getFilePath());
+            intent.putExtra(ReaderActivity.EXTRA_FILE_PATH, targetPath);
             intent.putExtra(ReaderActivity.EXTRA_JUMP_TO_POSITION, b.getCharPosition());
+            intent.putExtra(ReaderActivity.EXTRA_JUMP_DISPLAY_PAGE, b.getPageNumber());
+            intent.putExtra(ReaderActivity.EXTRA_JUMP_TOTAL_PAGES, b.getTotalPages());
         }
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);
     }
 
     private void showBookmarkDeleteConfirm(@NonNull Bookmark bookmark, @NonNull Runnable afterDelete) {
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle(getString(R.string.delete_bookmark))
-                .setMessage(bookmark.getFileName() + "\n\n" + bookmark.getDisplayText())
-                .setPositiveButton(getString(R.string.delete), (d, w) -> {
-                    bookmarkManager.deleteBookmark(bookmark.getId());
-                    afterDelete.run();
-                })
-                .setNegativeButton(getString(R.string.cancel), null)
-                .show();
+        LinearLayout box = makeDialogBox();
+        box.addView(makeDialogTitle(getString(R.string.delete_bookmark)));
+
+        TextView message = new TextView(this);
+        message.setText(bookmark.getFileName() + "\n\n" + bookmark.getDisplayText());
+        message.setTextColor(dialogSub());
+        message.setTextSize(14f);
+        message.setLineSpacing(0f, 1.15f);
+        message.setPadding(0, 0, 0, dpToPx(12));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
+        addDialogBottomActions(box, getString(R.string.delete), () -> {
+            bookmarkManager.deleteBookmark(bookmark.getId());
+            afterDelete.run();
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+        });
+        dialogRef[0] = createStablePositionedDialog(box, 74, false, false);
+        dialogRef[0].show();
     }
 
     private void showBookmarkMemoEditDialog(@NonNull Bookmark bookmark, @NonNull Runnable afterSave) {
-        EditText input = new EditText(this);
+        LinearLayout box = makeDialogBox();
+        box.addView(makeDialogTitle(getString(R.string.edit_bookmark_memo)));
+
+        EditText input = makeDialogInput(getString(R.string.optional_memo));
         input.setText(bookmark.getLabel());
-        input.setHint(getString(R.string.optional_memo));
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle(getString(R.string.edit_bookmark_memo))
-                .setView(input)
-                .setPositiveButton(getString(R.string.save), (d, w) -> {
-                    bookmark.setLabel(input.getText().toString().trim());
-                    bookmarkManager.updateBookmark(bookmark);
-                    afterSave.run();
-                })
-                .setNeutralButton(getString(R.string.clear), (d, w) -> {
-                    bookmark.setLabel("");
-                    bookmarkManager.updateBookmark(bookmark);
-                    afterSave.run();
-                })
-                .setNegativeButton(getString(R.string.cancel), null)
-                .show();
+        input.setSelectAllOnFocus(true);
+        box.addView(input, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(52)));
+
+        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setTag("dialog_actions");
+        actions.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.END);
+        actions.setPadding(0, dpToPx(8), 0, 0);
+
+        TextView cancel = new TextView(this);
+        cancel.setText(getString(R.string.cancel));
+        cancel.setTextColor(dialogSub());
+        cancel.setTextSize(16f);
+        cancel.setGravity(android.view.Gravity.CENTER);
+        cancel.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+
+        TextView clear = new TextView(this);
+        clear.setText(getString(R.string.clear_memo));
+        clear.setTextColor(dialogSub());
+        clear.setTextSize(16f);
+        clear.setGravity(android.view.Gravity.CENTER);
+        clear.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+
+        TextView save = new TextView(this);
+        save.setText(getString(R.string.save));
+        save.setTextColor(dialogFg());
+        save.setTextSize(16f);
+        save.setGravity(android.view.Gravity.CENTER);
+        save.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        save.setPadding(dpToPx(18), 0, dpToPx(18), 0);
+
+        actions.addView(cancel, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        actions.addView(clear, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        actions.addView(save, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        box.addView(actions, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        cancel.setOnClickListener(v -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+        });
+        clear.setOnClickListener(v -> {
+            bookmark.setLabel("");
+            bookmarkManager.updateBookmark(bookmark);
+            afterSave.run();
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+        });
+        save.setOnClickListener(v -> {
+            bookmark.setLabel(input.getText().toString().trim());
+            bookmarkManager.updateBookmark(bookmark);
+            afterSave.run();
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+        });
+
+        dialogRef[0] = createStablePositionedDialog(box, 74, true, false);
+        dialogRef[0].show();
     }
 
     private void saveReadingState() {

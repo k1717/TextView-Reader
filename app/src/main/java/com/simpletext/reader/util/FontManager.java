@@ -3,8 +3,6 @@ package com.simpletext.reader.util;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.os.Environment;
-import android.util.Log;
-
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,7 +16,6 @@ import java.util.concurrent.Executors;
  * Scans for and manages fonts available on the device.
  */
 public class FontManager {
-    private static final String TAG = "FontManager";
     public static final String SYSTEM_FAMILY_PREFIX = "system_family:";
     private static FontManager instance;
 
@@ -126,7 +123,7 @@ public class FontManager {
         }
 
         scanned = true;
-        Log.i(TAG, "Font scan complete: " + fontPaths.size() + " fonts found");
+            // Do not write user file paths or local document/font names to release Logcat.
     }
 
     private void scanDirectory(File dir) {
@@ -262,7 +259,7 @@ public class FontManager {
                     fontCache.put(path, tf);
                     return tf;
                 } catch (Exception e) {
-                    Log.e(TAG, "Failed to load font: " + path, e);
+            // Do not write user file paths or local document/font names to release Logcat.
                     return Typeface.DEFAULT;
                 }
         }
@@ -320,7 +317,7 @@ public class FontManager {
                 return displayName;
             }
         } catch (Exception e) {
-            Log.e(TAG, "Failed to import font", e);
+            // Do not write user file paths or local document/font names to release Logcat.
         }
         return null;
     }

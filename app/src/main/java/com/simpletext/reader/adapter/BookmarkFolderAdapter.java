@@ -305,15 +305,15 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
         if (viewType == TYPE_SECTION) {
             TextView title = new TextView(parent.getContext());
             float d = parent.getResources().getDisplayMetrics().density;
-            int padH = Math.round(12 * d);
-            int padV = Math.round(2 * d);
+            int padH = Math.round(14 * d);
+            int padV = Math.round(4 * d);
             title.setPadding(padH, padV, padH, padV);
             title.setTextSize(12f);
             title.setAllCaps(false);
             RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
                     RecyclerView.LayoutParams.WRAP_CONTENT,
-                    Math.round(24 * d));
-            lp.setMargins(0, Math.round(2 * d), 0, Math.round(3 * d));
+                    RecyclerView.LayoutParams.WRAP_CONTENT);
+            lp.setMargins(Math.round(2 * d), Math.round(8 * d), Math.round(2 * d), Math.round(5 * d));
             title.setLayoutParams(lp);
             return new SectionHolder(title);
         }

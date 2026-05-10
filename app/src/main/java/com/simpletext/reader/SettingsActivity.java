@@ -94,6 +94,9 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (themeManager != null) {
+            themeManager.reloadFromStorage();
+        }
         if (prefs != null && themeManager != null) {
             applySettingsReadableTheme();
             renderReadingThemeRows();

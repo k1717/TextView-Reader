@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.os.LocaleListCompat;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -171,6 +172,10 @@ public class PrefsManager {
         String clean = path.trim();
         if (clean.isEmpty()) return;
 
+        // If the user cleared this folder from the recent-folder list before,
+        // opening it again should make it eligible to appear again.
+        removeHiddenRecentFolder(clean);
+
         LinkedHashSet<String> ordered = new LinkedHashSet<>();
         ordered.add(clean);
         for (String old : getRecentFolders(32)) {
@@ -178,14 +183,114 @@ public class PrefsManager {
             if (ordered.size() >= 20) break;
         }
 
+        saveRecentFolders(ordered, 20);
+    }
+
+    public void removeRecentFolder(String path) {
+        if (path == null) return;
+        String clean = path.trim();
+        if (clean.isEmpty()) return;
+
+        LinkedHashSet<String> ordered = new LinkedHashSet<>();
+        for (String old : getRecentFolders(64)) {
+            if (old == null) continue;
+            String item = old.trim();
+            if (item.isEmpty() || item.equals(clean)) continue;
+            ordered.add(item);
+        }
+
+        SharedPreferences.Editor editor = prefs.edit();
+        putJoinedPaths(editor, "recent_folders", ordered, 20);
+        String last = getLastDirectory();
+        if (last != null && last.trim().equals(clean)) editor.remove("last_directory");
+        editor.apply();
+        hideRecentFolder(clean);
+    }
+
+    public void clearRecentFolders(Collection<String> pathsToHide) {
+        LinkedHashSet<String> hidden = getHiddenRecentFolderSet();
+        if (pathsToHide != null) {
+            for (String path : pathsToHide) {
+                if (path == null) continue;
+                String clean = path.trim();
+                if (!clean.isEmpty()) hidden.add(clean);
+            }
+        }
+
+        SharedPreferences.Editor editor = prefs.edit()
+                .remove("recent_folders")
+                .remove("last_directory");
+        putJoinedPaths(editor, "hidden_recent_folders", hidden, 256);
+        editor.apply();
+    }
+
+    public boolean isRecentFolderHidden(String path) {
+        if (path == null) return false;
+        String clean = path.trim();
+        if (clean.isEmpty()) return false;
+        return getHiddenRecentFolderSet().contains(clean);
+    }
+
+    private void hideRecentFolder(String path) {
+        if (path == null) return;
+        String clean = path.trim();
+        if (clean.isEmpty()) return;
+        LinkedHashSet<String> hidden = getHiddenRecentFolderSet();
+        hidden.add(clean);
+        SharedPreferences.Editor editor = prefs.edit();
+        putJoinedPaths(editor, "hidden_recent_folders", hidden, 256);
+        editor.apply();
+    }
+
+    private void removeHiddenRecentFolder(String path) {
+        if (path == null) return;
+        String clean = path.trim();
+        if (clean.isEmpty()) return;
+        LinkedHashSet<String> hidden = getHiddenRecentFolderSet();
+        if (!hidden.remove(clean)) return;
+        SharedPreferences.Editor editor = prefs.edit();
+        putJoinedPaths(editor, "hidden_recent_folders", hidden, 256);
+        editor.apply();
+    }
+
+    private LinkedHashSet<String> getHiddenRecentFolderSet() {
+        return readPathSet("hidden_recent_folders", 256);
+    }
+
+    private void saveRecentFolders(LinkedHashSet<String> ordered, int limit) {
+        SharedPreferences.Editor editor = prefs.edit();
+        putJoinedPaths(editor, "recent_folders", ordered, limit);
+        editor.apply();
+    }
+
+    private LinkedHashSet<String> readPathSet(String key, int limit) {
+        String raw = prefs.getString(key, "");
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        if (raw == null || raw.isEmpty()) return result;
+        String[] parts = raw.split("\n");
+        for (String part : parts) {
+            if (part == null) continue;
+            String path = part.trim();
+            if (path.isEmpty()) continue;
+            result.add(path);
+            if (limit > 0 && result.size() >= limit) break;
+        }
+        return result;
+    }
+
+    private void putJoinedPaths(SharedPreferences.Editor editor, String key, Collection<String> paths, int limit) {
         StringBuilder sb = new StringBuilder();
         int count = 0;
-        for (String item : ordered) {
-            if (count++ > 0) sb.append('\n');
-            sb.append(item);
-            if (count >= 20) break;
+        if (paths != null) {
+            for (String item : paths) {
+                if (item == null || item.trim().isEmpty()) continue;
+                if (count++ > 0) sb.append('\n');
+                sb.append(item.trim());
+                if (limit > 0 && count >= limit) break;
+            }
         }
-        prefs.edit().putString("recent_folders", sb.toString()).apply();
+        if (sb.length() == 0) editor.remove(key);
+        else editor.putString(key, sb.toString());
     }
     public List<String> getFolderShortcuts(int limit) {
         String raw = prefs.getString("folder_shortcuts", "");
