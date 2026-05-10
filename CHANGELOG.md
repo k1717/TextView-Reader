@@ -2,15 +2,6 @@
 
 ## 2.0.4 - 2026-05-10
 
-### GitHub submission cleanup
-
-- Updated Android release metadata to `versionCode 204` and `versionName "2.0.4"`.
-- Rebuilt the public README around the current TXT/PDF/EPUB/Word reader behavior.
-- Added current GitHub patch notes in `PATCHNOTES.md` for release-page copy/paste.
-- Strengthened `.gitignore` for Android/Gradle generated files, local IDE state, machine-specific configuration, packaged outputs, signing files, and secret/config files.
-- Removed generated/private files from the release source package, including `.gradle/`, `.idea/`, root `build/`, `app/build/`, generated APKs, and `local.properties`.
-- Reduced release Logcat exposure by removing path/file-name-bearing internal error logs from bookmark, font, theme, and document utility code.
-
 ### Bookmark stability and UI polish
 
 - Main bookmark folders now default to collapsed/shrunk.
