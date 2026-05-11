@@ -1,40 +1,38 @@
-## TextView Reader 2.0.5
+## TextView Reader 2.0.6
 
-This release focuses on bookmark-window polish, TXT dialog/card styling, sort-popup stability, and persistent multi-font handling compared to 2.0.4.
+This release focuses on TXT viewer row/pagination correctness, title-overlay placement, themed loading windows, PDF/EPUB/Word toolbar folding, safe-area handling, and PDF zoom focus compared to 2.0.5.
 
-### Bookmark UI
+### TXT Viewer
 
-- Added long-press deletion for bookmark folders in TXT, PDF, EPUB, and Word bookmark windows.
-- Long-pressing a bookmark folder deletes all bookmarks inside that folder after confirmation.
-- Folder deletion does **not** delete the original document file.
-- Applied the app's rounded/bordered confirmation dialog style to bookmark-folder deletion.
-- Viewer bookmark dialogs now keep a stable list area height so adding the first bookmark does not resize the whole window.
-- Empty bookmark windows keep the middle area blank instead of collapsing and moving the Close button.
-- Reduced the gap between the bookmark title and bookmark status line in the TXT viewer.
-- Switched the order of bookmark hint and add-bookmark button so the hint appears before **Add current bookmark**.
+- Added a file-title overlay under the top page indicator when the 5-button TXT control selector is visible.
+- Kept the file title hidden in full viewer mode.
+- Matched the title color to the active viewer font color and increased the title size to **14sp**.
+- Reworked the title mask so it uses a stable first-row slot instead of following last-page scroll clamping.
+- Fixed page-boundary behavior so the next page no longer repeats the previous page's last line.
+- Fixed page-boundary behavior so page turns no longer skip a line between pages.
+- Fixed first-page row-grid alignment so page 1 aligns more closely with page 2 and later pages.
+- Fixed cases where the last page's upper text row could be slightly cut off.
 
-### TXT Dialog and Card Styling
+### Loading Windows
 
-- Updated TXT bookmark folder rows to better match the PDF/EPUB/Word rounded card tone.
-- Added slight spacing between bookmarks inside expanded folders.
-- Retuned TXT bookmark chips, folder cards, current-file cards, and bookmark rows to use a consistent theme-derived tone.
-- Updated the TXT **More** menu to use rounded card-style rows.
-- Applied matching rounded card tone to TXT **More** subsections, including Font-related windows.
-- Matched the TXT Font and Add Font window border width with the other stable reader dialogs.
-- Updated the **Add current bookmark** button tone and rounded-card styling across TXT, PDF, EPUB, and Word.
+- Updated TXT loading UI so the rotating loading window no longer appears as a hard black box.
+- Made TXT loading background, text, and spinner tint follow the active viewer theme.
+- Made PDF loading spinner background/tint blend with the active viewer theme.
+- Made EPUB/Word loading spinner background/tint blend with the active viewer theme.
 
-### Font Management
+### PDF / EPUB / Word Toolbar Folding
 
-- Added support for keeping multiple user-added fonts in the compact font picker.
-- Added fonts now remain visible after returning from the viewer and reopening the font picker.
-- Long-pressing an added font in the normal **Font** picker removes it from the compact picker list.
-- The **Add font / All system fonts** window does not remove fonts; it only adds fonts to the compact picker.
-- Removed fonts can be added again later from the system/all-font list.
-- If the currently selected added font is removed, the viewer falls back to the default font.
+- Added single-tap toolbar fold/return behavior for PDF, EPUB, and Word viewers.
+- Single-tapping the document/page area now hides or restores the top toolbar and bottom control bar.
+- Preserved existing double-tap behavior:
+  - PDF double-tap zoom.
+  - EPUB/Word double-tap reset/original-size behavior.
+- Added folded-mode safe-area padding so content is not blocked by punch-hole/status-bar areas or the 3-button navigation bar.
+- Added extra top/bottom folded-mode margin beyond the raw system insets for better readability; tuned to 6dp so it protects content without wasting too much screen space.
 
-### Popup and Dialog Stability
+### PDF Zoom
 
-- Stabilized the main Sort popup so it does not visibly shift after first appearing.
-- Reused the same bottom-positioned rounded dialog behavior used by other fixed windows.
-- Disabled unstable popup window animation paths that caused hard-landing or position movement.
+- Improved PDF pinch-zoom so it preserves the selected pinch/focal spot instead of drifting toward the upper-left corner.
+- Improved PDF More-menu Zoom In/Zoom Out/Reset behavior so zoom changes preserve the current viewport center.
+- Preserved existing double-tap zoom focus behavior.
 

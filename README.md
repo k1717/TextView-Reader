@@ -2,7 +2,7 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.0.5**
+Current version: **2.0.6**
 
 ## Quick UI map
 
@@ -24,14 +24,18 @@ Current version: **2.0.5**
 - Use **More > Font** to choose built-in, system-scanned, or imported fonts.
 - Long-press an added font in **Font** to remove it from the compact font list.
 - Page indicator alignment can be set to left, center, right, or hidden.
+- When the TXT control selector is open, the current file title appears under the top page indicator and hides again in full viewer mode.
+- TXT pagination uses line-boundary anchors to reduce duplicate/skipped lines and keep first/last page rows aligned.
 
 ### PDF reader
 
 - Supports horizontal page-slide mode and vertical continuous mode.
-- Pinch zoom is supported.
+- Pinch zoom is supported and preserves the selected focal spot.
 - In vertical continuous mode, zoomed pages can be horizontally panned.
 - PDF popups use the same compact dialog width style as the TXT reader.
 - Bookmarks remain wider so long bookmark/file information is easier to read.
+- Single-tap the page area to fold or restore the top toolbar and bottom controls.
+- Folded toolbar mode keeps 6dp extra safe-area padding around punch-hole/status-bar and navigation-bar regions.
 
 ### EPUB / Word reader
 
@@ -43,6 +47,8 @@ Current version: **2.0.5**
 - Multiple user-added fonts can be kept in the compact font picker.
 - Long-press an added font in **Font** to remove it from the compact font list.
 - Double-tap resets the document view to the default/original size.
+- Single-tap the page area to fold or restore the top toolbar and bottom controls.
+- Folded toolbar mode keeps 6dp extra safe-area padding around punch-hole/status-bar and navigation-bar regions.
 - Zoom controls were removed from the Word/EPUB **More** menu because they duplicated gesture behavior.
 
 ## Features
@@ -72,14 +78,16 @@ Current version: **2.0.5**
 - User-added font removal from the normal compact font picker by long-press.
 - Volume-key page movement.
 - Auto-resume reading position.
+- Theme-matched loading indicator instead of a hard black loading box.
 
 ### PDF reading
 
 - Android `PdfRenderer` based reading path.
 - Horizontal page-slide mode.
 - Vertical continuous mode.
-- Pinch zoom.
+- Pinch zoom that keeps the selected focal spot stable.
 - Horizontal panning for zoomed pages in vertical continuous mode.
+- Single-tap toolbar fold/return with folded-mode safe-area padding plus a 6dp extra buffer.
 - Faster horizontal pan response for zoomed vertical pages.
 - Improved continuous-mode blank-page recovery and render rebinding.
 - More stable popup/dialog sizing and positioning.
@@ -98,6 +106,7 @@ Current version: **2.0.5**
 - Multiple added fonts are preserved in the compact font picker.
 - Added fonts remain available after returning from the viewer.
 - Double-tap resets to the default/original size.
+- Single-tap toolbar fold/return with folded-mode safe-area padding plus a 6dp extra buffer.
 - Zoomed edge-swipe page turning requires a deliberate edge gesture instead of accidentally turning during the same pan.
 - Word/EPUB popup windows match the compact TXT reader width, except bookmark dialogs.
 
@@ -123,7 +132,7 @@ Current version: **2.0.5**
 - Theme state refreshes correctly when returning from Settings to a viewer popup.
 - Font selection shared across TXT, EPUB, and Word where applicable.
 - EPUB/Word can preserve file-declared default fonts.
-- Dialogs and popup windows are theme-matched and sized consistently across viewers.
+- Dialogs, popup windows, and loading indicators are theme-matched and sized consistently across viewers.
 - TXT bookmark, More, Font, and Add Font windows use rounded card-style styling aligned with PDF/EPUB/Word dialogs.
 
 ### Privacy

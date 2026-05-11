@@ -1,4 +1,4 @@
-# TextView Reader 2.0.5 GitHub Upload Notes
+# TextView Reader 2.0.6 GitHub Upload Notes
 
 # GitHub Upload Notes
 
@@ -75,7 +75,7 @@ captures/
 9. Commit with a message such as:
 
 ```text
-Update TextView Reader 2.0.5 source
+Update TextView Reader 2.0.6 source
 ```
 
 ## Important limitation
@@ -107,17 +107,18 @@ Before uploading, confirm the package does not contain:
 - signing keys;
 - secret/environment files.
 
-## Release notes summary for v2.0.5
+## Release notes summary for v2.0.6
 
 Use this if GitHub asks for a short release description:
 
 ```markdown
-## TextView Reader 2.0.5 — Functional changes from 2.0.1
+## TextView Reader 2.0.6
 
-- Increased huge TXT preview-only threshold from 20 MB to 32 MB.
-- Added user folder shortcuts: long-press a folder to add a drawer shortcut; long-press an added shortcut to remove it.
-- Added PDF horizontal slide / vertical continuous reading-mode toggle.
-- Added TXT page indicator alignment setting: left, center, right, or hidden.
-- Refined file search/type-filter behavior and drawer navigation responsiveness.
-- Strengthened viewer lifecycle handling to reduce stacked viewer instances.
+- Fixed TXT page-boundary behavior so pages do not duplicate or skip lines.
+- Improved TXT first-page and last-page row alignment.
+- Added TXT file-title overlay under the top page indicator when controls are open.
+- Updated TXT/PDF/EPUB/Word loading indicators to blend with the active viewer theme.
+- Added single-tap toolbar fold/return for PDF, EPUB, and Word viewers.
+- Added folded-mode safe-area padding for punch-hole/status-bar and 3-button navigation-bar areas.
+- Improved PDF zoom focus so pinch and menu zoom preserve the selected/visible spot.
 ```
