@@ -1,3 +1,5 @@
+# TextView Reader 2.0.5 GitHub Upload Notes
+
 # GitHub Upload Notes
 
 Use this checklist before replacing files on GitHub through the web interface.
@@ -14,7 +16,6 @@ gradle/
 .gitignore
 README.md
 CHANGELOG.md
-PATCHNOTES.md
 LICENSE
 PRIVACY.md
 CONTRIBUTING.md
@@ -48,7 +49,6 @@ local.properties
 *.apk
 *.aab
 *.apks
-*.idsig
 *.jks
 *.keystore
 *.pem
@@ -57,7 +57,6 @@ local.properties
 .env.*
 secrets.properties
 google-services.json
-firebase*.json
 captures/
 *.hprof
 *.log
@@ -76,7 +75,7 @@ captures/
 9. Commit with a message such as:
 
 ```text
-Update TextView Reader 2.0.4 source
+Update TextView Reader 2.0.5 source
 ```
 
 ## Important limitation
@@ -96,18 +95,6 @@ ic_launcher-playstore.png
 
 Keep the correct copies under `app/src/main/`.
 
-Also delete these from GitHub manually if they already exist in the repository from an earlier upload:
-
-```text
-.gradle/
-.idea/
-build/
-app/build/
-local.properties
-*.apk
-*.aab
-```
-
 ## Privacy check before upload
 
 Before uploading, confirm the package does not contain:
@@ -118,33 +105,19 @@ Before uploading, confirm the package does not contain:
 - generated APK/AAB files;
 - local SDK path files;
 - signing keys;
-- secret/environment files;
-- duplicate root-level Android source folders.
+- secret/environment files.
 
-A quick local check from the repository root:
-
-```bash
-find . -maxdepth 3 \
-  \( -path './.git' -o -path './gradle' -o -path './app/src' \) -prune -o \
-  \( -name '.gradle' -o -name '.idea' -o -name 'build' -o -name 'local.properties' -o -name '*.apk' -o -name '*.aab' -o -name '*.jks' -o -name '*.keystore' -o -name '.env' \) \
-  -print
-```
-
-Expected result for a clean public source package: no private/generated files except normal source/build-script folders that should remain.
-
-## Release notes summary for v2.0.4
+## Release notes summary for v2.0.5
 
 Use this if GitHub asks for a short release description:
 
 ```markdown
-## TextView Reader 2.0.4
+## TextView Reader 2.0.5 — Functional changes from 2.0.1
 
-- Prepared the repository for public GitHub submission by removing generated/private files from the source package.
-- Updated app metadata to versionCode 204 / versionName 2.0.4.
-- Updated README, CHANGELOG, PATCHNOTES, PRIVACY, and upload guidance.
-- Strengthened .gitignore for Android build outputs, IDE state, machine-local config, signing files, APK/AAB outputs, and secret/config files.
-- Main bookmark folders now default to collapsed, and bookmark edit dialogs use rounded bordered styling.
-- Added Cancel / Clear memo / Save to TXT, PDF, EPUB, and Word bookmark memo dialogs.
-- Fixed stale viewer-theme behavior after returning from Settings/theme editing, including PDF More dialogs.
-- Reduced Logcat exposure of user file paths and local file names.
+- Increased huge TXT preview-only threshold from 20 MB to 32 MB.
+- Added user folder shortcuts: long-press a folder to add a drawer shortcut; long-press an added shortcut to remove it.
+- Added PDF horizontal slide / vertical continuous reading-mode toggle.
+- Added TXT page indicator alignment setting: left, center, right, or hidden.
+- Refined file search/type-filter behavior and drawer navigation responsiveness.
+- Strengthened viewer lifecycle handling to reduce stacked viewer instances.
 ```

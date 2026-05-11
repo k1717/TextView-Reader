@@ -2,7 +2,7 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.0.4**
+Current version: **2.0.5**
 
 ## Quick UI map
 
@@ -20,7 +20,9 @@ Current version: **2.0.4**
 - Tap the reader area to toggle the overlay controls.
 - Use **Find** for text search.
 - Use **Go to Position** for percent/line jumps.
+- Use **Bookmarks** to add, move to, edit, or delete bookmarks.
 - Use **More > Font** to choose built-in, system-scanned, or imported fonts.
+- Long-press an added font in **Font** to remove it from the compact font list.
 - Page indicator alignment can be set to left, center, right, or hidden.
 
 ### PDF reader
@@ -30,7 +32,6 @@ Current version: **2.0.4**
 - In vertical continuous mode, zoomed pages can be horizontally panned.
 - PDF popups use the same compact dialog width style as the TXT reader.
 - Bookmarks remain wider so long bookmark/file information is easier to read.
-- Returning from Settings/theme editing refreshes the PDF More popup theme instead of keeping stale colors.
 
 ### EPUB / Word reader
 
@@ -39,6 +40,8 @@ Current version: **2.0.4**
 - **Find** searches within the current document and wraps across pages.
 - **More > Font** uses the same structure as the TXT font selector.
 - EPUB and Word files can use **Default font** first when the file declares its own font.
+- Multiple user-added fonts can be kept in the compact font picker.
+- Long-press an added font in **Font** to remove it from the compact font list.
 - Double-tap resets the document view to the default/original size.
 - Zoom controls were removed from the Word/EPUB **More** menu because they duplicated gesture behavior.
 
@@ -65,7 +68,8 @@ Current version: **2.0.4**
 - Cache cleanup does not delete bookmarks, history, reading position, folder shortcuts, or documents.
 - Text search with custom reader-dialog input styling.
 - Custom reader themes and brightness control.
-- Custom font import and system font scanning.
+- Custom font import, system font scanning, and multiple added-font persistence.
+- User-added font removal from the normal compact font picker by long-press.
 - Volume-key page movement.
 - Auto-resume reading position.
 
@@ -80,7 +84,6 @@ Current version: **2.0.4**
 - Improved continuous-mode blank-page recovery and render rebinding.
 - More stable popup/dialog sizing and positioning.
 - PDF slide-mode label refreshes while the More dialog is open.
-- PDF More dialog refreshes theme colors after returning from Settings or theme editing.
 - Bookmarks and file info.
 
 ### EPUB and Word reading
@@ -92,6 +95,8 @@ Current version: **2.0.4**
 - EPUB file-declared fonts can be used as **Default font**.
 - Word file-declared fonts can be used as **Default font** when detected from DOCX style/font metadata.
 - Imported/system fonts are served to WebView through the internal local font route instead of direct file access.
+- Multiple added fonts are preserved in the compact font picker.
+- Added fonts remain available after returning from the viewer.
 - Double-tap resets to the default/original size.
 - Zoomed edge-swipe page turning requires a deliberate edge gesture instead of accidentally turning during the same pan.
 - Word/EPUB popup windows match the compact TXT reader width, except bookmark dialogs.
@@ -102,7 +107,10 @@ Current version: **2.0.4**
 - Custom bookmark labels and excerpts.
 - Grouped bookmark list by file.
 - Bookmark folders default to collapsed on the main bookmark page.
-- Rounded, bordered bookmark edit dialogs with **Cancel**, **Clear memo**, and **Save** actions.
+- Viewer bookmark dialogs keep stable height to avoid first-bookmark bounce.
+- Long-press a bookmark folder to delete all bookmarks inside that folder.
+- Folder-delete confirmation uses the rounded/bordered dialog style.
+- Bookmark memo dialogs include **Cancel**, **Clear memo**, and **Save**.
 - Export/import support.
 - Reading-position persistence per file.
 - Bookmark cleanup and cache cleanup are separate.
@@ -112,10 +120,11 @@ Current version: **2.0.4**
 - Built-in reading themes.
 - Custom theme editor.
 - Light/dark/follow-system behavior.
+- Theme state refreshes correctly when returning from Settings to a viewer popup.
 - Font selection shared across TXT, EPUB, and Word where applicable.
 - EPUB/Word can preserve file-declared default fonts.
 - Dialogs and popup windows are theme-matched and sized consistently across viewers.
-- Viewer popups reload the current theme after returning from Settings/theme editing.
+- TXT bookmark, More, Font, and Add Font windows use rounded card-style styling aligned with PDF/EPUB/Word dialogs.
 
 ### Privacy
 
@@ -126,7 +135,6 @@ TextView Reader is intended as an offline local reader.
 - No account login.
 - No cloud sync backend.
 - No remote telemetry collection.
-- Public source packages exclude local IDE/build caches, generated APKs, signing files, and machine-specific configuration such as `local.properties`.
 
 See [`PRIVACY.md`](PRIVACY.md) for details.
 
@@ -193,4 +201,4 @@ Do not upload duplicate root-level Android folders such as `java/`, `res/`, or r
 
 ## Release notes
 
-See [`CHANGELOG.md`](CHANGELOG.md). For GitHub release text, see [`PATCHNOTES.md`](PATCHNOTES.md).
+See [`CHANGELOG.md`](CHANGELOG.md) and [`PATCHNOTES.md`](PATCHNOTES.md).

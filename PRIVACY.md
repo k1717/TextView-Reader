@@ -47,9 +47,3 @@ The optional PIN lock is an app-level convenience lock. It is not a substitute f
 ## Generated cache data
 
 Disposable TXT page/index cache bookkeeping is used only for generated cache data under app cache storage. Cache cleanup must not remove bookmarks, reading history, saved reading position, folder shortcuts, or user documents.
-
-## Public source package hygiene
-
-The public source package should not include local IDE/build state or machine-specific files. Excluded items include `.idea/`, `.gradle/`, root `build/`, `app/build/`, generated APK/AAB outputs, signing files, secret/config files, and `local.properties`.
-
-Release utility code avoids logging user file paths or local file names through Logcat where possible.

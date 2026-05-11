@@ -1,57 +1,37 @@
 # Changelog
 
-## 2.0.4 - 2026-05-10
+## 2.0.5 - 2026-05-10
 
-### Bookmark stability and UI polish
+### Bookmark UI
 
-- Main bookmark folders now default to collapsed/shrunk.
-- Folder expand/shrink behavior remains fast with unnecessary list animation disabled.
-- Bookmark edit memo dialogs use a more rounded custom bordered dialog style.
-- TXT, PDF, EPUB, and Word bookmark memo edit dialogs now provide **Cancel**, **Clear memo**, and **Save** actions.
-- Main bookmark delete/edit dialogs use the same stable custom dialog path to reduce first-open hard-edge or hard-landing glitches.
-- Bookmark opening now uses a shared navigation path with null/empty file-path protection.
+- Added long-press bookmark-folder deletion in TXT, PDF, EPUB, and Word bookmark windows.
+- Added rounded/bordered confirmation dialogs for bookmark-folder deletion.
+- Kept viewer bookmark dialog height stable so adding the first bookmark does not bounce or resize the window.
+- Kept empty bookmark dialogs at the same length, leaving the middle list area blank while keeping the Close button in place.
+- Reduced TXT bookmark title/status spacing.
+- Reordered viewer bookmark controls so the hint appears before the add-bookmark button.
 
-### Theme refresh and viewer popup fixes
+### Dialog and card styling
 
-- Viewers reload active theme state when returning from Settings or the theme editor.
-- TXT, PDF, EPUB, and Word More dialogs refresh theme colors before drawing.
-- PDF More now dismisses the old dialog before opening Settings or File Info, preventing stacked stale dialogs.
-- Active theme saving now uses synchronous preference commit to avoid immediate-return race conditions.
+- Retuned TXT bookmark cards to better match the tone used by PDF/EPUB/Word bookmark cards.
+- Added spacing between expanded bookmark rows.
+- Updated TXT More rows and subsections, including font windows, to use rounded card-style surfaces.
+- Matched TXT Font/Add Font outer border width with the other stable reader dialogs.
+- Retuned the Add Current Bookmark button style across TXT, PDF, EPUB, and Word.
+- Stabilized the main Sort popup to avoid visible position movement after opening.
 
-## 2.0.3 - 2026-05-10
+### Font management
 
-### EPUB / Word viewer
+- Added persistent multi-font support for user-added fonts.
+- Added fonts now remain available after returning from the viewer and reopening the font picker.
+- Added long-press removal for user-added fonts from the normal compact Font picker only.
+- Kept the Add Font / All System Fonts window as add-only, so removed fonts can be retrieved later.
+- Reset font selection to default if the selected added font is removed.
 
-- Added a bottom-bar **Find/Search** button next to **Previous** / **Next**.
-- Added EPUB/Word document search with a match counter, previous/next result navigation, and page-to-page wrapping.
-- Updated the EPUB/Word search popup with TXT-style search input, cursor, and selection-handle behavior.
-- Improved EPUB/Word font selection UI to follow the TXT reader font-window structure.
-- Added **Default font** support.
-  - EPUB prefers the file's declared font when available.
-  - Word/DOCX detects document fonts and can use them as the default font.
-- Removed unused More-menu zoom buttons from EPUB/Word while preserving double-tap reset/original-size behavior.
-- Improved expanded-page edge swiping so page turns are more responsive while avoiding accidental same-drag page jumps.
+### Version metadata
 
-### PDF viewer
-
-- Improved vertical continuous-scroll mode.
-- Fixed cases where vertical scrolling could show blank PDF pages.
-- Improved zoom behavior in vertical PDF mode.
-- Added horizontal panning for zoomed PDF pages in vertical mode.
-- Increased horizontal pan speed for smoother movement.
-- Improved bitmap/cache handling to reduce stale blank renders and memory pressure.
-- Preserved the existing vertical Go-to-page behavior; the earlier repeated-snap Go-to-page change was not reintroduced.
-
-### Popup / dialog UI
-
-- Updated Word/EPUB/PDF popup widths to match the TXT viewer style, except bookmark dialogs.
-- Improved More windows and subsection windows such as File information, Page move, Font picker, and the full system font list.
-- Fixed popup hard-landing / diagonal-drop behavior.
-- Fixed transparent popup background issues.
-
-### Main file browser
-
-- Improved the sort-window radio selection bubble placement so it sits more naturally inward.
+- Updated Android version metadata to `versionCode 205` and `versionName "2.0.5"`.
+- Updated `README.md`, `CHANGELOG.md`, and `PATCHNOTES.md` for the 2.0.5 release.
 
 ## 2.0.2 - 2026-05-09
 
