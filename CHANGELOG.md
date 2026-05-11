@@ -28,73 +28,58 @@
 - Kept the Add Font / All System Fonts window as add-only, so removed fonts can be retrieved later.
 - Reset font selection to default if the selected added font is removed.
 
-### Version metadata
+## 2.0.4 - 2026-05-10
 
-- Updated Android version metadata to `versionCode 205` and `versionName "2.0.5"`.
-- Updated `README.md`, `CHANGELOG.md`, and `PATCHNOTES.md` for the 2.0.5 release.
+### Bookmark stability and UI polish
 
-## 2.0.3 - 2026-05-09
+- Main bookmark folders now default to collapsed/shrunk.
+- Folder expand/shrink behavior remains fast with unnecessary list animation disabled.
+- Bookmark edit memo dialogs use a more rounded custom bordered dialog style.
+- TXT, PDF, EPUB, and Word bookmark memo edit dialogs now provide **Cancel**, **Clear memo**, and **Save** actions.
+- Main bookmark delete/edit dialogs use the same stable custom dialog path to reduce first-open hard-edge or hard-landing glitches.
+- Bookmark opening now uses a shared navigation path with null/empty file-path protection.
 
-### Functional changes from 2.0.2
+### Theme refresh and viewer popup fixes
 
-#### EPUB / Word reader
+- Viewers reload active theme state when returning from Settings or the theme editor.
+- TXT, PDF, EPUB, and Word More dialogs refresh theme colors before drawing.
+- PDF More now dismisses the old dialog before opening Settings or File Info, preventing stacked stale dialogs.
+- Active theme saving now uses synchronous preference commit to avoid immediate-return race conditions.
 
-- Added a bottom-bar **Find** button next to **Next** instead of placing document search inside the More menu.
-- Added document search for EPUB/Word with:
-  - search input;
-  - match counter;
-  - Previous / Next navigation;
-  - wrap-around across document pages;
-  - WebView-native text highlighting.
-- Applied the TXT-reader style custom cursor, highlight, and selection-handle behavior to the EPUB/Word search input.
-- Removed only the unused Word/EPUB More-menu zoom buttons:
-  - Decrease zoom;
-  - Increase zoom;
-  - Reset zoom.
-- Restored and preserved double-tap reset/original-size behavior after removing the buttons.
-- Improved zoomed Word/EPUB edge-swipe behavior:
-  - first drag pans within the expanded page;
-  - page turn requires a deliberate edge gesture;
-  - edge re-swipe window is now 600 ms;
-  - page-turn sensitivity is slightly improved so it does not feel like two full swipes are required.
+## 2.0.3 - 2026-05-10
 
-#### EPUB / Word fonts
+### EPUB / Word viewer
 
-- Connected the TXT reader font-selection structure to the EPUB/Word font dialog.
-- Added the same fixed header, scrollable font list, bottom action row, Add Font action, and all-system-font subsection structure.
-- EPUB files that declare their own font can open with **Default font** as the first option.
-- Word files now use the same **Default font** logic when a DOCX-declared font is detected from document/style/font metadata.
-- Choosing **Default font** avoids forcing the shared TXT reader font when the file has its own declared font.
-- Imported/custom fonts for EPUB/Word are routed through the internal WebView font path instead of direct external file access.
-- Removed the bottom-edge barrier from the EPUB/Word font picker and all-system-font subsection while keeping the separator above the bottom action row.
+- Added a bottom-bar **Find/Search** button next to **Previous** / **Next**.
+- Added EPUB/Word document search with a match counter, previous/next result navigation, and page-to-page wrapping.
+- Updated the EPUB/Word search popup with TXT-style search input, cursor, and selection-handle behavior.
+- Improved EPUB/Word font selection UI to follow the TXT reader font-window structure.
+- Added **Default font** support.
+  - EPUB prefers the file's declared font when available.
+  - Word/DOCX detects document fonts and can use them as the default font.
+- Removed unused More-menu zoom buttons from EPUB/Word while preserving double-tap reset/original-size behavior.
+- Improved expanded-page edge swiping so page turns are more responsive while avoiding accidental same-drag page jumps.
 
-#### PDF reader
+### PDF viewer
 
-- Improved the PDF More dialog slide-mode label so it updates immediately when the mode changes.
-- Improved vertical continuous PDF rendering when pages previously appeared blank.
-- Improved zoom behavior in vertical continuous PDF mode.
-- Added horizontal panning for zoomed pages in vertical continuous PDF mode.
-- Increased horizontal pan response speed for zoomed vertical PDF pages.
-- Kept bookmark windows wider, while regular PDF popups follow the compact TXT-reader width.
+- Improved vertical continuous-scroll mode.
+- Fixed cases where vertical scrolling could show blank PDF pages.
+- Improved zoom behavior in vertical PDF mode.
+- Added horizontal panning for zoomed PDF pages in vertical mode.
+- Increased horizontal pan speed for smoother movement.
+- Improved bitmap/cache handling to reduce stale blank renders and memory pressure.
+- Preserved the existing vertical Go-to-page behavior; the earlier repeated-snap Go-to-page change was not reintroduced.
 
-#### Popup/dialog behavior
+### Popup / dialog UI
 
-- Word/EPUB/PDF More, File Info, Go to Page, and related subsection windows now follow the TXT reader compact popup width.
-- Bookmark dialogs are intentionally excluded from this width limit.
-- Fixed hard-landing/diagonal drop behavior in those popups.
-- Fixed transparent-popup regression so dialog panels keep their visible rounded background.
-- Fixed Go-to-Page positioning behavior in PDF and Word/EPUB so the dialog does not visibly jump after opening.
+- Updated Word/EPUB/PDF popup widths to match the TXT viewer style, except bookmark dialogs.
+- Improved More windows and subsection windows such as File information, Page move, Font picker, and the full system font list.
+- Fixed popup hard-landing / diagonal-drop behavior.
+- Fixed transparent popup background issues.
 
-#### Main screen
+### Main file browser
 
-- Improved the main sort dialog selection indicator so the radio bubble sits more naturally inward from the left edge.
-
-### Packaging and documentation
-
-- Updated README for the 2.0.3 reader behavior.
-- Updated privacy notes for folder shortcuts, generated cache data, local font handling, and document search behavior.
-- Updated GitHub upload notes for 2.0.3.
-- Kept the public source package free of Android Studio workspace files, Gradle cache files, build outputs, local SDK paths, APK/AAB files, signing keys, `.env` files, and secret configuration files.
+- Improved the sort-window radio selection bubble placement so it sits more naturally inward.
 
 ## 2.0.2 - 2026-05-09
 
@@ -153,25 +138,7 @@
   - Detaches the continuous adapter before releasing cached page bitmaps.
   - Cancels stale render generations so old background work cannot reattach bitmaps after the viewer is closed or a new PDF is opened.
 
-### Documentation and repository updates
-
-- Updated `README.md` for version 2.0.2 and the new folder-shortcut, PDF-mode, TXT threshold, page-indicator, drawer, and search/filter behavior.
-- Updated `CHANGELOG.md` with this 2.0.2 comparison against 2.0.1.
-- Updated `PRIVACY.md` to mention locally stored folder shortcuts and generated cache metadata.
-- Updated `CONTRIBUTING.md`, `ANDROID_STUDIO_SETUP_FOR_BEGINNERS.md`, `BUILD_FIX_NOTES.md`, and `GITHUB_UPLOAD_NOTES.md` for the current package.
-- Updated Android version metadata to `versionCode 202` and `versionName "2.0.2"`.
-- Kept the MIT license under `Copyright (c) 2026 k1717 aka Delphinium`.
-- Cleaned the public source package by excluding `.idea/`, `.gradle/`, `app/build/`, root `build/`, `local.properties`, generated APK/AAB files, signing keys, `.env` files, and other private/generated files.
-
 ## 2.0.1 - 2026-05-07
-
-### Final 2.0.1 source refresh
-
-- Kept the public release version at `versionName "2.0.1"` and `versionCode 201`.
-- Added initial language behavior that follows the Android system locale until the user explicitly chooses English or Korean.
-- Added disposable TXT page/index cache bookkeeping for large TXT files.
-- Added `PageIndexCacheManager` and TXT reader integration for best-effort large-file cache access recording.
-- Updated README and instruction documents to describe the 2.0.1 behavior.
 
 ### Main file browser
 
