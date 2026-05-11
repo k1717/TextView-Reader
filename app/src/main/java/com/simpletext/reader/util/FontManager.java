@@ -1,14 +1,20 @@
 package com.simpletext.reader.util;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.os.Environment;
+import android.util.Log;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -16,7 +22,11 @@ import java.util.concurrent.Executors;
  * Scans for and manages fonts available on the device.
  */
 public class FontManager {
+    private static final String TAG = "FontManager";
     public static final String SYSTEM_FAMILY_PREFIX = "system_family:";
+    private static final String FONT_PREFS = "font_manager_prefs";
+    private static final String KEY_ADDED_FONTS = "added_font_names";
+    private static final String KEY_HIDDEN_FONTS = "hidden_added_font_names";
     private static FontManager instance;
 
     private final Map<String, String> fontPaths = new HashMap<>(); // displayName -> path
@@ -123,7 +133,7 @@ public class FontManager {
         }
 
         scanned = true;
-            // Do not write user file paths or local document/font names to release Logcat.
+        Log.i(TAG, "Font scan complete: " + fontPaths.size() + " fonts found");
     }
 
     private void scanDirectory(File dir) {
@@ -204,6 +214,108 @@ public class FontManager {
         return names;
     }
 
+    private SharedPreferences fontPrefs(Context context) {
+        return context.getApplicationContext().getSharedPreferences(FONT_PREFS, Context.MODE_PRIVATE);
+    }
+
+    private Set<String> loadFontSet(Context context, String key) {
+        Set<String> raw = fontPrefs(context).getStringSet(key, null);
+        Set<String> result = new LinkedHashSet<>();
+        if (raw != null) {
+            for (String name : raw) {
+                if (name != null && !name.trim().isEmpty()) result.add(name.trim());
+            }
+        }
+        return result;
+    }
+
+    private void saveFontSet(Context context, String key, Set<String> values) {
+        fontPrefs(context).edit().putStringSet(key, new HashSet<>(values)).apply();
+    }
+
+    private boolean isBuiltInLogicalFont(String fontName) {
+        if (fontName == null) return true;
+        String path = fontPaths.get(fontName.trim());
+        if (path == null) return false;
+        return "DEFAULT".equals(path) || "SERIF".equals(path) || "MONOSPACE".equals(path);
+    }
+
+    /**
+     * Fonts that the user explicitly added to the compact Font picker.
+     * This is intentionally separate from the full Add font / All system fonts list:
+     * removing a font from the compact picker only hides it from that picker, and the
+     * source font remains available in the full list for re-adding later.
+     */
+    public List<String> getUserAddedFontNames(Context context) {
+        if (context == null) return getUserFontNames();
+        if (!scanned) doScan(context);
+
+        Set<String> hidden = loadFontSet(context, KEY_HIDDEN_FONTS);
+        Set<String> names = new LinkedHashSet<>();
+
+        for (String name : loadFontSet(context, KEY_ADDED_FONTS)) {
+            if (fontPaths.containsKey(name) && !hidden.contains(name) && !isBuiltInLogicalFont(name)) {
+                names.add(name);
+            }
+        }
+
+        // Preserve compatibility with font files that were previously copied into or
+        // placed under this app's font locations.  These remain removable from the
+        // compact picker, but the actual file is not deleted.
+        for (String name : userFontNames) {
+            if (name != null && fontPaths.containsKey(name) && !hidden.contains(name) && !isBuiltInLogicalFont(name)) {
+                names.add(name);
+            }
+        }
+
+        List<String> sorted = new ArrayList<>(names);
+        Collections.sort(sorted, String::compareToIgnoreCase);
+        return sorted;
+    }
+
+    /**
+     * Add a selected font to the compact Font picker.  Multiple fonts are retained.
+     */
+    public boolean addUserFont(Context context, String fontName) {
+        if (context == null || fontName == null || fontName.trim().isEmpty()) return false;
+        if (!scanned) doScan(context);
+
+        String key = fontName.trim();
+        if (!fontPaths.containsKey(key) || isBuiltInLogicalFont(key)) return false;
+
+        Set<String> added = loadFontSet(context, KEY_ADDED_FONTS);
+        Set<String> hidden = loadFontSet(context, KEY_HIDDEN_FONTS);
+        added.add(key);
+        hidden.remove(key);
+        saveFontSet(context, KEY_ADDED_FONTS, added);
+        saveFontSet(context, KEY_HIDDEN_FONTS, hidden);
+        return true;
+    }
+
+    /**
+     * Remove a user-added font from the compact Font picker only.  This does not
+     * delete system fonts or font files, so the font can be added again from the full
+     * Add font / All system fonts list.
+     */
+    public boolean isRemovableUserFont(Context context, String fontName) {
+        if (context == null || fontName == null || fontName.trim().isEmpty()) return false;
+        String key = fontName.trim();
+        return getUserAddedFontNames(context).contains(key);
+    }
+
+    public boolean removeUserFont(Context context, String fontName) {
+        if (!isRemovableUserFont(context, fontName)) return false;
+
+        String key = fontName.trim();
+        Set<String> added = loadFontSet(context, KEY_ADDED_FONTS);
+        Set<String> hidden = loadFontSet(context, KEY_HIDDEN_FONTS);
+        added.remove(key);
+        hidden.add(key);
+        saveFontSet(context, KEY_ADDED_FONTS, added);
+        saveFontSet(context, KEY_HIDDEN_FONTS, hidden);
+        return true;
+    }
+
     public static String toSystemFamilyValue(String familyName) {
         if (familyName == null) return SYSTEM_FAMILY_PREFIX;
         return SYSTEM_FAMILY_PREFIX + familyName.trim();
@@ -259,7 +371,7 @@ public class FontManager {
                     fontCache.put(path, tf);
                     return tf;
                 } catch (Exception e) {
-            // Do not write user file paths or local document/font names to release Logcat.
+                    Log.e(TAG, "Failed to load font: " + path, e);
                     return Typeface.DEFAULT;
                 }
         }
@@ -317,7 +429,7 @@ public class FontManager {
                 return displayName;
             }
         } catch (Exception e) {
-            // Do not write user file paths or local document/font names to release Logcat.
+            Log.e(TAG, "Failed to import font", e);
         }
         return null;
     }

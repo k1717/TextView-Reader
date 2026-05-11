@@ -1,6 +1,8 @@
 package com.simpletext.reader.util;
 
 import android.content.Context;
+import android.util.Log;
+
 import com.simpletext.reader.model.Theme;
 
 import org.json.JSONArray;
@@ -20,6 +22,7 @@ import java.util.List;
  * Manages reading themes (built-in + custom).
  */
 public class ThemeManager {
+    private static final String TAG = "ThemeManager";
     private static final String THEMES_FILE = "custom_themes.json";
 
     private static ThemeManager instance;
@@ -125,7 +128,7 @@ public class ThemeManager {
                 }
             }
         } catch (Exception e) {
-            // Do not write user file paths or local document/font names to release Logcat.
+            Log.e(TAG, "Failed to load custom themes", e);
         }
     }
 
@@ -144,7 +147,7 @@ public class ThemeManager {
                 writer.write(root.toString(2));
             }
         } catch (Exception e) {
-            // Do not write user file paths or local document/font names to release Logcat.
+            Log.e(TAG, "Failed to save custom themes", e);
         }
     }
 }

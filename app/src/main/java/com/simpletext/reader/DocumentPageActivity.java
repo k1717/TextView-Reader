@@ -811,6 +811,15 @@ public class DocumentPageActivity extends AppCompatActivity {
                 dialog.dismiss();
                 setDocumentFontSelection(option.value);
             });
+            if (isRemovableUserFontValue(option.value)) {
+                row.setOnLongClickListener(v -> {
+                    showUserFontRemoveConfirm(option.value, label, () -> {
+                        dialog.dismiss();
+                        showDocumentFontDialog();
+                    });
+                    return true;
+                });
+            }
             list.addView(row);
         }
 
@@ -935,6 +944,11 @@ public class DocumentPageActivity extends AppCompatActivity {
 
                 TextView row = makeDocumentFontActionRow(label, fg, selected);
                 row.setOnClickListener(v -> {
+                    try {
+                        FontManager.getInstance().addUserFont(this, fontName);
+                    } catch (Throwable ignored) {
+                        // Selecting the font should still work even if persisting the shortcut fails.
+                    }
                     dialog.dismiss();
                     setDocumentFontSelection(value);
                 });
@@ -944,6 +958,96 @@ public class DocumentPageActivity extends AppCompatActivity {
 
         cancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
+    }
+
+    private boolean isRemovableUserFontValue(String value) {
+        try {
+            FontManager fontManager = FontManager.getInstance();
+            if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
+            return fontManager.isRemovableUserFont(this, value);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private void showUserFontRemoveConfirm(String value, String label, Runnable afterRemove) {
+        LinearLayout box = makeDialogBox();
+        box.addView(makeDialogTitle(localizedText("Remove font", "글꼴 삭제")));
+
+        TextView message = new TextView(this);
+        String safeLabel = label != null && !label.trim().isEmpty() ? label.trim() : value;
+        message.setText(safeLabel + "\n\n" + localizedText(
+                "Remove this user-added font from TextView Reader?",
+                "이 사용자 추가 글꼴을 TextView Reader에서 삭제할까요?")
+                + "\n" + localizedText(
+                "System fonts and document files are not affected.",
+                "시스템 글꼴과 문서 파일은 영향받지 않습니다."));
+        message.setTextColor(dialogSub());
+        message.setTextSize(14f);
+        message.setLineSpacing(0f, 1.15f);
+        message.setPadding(0, 0, 0, dpToPx(12));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
+        LinearLayout actions = new LinearLayout(this);
+        actions.setTag("dialog_actions");
+        actions.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.END);
+        actions.setPadding(0, dpToPx(8), 0, 0);
+
+        TextView cancel = new TextView(this);
+        cancel.setText(getString(R.string.cancel));
+        cancel.setTextColor(dialogSub());
+        cancel.setTextSize(16f);
+        cancel.setGravity(android.view.Gravity.CENTER);
+        cancel.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+
+        TextView delete = new TextView(this);
+        delete.setText(getString(R.string.delete));
+        delete.setTextColor(!isDarkColor(dialogBg()) ? Color.rgb(95, 35, 35) : Color.rgb(255, 170, 170));
+        delete.setTextSize(16f);
+        delete.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        delete.setGravity(android.view.Gravity.CENTER);
+        delete.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+
+        actions.addView(cancel, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        actions.addView(delete, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        box.addView(actions, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        cancel.setOnClickListener(v -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+        });
+        delete.setOnClickListener(v -> {
+            boolean removed = false;
+            try {
+                FontManager fontManager = FontManager.getInstance();
+                if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
+                removed = fontManager.removeUserFont(this, value);
+            } catch (Throwable ignored) {
+                removed = false;
+            }
+
+            if (removed) {
+                if (normalizeReadingFontValue(currentDocumentFontSelection()).equals(normalizeReadingFontValue(value))) {
+                    setDocumentFontSelection("default");
+                }
+                Toast.makeText(this, localizedText("Font removed", "글꼴을 삭제했습니다"), Toast.LENGTH_SHORT).show();
+                if (dialogRef[0] != null) dialogRef[0].dismiss();
+                if (afterRemove != null) afterRemove.run();
+            } else {
+                Toast.makeText(this, localizedText(
+                        "This font cannot be removed from inside the app.",
+                        "이 글꼴은 앱 안에서 삭제할 수 없습니다."), Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        dialogRef[0] = createStablePositionedDialog(box, 74, false, false);
+        dialogRef[0].show();
     }
 
     private boolean shouldOfferDocumentDefaultFont() {
@@ -1316,22 +1420,13 @@ public class DocumentPageActivity extends AppCompatActivity {
             FontManager fontManager = FontManager.getInstance();
             if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
 
-            for (String fontName : fontManager.getSystemInstalledFontNames()) {
+            for (String fontName : fontManager.getUserAddedFontNames(this)) {
                 if (fontName == null || fontName.trim().isEmpty()) continue;
                 String value = normalizeReadingFontValue(fontName);
                 if (isCuratedReadingFontValue(value) || containsReadingFontOption(options, value)) continue;
                 options.add(new ReadingFontOption(value,
-                        "Installed system font: " + fontName,
-                        "설치된 시스템 글꼴: " + fontName));
-            }
-
-            for (String fontName : fontManager.getUserFontNames()) {
-                if (fontName == null || fontName.trim().isEmpty()) continue;
-                String value = normalizeReadingFontValue(fontName);
-                if (isCuratedReadingFontValue(value) || containsReadingFontOption(options, value)) continue;
-                options.add(new ReadingFontOption(value,
-                        "Font file: " + fontName,
-                        "글꼴 파일: " + fontName));
+                        "Added font: " + fontName,
+                        "추가한 글꼴: " + fontName));
             }
         } catch (Throwable ignored) {
             // Font scanning should not block the Word/EPUB More menu.
@@ -2297,7 +2392,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         title.setTextSize(22f);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         title.setGravity(android.view.Gravity.CENTER);
-        title.setPadding(0, 0, 0, dpToPx(12));
+        title.setPadding(0, 0, 0, dpToPx(4));
         box.addView(title, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -2312,23 +2407,6 @@ public class DocumentPageActivity extends AppCompatActivity {
         box.addView(currentInfo, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        TextView saveButton = new TextView(this);
-        saveButton.setText(getString(R.string.add_current_bookmark));
-        saveButton.setGravity(android.view.Gravity.CENTER);
-        saveButton.setTextColor(fg);
-        saveButton.setTextSize(16f);
-        saveButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        saveButton.setPadding(0, dpToPx(12), 0, dpToPx(12));
-        android.graphics.drawable.GradientDrawable saveBg = new android.graphics.drawable.GradientDrawable();
-        saveBg.setColor(panel);
-        saveBg.setCornerRadius(dpToPx(8));
-        saveBg.setStroke(Math.max(1, dpToPx(1)), line);
-        saveButton.setBackground(saveBg);
-        box.addView(saveButton, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
         TextView hint = new TextView(this);
         hint.setText(getString(R.string.bookmark_folder_hint));
         hint.setTextColor(blendColors(bg, fg, 0.76f));
@@ -2338,6 +2416,25 @@ public class DocumentPageActivity extends AppCompatActivity {
         hint.setLineSpacing(0f, 1.08f);
         hint.setPadding(0, dpToPx(8), 0, dpToPx(6));
         box.addView(hint, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView saveButton = new TextView(this);
+        saveButton.setText(getString(R.string.add_current_bookmark));
+        saveButton.setGravity(android.view.Gravity.CENTER);
+        saveButton.setTextColor(fg);
+        saveButton.setTextSize(16f);
+        saveButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        saveButton.setPadding(0, dpToPx(12), 0, dpToPx(12));
+        android.graphics.drawable.GradientDrawable saveBg = new android.graphics.drawable.GradientDrawable();
+        boolean darkBookmarkDialog = isDarkColor(bg);
+        int saveFill = blendColors(bg, fg, darkBookmarkDialog ? 0.135f : 0.085f);
+        int saveStroke = blendColors(bg, fg, darkBookmarkDialog ? 0.460f : 0.360f);
+        saveBg.setColor(saveFill);
+        saveBg.setCornerRadius(dpToPx(14));
+        saveBg.setStroke(Math.max(1, dpToPx(1)), saveStroke);
+        saveButton.setBackground(saveBg);
+        box.addView(saveButton, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -2362,9 +2459,10 @@ public class DocumentPageActivity extends AppCompatActivity {
         box.addView(emptyText, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
-        box.addView(rv, new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams bookmarkListLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(430)));
+                dpToPx(430));
+        box.addView(rv, bookmarkListLp);
 
         TextView closeButton = new TextView(this);
         closeButton.setText(getString(R.string.close));
@@ -2376,13 +2474,21 @@ public class DocumentPageActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        android.app.Dialog dialog = createStablePositionedDialog(box, 74, false, true);
+        android.app.Dialog dialog = createStablePositionedDialog(box, 34, false, true);
 
         final Runnable[] refreshRef = new Runnable[1];
         refreshRef[0] = () -> {
             List<Bookmark> all = bookmarkManager.getAllBookmarks();
             adapter.setBookmarks(all, expandedFolders, filePath);
-            emptyText.setVisibility(all.isEmpty() ? View.VISIBLE : View.GONE);
+            // Keep the bookmark dialog height stable even when the list is empty.
+            // This prevents the window from bouncing when the first bookmark is added.
+            emptyText.setVisibility(View.GONE);
+            rv.setVisibility(View.VISIBLE);
+            LinearLayout.LayoutParams rvLp = (LinearLayout.LayoutParams) rv.getLayoutParams();
+            if (rvLp != null && rvLp.height != dpToPx(430)) {
+                rvLp.height = dpToPx(430);
+                rv.setLayoutParams(rvLp);
+            }
             currentInfo.setText(getString(R.string.all_bookmarks_status,
                     adapter.getFolderCount(), all.size(), currentPage + 1, pages.size()));
         };
@@ -2401,6 +2507,14 @@ public class DocumentPageActivity extends AppCompatActivity {
                 refreshRef[0].run();
             }
 
+            @Override public void onFolderDelete(String folderFilePath, String expansionKey, String folderName, int bookmarkCount) {
+                showBookmarkFolderDeleteConfirm(folderFilePath, folderName, bookmarkCount, () -> {
+                    expandedFolders.remove(folderFilePath);
+                    expandedFolders.remove(expansionKey);
+                    refreshRef[0].run();
+                });
+            }
+
             @Override public void onBookmarkClick(Bookmark b) {
                 navigateToBookmark(b);
                 dialog.dismiss();
@@ -2415,8 +2529,8 @@ public class DocumentPageActivity extends AppCompatActivity {
             }
         });
 
-        dialog.show();
         refreshRef[0].run();
+        dialog.show();
     }
 
     private void navigateToBookmark(@NonNull Bookmark b) {
@@ -2473,6 +2587,33 @@ public class DocumentPageActivity extends AppCompatActivity {
         final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
         addDialogBottomActions(box, getString(R.string.delete), () -> {
             bookmarkManager.deleteBookmark(bookmark.getId());
+            afterDelete.run();
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+        });
+        dialogRef[0] = createStablePositionedDialog(box, 74, false, false);
+        dialogRef[0].show();
+    }
+
+    private void showBookmarkFolderDeleteConfirm(String folderFilePath, String folderName, int bookmarkCount, @NonNull Runnable afterDelete) {
+        LinearLayout box = makeDialogBox();
+        box.addView(makeDialogTitle(getString(R.string.delete_bookmark_folder)));
+
+        TextView message = new TextView(this);
+        String displayName = folderName != null && !folderName.trim().isEmpty() ? folderName.trim() : getString(R.string.bookmark);
+        message.setText(displayName + "\n\n"
+                + getString(R.string.delete_bookmark_folder_message, bookmarkCount)
+                + "\n" + getString(R.string.delete_bookmark_folder_note));
+        message.setTextColor(dialogSub());
+        message.setTextSize(14f);
+        message.setLineSpacing(0f, 1.15f);
+        message.setPadding(0, 0, 0, dpToPx(12));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
+        addDialogBottomActions(box, getString(R.string.delete), () -> {
+            bookmarkManager.deleteBookmarksForFile(folderFilePath);
             afterDelete.run();
             if (dialogRef[0] != null) dialogRef[0].dismiss();
         });

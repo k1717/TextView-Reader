@@ -6,6 +6,8 @@ import android.net.Uri;
 import android.provider.OpenableColumns;
 import android.text.Html;
 import android.text.Spanned;
+import android.util.Log;
+
 import com.simpletext.reader.model.TextChunk;
 
 import java.io.BufferedInputStream;
@@ -49,6 +51,7 @@ import org.w3c.dom.NodeList;
  * Bad or unmappable bytes are decoded with replacement instead of crashing.
  */
 public class FileUtils {
+    private static final String TAG = "FileUtils";
 
     private static final byte[] BOM_UTF8 = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
     private static final byte[] BOM_UTF16_LE = {(byte) 0xFF, (byte) 0xFE};
@@ -137,7 +140,7 @@ public class FileUtils {
             byte[] data = readSample(file);
             return detectEncodingFromBytes(data);
         } catch (IOException e) {
-            // Do not write user file paths or local document/font names to release Logcat.
+            Log.e(TAG, "Encoding detection failed", e);
             return "UTF-8";
         }
     }
@@ -157,7 +160,7 @@ public class FileUtils {
 
             return detectEncodingFromBytes(data);
         } catch (IOException e) {
-            // Do not write user file paths or local document/font names to release Logcat.
+            Log.e(TAG, "Encoding detection from stream failed", e);
             return "UTF-8";
         }
     }
@@ -814,7 +817,7 @@ public class FileUtils {
                 }
             }
         } catch (Exception e) {
-            // Do not write EPUB file internals to release Logcat.
+            Log.w(TAG, "EPUB spine parse failed; falling back to entry order", e);
         }
         return result;
     }

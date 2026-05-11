@@ -1631,7 +1631,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         title.setTextSize(22f);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         title.setGravity(android.view.Gravity.CENTER);
-        title.setPadding(0, 0, 0, dpToPx(12));
+        title.setPadding(0, 0, 0, dpToPx(4));
         box.addView(title, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -1646,23 +1646,6 @@ public class PdfReaderActivity extends AppCompatActivity {
         box.addView(currentInfo, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        TextView saveButton = new TextView(this);
-        saveButton.setText(getString(R.string.add_current_bookmark));
-        saveButton.setGravity(android.view.Gravity.CENTER);
-        saveButton.setTextColor(fg);
-        saveButton.setTextSize(16f);
-        saveButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        saveButton.setPadding(0, dpToPx(12), 0, dpToPx(12));
-        android.graphics.drawable.GradientDrawable saveBg = new android.graphics.drawable.GradientDrawable();
-        saveBg.setColor(panel);
-        saveBg.setCornerRadius(dpToPx(8));
-        saveBg.setStroke(Math.max(1, dpToPx(1)), line);
-        saveButton.setBackground(saveBg);
-        box.addView(saveButton, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
         TextView hint = new TextView(this);
         hint.setText(getString(R.string.bookmark_folder_hint));
         hint.setTextColor(sub);
@@ -1672,6 +1655,25 @@ public class PdfReaderActivity extends AppCompatActivity {
         hint.setLineSpacing(0f, 1.08f);
         hint.setPadding(0, dpToPx(8), 0, dpToPx(6));
         box.addView(hint, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView saveButton = new TextView(this);
+        saveButton.setText(getString(R.string.add_current_bookmark));
+        saveButton.setGravity(android.view.Gravity.CENTER);
+        saveButton.setTextColor(fg);
+        saveButton.setTextSize(16f);
+        saveButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        saveButton.setPadding(0, dpToPx(12), 0, dpToPx(12));
+        android.graphics.drawable.GradientDrawable saveBg = new android.graphics.drawable.GradientDrawable();
+        boolean darkBookmarkDialog = isDarkColor(bg);
+        int saveFill = blendColors(bg, fg, darkBookmarkDialog ? 0.135f : 0.085f);
+        int saveStroke = blendColors(bg, fg, darkBookmarkDialog ? 0.460f : 0.360f);
+        saveBg.setColor(saveFill);
+        saveBg.setCornerRadius(dpToPx(14));
+        saveBg.setStroke(Math.max(1, dpToPx(1)), saveStroke);
+        saveButton.setBackground(saveBg);
+        box.addView(saveButton, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -1696,9 +1698,10 @@ public class PdfReaderActivity extends AppCompatActivity {
         box.addView(emptyText, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
-        box.addView(rv, new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams bookmarkListLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(430)));
+                dpToPx(430));
+        box.addView(rv, bookmarkListLp);
 
         TextView closeButton = new TextView(this);
         closeButton.setText(getString(R.string.close));
@@ -1710,13 +1713,21 @@ public class PdfReaderActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        android.app.Dialog dialog = createStablePositionedDialog(box, 74, false, true);
+        android.app.Dialog dialog = createStablePositionedDialog(box, 34, false, true);
 
         final Runnable[] refreshRef = new Runnable[1];
         refreshRef[0] = () -> {
             List<Bookmark> all = bookmarkManager.getAllBookmarks();
             adapter.setBookmarks(all, expandedFolders, filePath);
-            emptyText.setVisibility(all.isEmpty() ? View.VISIBLE : View.GONE);
+            // Keep the bookmark dialog height stable even when the list is empty.
+            // This prevents the window from bouncing when the first bookmark is added.
+            emptyText.setVisibility(View.GONE);
+            rv.setVisibility(View.VISIBLE);
+            LinearLayout.LayoutParams rvLp = (LinearLayout.LayoutParams) rv.getLayoutParams();
+            if (rvLp != null && rvLp.height != dpToPx(430)) {
+                rvLp.height = dpToPx(430);
+                rv.setLayoutParams(rvLp);
+            }
             currentInfo.setText(getString(R.string.all_bookmarks_status,
                     adapter.getFolderCount(), all.size(), currentPage + 1, pageCount));
         };
@@ -1735,6 +1746,14 @@ public class PdfReaderActivity extends AppCompatActivity {
                 refreshRef[0].run();
             }
 
+            @Override public void onFolderDelete(String folderFilePath, String expansionKey, String folderName, int bookmarkCount) {
+                showBookmarkFolderDeleteConfirm(folderFilePath, folderName, bookmarkCount, () -> {
+                    expandedFolders.remove(folderFilePath);
+                    expandedFolders.remove(expansionKey);
+                    refreshRef[0].run();
+                });
+            }
+
             @Override public void onBookmarkClick(Bookmark b) {
                 navigateToBookmark(b);
                 dialog.dismiss();
@@ -1750,8 +1769,8 @@ public class PdfReaderActivity extends AppCompatActivity {
         });
 
         dialog.setOnDismissListener(d -> {});
-        dialog.show();
         refreshRef[0].run();
+        dialog.show();
     }
 
     private void navigateToBookmark(@NonNull Bookmark b) {
@@ -1808,6 +1827,33 @@ public class PdfReaderActivity extends AppCompatActivity {
         final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
         addDialogBottomActions(box, null, getString(R.string.delete), () -> {
             bookmarkManager.deleteBookmark(bookmark.getId());
+            afterDelete.run();
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+        });
+        dialogRef[0] = createStablePositionedDialog(box, 74, false, false);
+        dialogRef[0].show();
+    }
+
+    private void showBookmarkFolderDeleteConfirm(String folderFilePath, String folderName, int bookmarkCount, @NonNull Runnable afterDelete) {
+        LinearLayout box = makeDialogBox();
+        box.addView(makeDialogTitle(getString(R.string.delete_bookmark_folder)));
+
+        TextView message = new TextView(this);
+        String displayName = folderName != null && !folderName.trim().isEmpty() ? folderName.trim() : getString(R.string.bookmark);
+        message.setText(displayName + "\n\n"
+                + getString(R.string.delete_bookmark_folder_message, bookmarkCount)
+                + "\n" + getString(R.string.delete_bookmark_folder_note));
+        message.setTextColor(dialogSub());
+        message.setTextSize(14f);
+        message.setLineSpacing(0f, 1.15f);
+        message.setPadding(0, 0, 0, dpToPx(12));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
+        addDialogBottomActions(box, null, getString(R.string.delete), () -> {
+            bookmarkManager.deleteBookmarksForFile(folderFilePath);
             afterDelete.run();
             if (dialogRef[0] != null) dialogRef[0].dismiss();
         });

@@ -39,6 +39,7 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
 
     public interface Listener {
         void onFolderClick(String filePath);
+        void onFolderDelete(String filePath, String expansionKey, String fileName, int bookmarkCount);
         void onBookmarkClick(Bookmark bookmark);
         void onBookmarkDelete(Bookmark bookmark);
         void onBookmarkEdit(Bookmark bookmark);
@@ -103,14 +104,24 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
 
     public void setThemeColors(int dialogBgColor, int textColor, int subTextColor, int folderBgColor) {
         this.dialogBgColor = dialogBgColor;
-        this.folderBgColor = folderBgColor;
         this.textColor = textColor;
-        this.subTextColor = blendColors(dialogBgColor, textColor, 0.76f);
-        this.pathTextColor = blendColors(dialogBgColor, textColor, 0.66f);
 
-        // Stronger folder boundary so expanded/shrunk file folders are clearly visible.
-        this.folderBorderColor = blendColors(folderBgColor, textColor, 0.42f);
+        boolean lightDialog = isLightColor(dialogBgColor);
+        // Derive every bookmark-card surface from the dialog background itself.
+        // TXT, PDF, EPUB, and Word sometimes pass slightly different panel colors,
+        // so using folderBgColor directly made TXT bookmark cards drift in tone.
+        // This keeps the file cards, section chips, and expanded bookmark rows
+        // visually aligned across all viewers while still following the active theme.
+        this.folderBgColor = blendColors(dialogBgColor, textColor, lightDialog ? 0.070f : 0.115f);
+        this.subTextColor = blendColors(dialogBgColor, textColor, lightDialog ? 0.74f : 0.78f);
+        this.pathTextColor = blendColors(dialogBgColor, textColor, lightDialog ? 0.58f : 0.66f);
+        this.folderBorderColor = blendColors(dialogBgColor, textColor, lightDialog ? 0.260f : 0.360f);
         notifyDataSetChanged();
+    }
+
+    private static boolean isLightColor(int color) {
+        double luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0;
+        return luminance >= 0.5;
     }
 
     private static int blendColors(int bottomColor, int topColor, float topAlpha) {
@@ -346,11 +357,12 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
         void bind(Row row) {
             title.setText(row.fileName + "  •  " + row.count);
             title.setTextColor(blendColors(dialogBgColor, textColor, 0.90f));
+            boolean lightDialog = isLightColor(dialogBgColor);
             GradientDrawable bg = new GradientDrawable();
-            bg.setColor(blendColors(dialogBgColor, textColor, 0.12f));
-            bg.setCornerRadius(12f * title.getResources().getDisplayMetrics().density);
+            bg.setColor(blendColors(dialogBgColor, textColor, lightDialog ? 0.070f : 0.125f));
+            bg.setCornerRadius(13f * title.getResources().getDisplayMetrics().density);
             bg.setStroke(Math.max(1, Math.round(1f * title.getResources().getDisplayMetrics().density)),
-                    blendColors(dialogBgColor, textColor, 0.22f));
+                    blendColors(dialogBgColor, textColor, lightDialog ? 0.160f : 0.245f));
             title.setBackground(bg);
             title.setGravity(android.view.Gravity.CENTER_VERTICAL);
         }
@@ -358,7 +370,10 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
 
     class FolderHolder extends RecyclerView.ViewHolder {
         TextView arrow, title, meta, path;
+        private String boundFilePath;
         private String boundExpansionKey;
+        private String boundFileName;
+        private int boundBookmarkCount;
 
         FolderHolder(View itemView) {
             super(itemView);
@@ -371,11 +386,27 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
                     listener.onFolderClick(boundExpansionKey);
                 }
             });
+            itemView.setOnLongClickListener(v -> {
+                if (listener != null) {
+                    listener.onFolderDelete(boundFilePath, boundExpansionKey, boundFileName, boundBookmarkCount);
+                }
+                return true;
+            });
         }
 
         void bind(Row row) {
+            boundFilePath = row.filePath;
             boundExpansionKey = row.expansionKey;
-            itemView.setBackground(rowBackground(folderBgColor, folderBorderColor, 8f, 1.4f, itemView));
+            boundFileName = row.fileName;
+            boundBookmarkCount = row.count;
+            boolean lightDialog = isLightColor(dialogBgColor);
+            int cardFill = row.currentFile
+                    ? blendColors(dialogBgColor, textColor, lightDialog ? 0.095f : 0.145f)
+                    : folderBgColor;
+            int cardStroke = row.currentFile
+                    ? blendColors(dialogBgColor, textColor, lightDialog ? 0.360f : 0.460f)
+                    : folderBorderColor;
+            itemView.setBackground(rowBackground(cardFill, cardStroke, 11f, 1.4f, itemView));
 
             arrow.setText(row.expanded ? "▾" : "▸");
             arrow.setTextColor(textColor);
@@ -385,10 +416,10 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
             title.setTextColor(textColor);
 
             meta.setText(row.count + (row.count == 1 ? " bookmark" : " bookmarks"));
-            meta.setTextColor(blendColors(folderBgColor, textColor, 0.84f));
+            meta.setTextColor(subTextColor);
 
             path.setText(row.filePath != null ? row.filePath : "");
-            path.setTextColor(blendColors(folderBgColor, textColor, 0.68f));
+            path.setTextColor(pathTextColor);
         }
     }
 
@@ -428,8 +459,12 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
 
         void bind(Bookmark bookmark) {
             boundBookmark = bookmark;
-            // Bookmark rows should blend into the bookmark dialog background, not show black boxes.
-            itemView.setBackgroundColor(Color.TRANSPARENT);
+            // Expanded bookmark rows use a subtle rounded subsection card, matching
+            // the visual language of the file-folder rows without overpowering them.
+            boolean lightDialog = isLightColor(dialogBgColor);
+            int rowFill = blendColors(dialogBgColor, textColor, lightDialog ? 0.045f : 0.080f);
+            int rowStroke = blendColors(dialogBgColor, textColor, lightDialog ? 0.100f : 0.160f);
+            itemView.setBackground(rowBackground(rowFill, rowStroke, 9f, 1.0f, itemView));
 
             String display = bookmark.getDisplayText();
             title.setText(display != null && !display.isEmpty()

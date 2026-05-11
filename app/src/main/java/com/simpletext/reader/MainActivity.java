@@ -1291,6 +1291,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             lp.dimAmount = dimAmount;
             window.setAttributes(lp);
             window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.setWindowAnimations(0);
             window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         }
         return dialog;
@@ -2420,9 +2421,17 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             group.check(ids[PrefsManager.SORT_NAME_ASC]);
         }
 
-        AlertDialog dialog = new AlertDialog.Builder(this).create();
-        dialog.setView(box);
-        dialog.setOnShowListener(d -> applyRoundedDialogWindow(dialog));
+        TextView cancel = new TextView(this);
+        cancel.setText(getString(R.string.cancel));
+        cancel.setTextColor(sub);
+        cancel.setTextSize(16f);
+        cancel.setGravity(Gravity.CENTER);
+        cancel.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        box.addView(cancel, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(48)));
+
+        android.app.Dialog dialog = createStableBottomDialog(box, dpToPx(74), 0.22f);
 
         group.setOnCheckedChangeListener((g, checkedId) -> {
             if (sortingRecentHome && checkedId == recentReadId) {
@@ -2457,16 +2466,6 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                 }
             }
         });
-
-        TextView cancel = new TextView(this);
-        cancel.setText(getString(R.string.cancel));
-        cancel.setTextColor(sub);
-        cancel.setTextSize(16f);
-        cancel.setGravity(Gravity.CENTER);
-        cancel.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        box.addView(cancel, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(48)));
         cancel.setOnClickListener(v -> dialog.dismiss());
 
         dialog.show();

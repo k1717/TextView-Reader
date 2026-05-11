@@ -228,6 +228,73 @@ public class BookmarkListActivity extends AppCompatActivity
         dialog.show();
     }
 
+    private void showBookmarkFolderDeleteConfirm(String folderFilePath,
+                                                 String expansionKey,
+                                                 String folderName,
+                                                 int bookmarkCount) {
+        boolean dark = isDarkUi();
+
+        int baseBg = dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
+        int bg = blendColors(baseBg, dark ? Color.WHITE : Color.BLACK, dark ? 0.12f : 0.06f);
+        int fg = readableTextColorForBackground(bg);
+        int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(75, 75, 75);
+        int deleteColor = isLightColor(bg) ? Color.rgb(125, 45, 45) : Color.rgb(255, 175, 175);
+
+        LinearLayout dialogPanel = new LinearLayout(this);
+        dialogPanel.setOrientation(LinearLayout.VERTICAL);
+        dialogPanel.setBackgroundColor(Color.TRANSPARENT);
+
+        dialogPanel.addView(makeBookmarkDialogTitle(getString(R.string.delete_bookmark_folder), fg),
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(Color.TRANSPARENT);
+        box.setPadding(dpToPx(22), dpToPx(12), dpToPx(22), dpToPx(10));
+
+        TextView message = new TextView(this);
+        String displayName = folderName != null && !folderName.trim().isEmpty()
+                ? folderName.trim()
+                : getString(R.string.bookmark);
+        message.setText(displayName + "\n\n"
+                + getString(R.string.delete_bookmark_folder_message, bookmarkCount)
+                + "\n" + getString(R.string.delete_bookmark_folder_note));
+        message.setTextColor(fg);
+        message.setTextSize(14f);
+        message.setLineSpacing(0f, 1.15f);
+        message.setPadding(0, dpToPx(4), 0, dpToPx(8));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        dialogPanel.addView(box, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actions = makeBookmarkDialogActionRow(bg, fg);
+        TextView cancel = makeBookmarkDialogActionText(getString(R.string.cancel), sub, Gravity.CENTER);
+        TextView delete = makeBookmarkDialogActionText(getString(R.string.delete), deleteColor, Gravity.CENTER);
+        actions.addView(cancel, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        actions.addView(delete, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        dialogPanel.addView(actions, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        android.app.Dialog dialog = createBookmarkDialog(dialogPanel, bg);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        delete.setOnClickListener(v -> {
+            bookmarkManager.deleteBookmarksForFile(folderFilePath);
+            expandedFolders.remove(folderFilePath);
+            expandedFolders.remove(expansionKey);
+            loadBookmarks();
+            dialog.dismiss();
+        });
+        dialog.show();
+    }
+
     private int dpToPx(int dp) {
         return Math.round(dp * getResources().getDisplayMetrics().density);
     }
@@ -308,6 +375,11 @@ public class BookmarkListActivity extends AppCompatActivity
         if (expandedFolders.contains(folderFilePath)) expandedFolders.remove(folderFilePath);
         else expandedFolders.add(folderFilePath);
         loadBookmarks();
+    }
+
+    @Override
+    public void onFolderDelete(String folderFilePath, String expansionKey, String folderName, int bookmarkCount) {
+        showBookmarkFolderDeleteConfirm(folderFilePath, expansionKey, folderName, bookmarkCount);
     }
 
     @Override

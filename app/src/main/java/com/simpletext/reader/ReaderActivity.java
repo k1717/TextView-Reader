@@ -423,11 +423,13 @@ public class ReaderActivity extends AppCompatActivity {
 
     private int readerDialogPanelColor() {
         syncReaderDialogThemeSnapshot();
-        // Slightly separated from the dialog background, still opaque and theme-derived.
-        boolean light = isLightColor(currentReaderBackgroundColor);
-        int overlay = light ? Color.WHITE : Color.BLACK;
-        float mix = light ? 0.18f : 0.28f;
-        int blended = blendColors(currentReaderBackgroundColor, overlay, mix);
+        // Match the PDF/EPUB/Word dialog card tone: start from the actual
+        // dialog surface and separate cards by blending toward the readable
+        // foreground, not by adding a white overlay. This keeps TXT More/Font
+        // cards in the same tone family as the document viewers.
+        int bg = readerDialogBgColor();
+        int fg = readableTextColorForBackground(bg);
+        int blended = blendColors(bg, fg, isDarkColor(bg) ? 0.10f : 0.08f);
         return Color.rgb(Color.red(blended), Color.green(blended), Color.blue(blended));
     }
 
@@ -487,12 +489,20 @@ public class ReaderActivity extends AppCompatActivity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dpToPx(18), 0, dpToPx(18), 0);
 
-        // No separate boxes in 더보기. The row background is unified with the dialog/theme.
-        row.setBackgroundColor(Color.TRANSPARENT);
+        // Match the EPUB/Word/PDF "More" window style: each TXT More row is a
+        // separate rounded card, not a flat/bland text row.  The fill and stroke
+        // are theme-derived so light themes get a soft gray card and dark themes
+        // get a visible but not harsh raised card.
+        int panel = readerDialogPanelColor();
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(panel);
+        bg.setCornerRadius(dpToPx(10));
+        bg.setStroke(0, Color.TRANSPARENT);
+        row.setBackground(bg);
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(46));
-        lp.setMargins(0, 0, 0, 0);
+                LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(48));
+        lp.setMargins(0, 0, 0, dpToPx(8));
         row.setLayoutParams(lp);
         return row;
     }
@@ -1061,6 +1071,8 @@ public class ReaderActivity extends AppCompatActivity {
 
         LinearLayout actions = new LinearLayout(this);
         actions.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        actions.setBackground(actionPanelBackground(
+                dialogActionPanelFillColor(bg), dialogActionPanelLineColor(bg)));
         actions.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
         TextView cancel = makeReaderDialogActionText(getString(R.string.cancel), sub, Gravity.CENTER);
         TextView delete = makeReaderDialogActionText(getString(R.string.delete), danger, Gravity.CENTER);
@@ -2437,30 +2449,12 @@ public class ReaderActivity extends AppCompatActivity {
         currentInfo.setTextSize(12f);
         currentInfo.setGravity(Gravity.CENTER);
         currentInfo.setSingleLine(false);
+        currentInfo.setIncludeFontPadding(false);
         currentInfo.setLineSpacing(0f, 1.08f);
         currentInfo.setPadding(0, 0, 0, dpToPx(8));
         box.addView(currentInfo, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        TextView saveButton = new TextView(this);
-        saveButton.setText(getString(R.string.add_current_bookmark));
-        saveButton.setGravity(Gravity.CENTER);
-        saveButton.setTextColor(fg);
-        saveButton.setTextSize(16f);
-        saveButton.setTypeface(Typeface.DEFAULT_BOLD);
-        saveButton.setPadding(0, dpToPx(12), 0, dpToPx(12));
-        GradientDrawable saveBg = new GradientDrawable();
-        saveBg.setColor(panel);
-        saveBg.setCornerRadius(dpToPx(8));
-        saveBg.setStroke(Math.max(1, dpToPx(1)), blendColors(panel, fg, 0.42f));
-        saveButton.setBackground(saveBg);
-        LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        saveLp.setMargins(0, 0, 0, dpToPx(2));
-        box.addView(saveButton, saveLp);
-
         TextView hint = new TextView(this);
         hint.setText(getString(R.string.bookmark_folder_hint));
         hint.setTextColor(sub);
@@ -2472,6 +2466,27 @@ public class ReaderActivity extends AppCompatActivity {
         box.addView(hint, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView saveButton = new TextView(this);
+        saveButton.setText(getString(R.string.add_current_bookmark));
+        saveButton.setGravity(Gravity.CENTER);
+        saveButton.setTextColor(fg);
+        saveButton.setTextSize(16f);
+        saveButton.setTypeface(Typeface.DEFAULT_BOLD);
+        saveButton.setPadding(0, dpToPx(12), 0, dpToPx(12));
+        GradientDrawable saveBg = new GradientDrawable();
+        boolean darkBookmarkDialog = isDarkColor(bg);
+        int saveFill = blendColors(bg, fg, darkBookmarkDialog ? 0.135f : 0.085f);
+        int saveStroke = blendColors(bg, fg, darkBookmarkDialog ? 0.460f : 0.360f);
+        saveBg.setColor(saveFill);
+        saveBg.setCornerRadius(dpToPx(14));
+        saveBg.setStroke(Math.max(1, dpToPx(1)), saveStroke);
+        saveButton.setBackground(saveBg);
+        LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        saveLp.setMargins(0, 0, 0, dpToPx(2));
+        box.addView(saveButton, saveLp);
 
         TextView emptyText = new TextView(this);
         emptyText.setText(getString(R.string.no_bookmarks_hint));
@@ -2498,16 +2513,25 @@ public class ReaderActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        box.addView(rv, new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams bookmarkListLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(430)));
+                dpToPx(430));
+        box.addView(rv, bookmarkListLp);
 
         final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
 
         Runnable refresh = () -> {
             List<Bookmark> allBookmarks = bookmarkManager.getAllBookmarks();
             adapter.setBookmarks(allBookmarks, expandedFolders, filePath);
-            emptyText.setVisibility(allBookmarks.isEmpty() ? View.VISIBLE : View.GONE);
+            // Keep the bookmark dialog height stable even when the list is empty.
+            // This prevents the window from bouncing when the first bookmark is added.
+            emptyText.setVisibility(View.GONE);
+            rv.setVisibility(View.VISIBLE);
+            LinearLayout.LayoutParams rvLp = (LinearLayout.LayoutParams) rv.getLayoutParams();
+            if (rvLp != null && rvLp.height != dpToPx(430)) {
+                rvLp.height = dpToPx(430);
+                rv.setLayoutParams(rvLp);
+            }
             currentInfo.setText(getString(R.string.all_bookmarks_status,
                     adapter.getFolderCount(),
                     allBookmarks.size(),
@@ -2526,6 +2550,8 @@ public class ReaderActivity extends AppCompatActivity {
 
         TextView title = makeReaderDialogTitle(getString(R.string.bookmark), bg, fg);
         title.setGravity(Gravity.CENTER);
+        title.setIncludeFontPadding(false);
+        title.setPadding(dpToPx(22), dpToPx(12), dpToPx(22), 0);
         LinearLayout dialogPanel = new LinearLayout(this);
         dialogPanel.setOrientation(LinearLayout.VERTICAL);
         dialogPanel.setBackgroundColor(Color.TRANSPARENT);
@@ -2547,7 +2573,7 @@ public class ReaderActivity extends AppCompatActivity {
         refresh.run();
 
         android.app.Dialog dialog = createPositionedReaderDialog(dialogPanel, bg,
-                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 74, 14, 460, false);
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 34, 14, 460, false);
         dialogRef[0] = dialog;
         closeButton.setOnClickListener(v -> dialog.dismiss());
 
@@ -2565,6 +2591,15 @@ public class ReaderActivity extends AppCompatActivity {
                     expandedFolders.add(folderFilePath);
                 }
                 refresh.run();
+            }
+
+            @Override
+            public void onFolderDelete(String folderFilePath, String expansionKey, String folderName, int bookmarkCount) {
+                showBookmarkFolderDeleteConfirm(folderFilePath, folderName, bookmarkCount, () -> {
+                    expandedFolders.remove(folderFilePath);
+                    expandedFolders.remove(expansionKey);
+                    refresh.run();
+                });
             }
 
             @Override
@@ -2618,6 +2653,66 @@ public class ReaderActivity extends AppCompatActivity {
         dialog.show();
     }
 
+
+    private void showBookmarkFolderDeleteConfirm(String folderFilePath, String folderName, int bookmarkCount, Runnable afterDelete) {
+        final int bg = readerDialogBgColor();
+        final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
+        final int danger = isLightColor(bg) ? Color.rgb(95, 35, 35) : Color.rgb(255, 170, 170);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+
+        TextView title = makeReaderDialogTitle(getString(R.string.delete_bookmark_folder), bg, fg);
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(Color.TRANSPARENT);
+        box.setPadding(dpToPx(22), dpToPx(12), dpToPx(22), dpToPx(8));
+
+        TextView message = new TextView(this);
+        String displayName = folderName != null && !folderName.trim().isEmpty() ? folderName.trim() : getString(R.string.bookmark);
+        message.setText(displayName + "\n\n"
+                + getString(R.string.delete_bookmark_folder_message, bookmarkCount)
+                + "\n" + getString(R.string.delete_bookmark_folder_note));
+        message.setTextColor(fg);
+        message.setTextSize(14f);
+        message.setLineSpacing(0f, 1.15f);
+        message.setPadding(0, dpToPx(4), 0, dpToPx(8));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(box, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        actions.setBackground(actionPanelBackground(
+                dialogActionPanelFillColor(bg), dialogActionPanelLineColor(bg)));
+        actions.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+        TextView cancel = makeReaderDialogActionText(getString(R.string.cancel), sub, Gravity.CENTER);
+        TextView delete = makeReaderDialogActionText(getString(R.string.delete), danger, Gravity.CENTER);
+        actions.addView(cancel, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        actions.addView(delete, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        panel.addView(actions, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        android.app.Dialog dialog = createPositionedReaderDialog(panel, bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 74, 14, 460, false);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        delete.setOnClickListener(v -> {
+            bookmarkManager.deleteBookmarksForFile(folderFilePath);
+            if (afterDelete != null) afterDelete.run();
+            dialog.dismiss();
+        });
+        dialog.show();
+    }
 
     private void showBookmarkMemoEditDialog(Bookmark bookmark, Runnable afterSave) {
         final int bg = readerDialogBgColor();
@@ -2915,26 +3010,13 @@ public class ReaderActivity extends AppCompatActivity {
                 fontManager.scanFontsSync(this);
             }
 
-            // System-installed custom fonts, such as Samsung/Android installed font
-            // styles, should be visible without showing the full raw /system/fonts list.
-            for (String fontName : fontManager.getSystemInstalledFontNames()) {
+            for (String fontName : fontManager.getUserAddedFontNames(this)) {
                 if (fontName == null || fontName.trim().isEmpty()) continue;
                 String value = normalizeReadingFontValue(fontName);
                 if (isCuratedReadingFontValue(value) || containsReadingFontOption(options, value)) continue;
                 options.add(new ReadingFontOption(value,
-                        "Installed system font: " + fontName,
-                        "설치된 시스템 글꼴: " + fontName));
-            }
-
-            // Keep manually provided font files available, but separate them from
-            // OS-installed custom fonts so the picker stays readable.
-            for (String fontName : fontManager.getUserFontNames()) {
-                if (fontName == null || fontName.trim().isEmpty()) continue;
-                String value = normalizeReadingFontValue(fontName);
-                if (isCuratedReadingFontValue(value) || containsReadingFontOption(options, value)) continue;
-                options.add(new ReadingFontOption(value,
-                        "Font file: " + fontName,
-                        "글꼴 파일: " + fontName));
+                        "Added font: " + fontName,
+                        "추가한 글꼴: " + fontName));
             }
         } catch (Throwable ignored) {
             // Font scanning should never block opening the font picker.
@@ -3132,7 +3214,10 @@ public class ReaderActivity extends AppCompatActivity {
 
     private Drawable fontDialogFrameBorderOverlay(int bgColor) {
         final int borderColor = strongDialogBorderColor(bgColor);
-        final float strokeWidth = Math.max(1f, dpToPx(1));
+        // Match the 2dp outer boundary used by the other stable reader dialogs.
+        // The font picker and full-system-font dialog share this frame, so this
+        // keeps both windows from looking thinner than More/Page/Bookmark.
+        final float strokeWidth = Math.max(1f, dpToPx(2));
         final float radius = dpToPx(16);
         return new Drawable() {
             private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -3298,6 +3383,15 @@ public class ReaderActivity extends AppCompatActivity {
                 applyPreferences();
                 updatePositionLabel();
             });
+            if (isRemovableUserFontValue(option.value)) {
+                row.setOnLongClickListener(v -> {
+                    showUserFontRemoveConfirm(option.value, label, () -> {
+                        dialog.dismiss();
+                        showFontDialog();
+                    });
+                    return true;
+                });
+            }
             list.addView(row);
         }
 
@@ -3420,6 +3514,11 @@ public class ReaderActivity extends AppCompatActivity {
 
                 TextView row = makeReaderFontActionRow(label, fg, selected);
                 row.setOnClickListener(v -> {
+                    try {
+                        FontManager.getInstance().addUserFont(this, fontName);
+                    } catch (Throwable ignored) {
+                        // Selecting the font should still work even if persisting the shortcut fails.
+                    }
                     dialog.dismiss();
                     prefs.setFontFamily(value);
                     applyPreferences();
@@ -3430,6 +3529,99 @@ public class ReaderActivity extends AppCompatActivity {
         }
 
         cancel.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+    }
+
+    private boolean isRemovableUserFontValue(String value) {
+        try {
+            FontManager fontManager = FontManager.getInstance();
+            if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
+            return fontManager.isRemovableUserFont(this, value);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private void showUserFontRemoveConfirm(String value, String label, Runnable afterRemove) {
+        final int bg = readerDialogBgColor();
+        final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
+        final int danger = isLightColor(bg) ? Color.rgb(95, 35, 35) : Color.rgb(255, 170, 170);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+
+        TextView title = makeReaderDialogTitle(localizedText("Remove font", "글꼴 삭제"), bg, fg);
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(Color.TRANSPARENT);
+        box.setPadding(dpToPx(22), dpToPx(10), dpToPx(22), dpToPx(10));
+
+        TextView message = new TextView(this);
+        String safeLabel = label != null && !label.trim().isEmpty() ? label.trim() : value;
+        message.setText(safeLabel + "\n\n" + localizedText(
+                "Remove this user-added font from TextView Reader?",
+                "이 사용자 추가 글꼴을 TextView Reader에서 삭제할까요?")
+                + "\n" + localizedText(
+                "System fonts and document files are not affected.",
+                "시스템 글꼴과 문서 파일은 영향받지 않습니다."));
+        message.setTextColor(fg);
+        message.setTextSize(14f);
+        message.setLineSpacing(0f, 1.15f);
+        message.setPadding(0, dpToPx(4), 0, dpToPx(8));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        panel.addView(box, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        actions.setBackground(actionPanelBackground(
+                dialogActionPanelFillColor(bg), dialogActionPanelLineColor(bg)));
+        actions.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+        TextView cancel = makeReaderDialogActionText(getString(R.string.cancel), sub, Gravity.CENTER);
+        TextView delete = makeReaderDialogActionText(getString(R.string.delete), danger, Gravity.CENTER);
+        actions.addView(cancel, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        actions.addView(delete, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        panel.addView(actions, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        android.app.Dialog dialog = createPositionedReaderDialog(panel, bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 74, 14, 460, false);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        delete.setOnClickListener(v -> {
+            boolean removed = false;
+            try {
+                FontManager fontManager = FontManager.getInstance();
+                if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
+                removed = fontManager.removeUserFont(this, value);
+            } catch (Throwable ignored) {
+                removed = false;
+            }
+
+            if (removed) {
+                if (normalizeReadingFontValue(prefs.getFontFamily()).equals(normalizeReadingFontValue(value))) {
+                    prefs.setFontFamily("default");
+                    applyPreferences();
+                    updatePositionLabel();
+                }
+                Toast.makeText(this, localizedText("Font removed", "글꼴을 삭제했습니다"), Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
+                if (afterRemove != null) afterRemove.run();
+            } else {
+                Toast.makeText(this, localizedText(
+                        "This font cannot be removed from inside the app.",
+                        "이 글꼴은 앱 안에서 삭제할 수 없습니다."), Toast.LENGTH_SHORT).show();
+            }
+        });
         dialog.show();
     }
 
