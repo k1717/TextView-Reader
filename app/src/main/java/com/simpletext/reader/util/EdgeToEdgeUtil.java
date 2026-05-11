@@ -21,6 +21,10 @@ import androidx.core.view.WindowInsetsControllerCompat;
 public final class EdgeToEdgeUtil {
     private EdgeToEdgeUtil() {}
 
+    public interface ChromeVisibilityProvider {
+        boolean isChromeVisible();
+    }
+
     public static void applyStandardInsets(Activity activity,
                                            View root,
                                            @Nullable View topBar,
@@ -42,6 +46,46 @@ public final class EdgeToEdgeUtil {
                 int bottomInset = imeVisible ? Math.max(bars.bottom, ime.bottom) : bars.bottom;
                 bottomContent.setPadding(bottomPad.left, bottomPad.top, bottomPad.right,
                         bottomPad.bottom + bottomInset);
+            }
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(root);
+    }
+
+    public static void applyFoldableChromeInsets(Activity activity,
+                                                 View root,
+                                                 @Nullable View topBar,
+                                                 @Nullable View bottomContent,
+                                                 @Nullable View foldedContent,
+                                                 ChromeVisibilityProvider chromeVisibilityProvider) {
+        prepareWindow(activity, root);
+        final Padding topPad = topBar != null ? new Padding(topBar) : null;
+        final Padding bottomPad = bottomContent != null ? new Padding(bottomContent) : null;
+        final Padding foldedPad = foldedContent != null ? new Padding(foldedContent) : null;
+        final int foldedExtraInset = dpToPx(activity, 6);
+
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                    | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            boolean imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+
+            boolean chromeVisible = chromeVisibilityProvider == null || chromeVisibilityProvider.isChromeVisible();
+
+            if (topBar != null) {
+                topBar.setPadding(topPad.left, topPad.top + bars.top, topPad.right, topPad.bottom);
+            }
+            if (bottomContent != null) {
+                int bottomInset = imeVisible ? Math.max(bars.bottom, ime.bottom) : bars.bottom;
+                bottomContent.setPadding(bottomPad.left, bottomPad.top, bottomPad.right,
+                        bottomPad.bottom + bottomInset);
+            }
+            if (foldedContent != null) {
+                int bottomInset = imeVisible ? 0 : bars.bottom;
+                int foldedTopInset = chromeVisible ? 0 : bars.top + foldedExtraInset;
+                int foldedBottomInset = chromeVisible ? 0 : bottomInset + foldedExtraInset;
+                foldedContent.setPadding(foldedPad.left, foldedPad.top + foldedTopInset,
+                        foldedPad.right, foldedPad.bottom + foldedBottomInset);
             }
             return insets;
         });
@@ -87,6 +131,10 @@ public final class EdgeToEdgeUtil {
         WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, root);
         controller.setAppearanceLightStatusBars(false);      // app bar is neutral/dark
         controller.setAppearanceLightNavigationBars(!darkMode);
+    }
+
+    private static int dpToPx(Activity activity, float dp) {
+        return Math.round(dp * activity.getResources().getDisplayMetrics().density);
     }
 
     private static final class Padding {

@@ -1,6 +1,7 @@
 package com.simpletext.reader;
 
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
@@ -109,6 +110,9 @@ public class DocumentPageActivity extends AppCompatActivity {
     private static final int WORD_PARAGRAPHS_PER_PAGE = 28;
 
     private Toolbar toolbar;
+    private View documentAppBar;
+    private View documentBottomChrome;
+    private boolean documentChromeVisible = true;
     private WebView webView;
     private ProgressBar progressBar;
     private TextView pageStatus;
@@ -202,12 +206,16 @@ public class DocumentPageActivity extends AppCompatActivity {
         // targetSdk 35 forces edge-to-edge regardless of setDecorFitsSystemWindows.
         // Without inset padding, the toolbar sits under the status bar and the
         // bottom button row sits under the 3-button navigation bar.
-        com.simpletext.reader.util.EdgeToEdgeUtil.applyStandardInsets(this,
+        com.simpletext.reader.util.EdgeToEdgeUtil.applyFoldableChromeInsets(this,
                 findViewById(R.id.document_root),
                 findViewById(R.id.document_appbar),
-                findViewById(R.id.document_bottom_scroller));
+                findViewById(R.id.document_bottom_scroller),
+                findViewById(R.id.document_viewport),
+                () -> documentChromeVisible);
         applyDocumentSystemBarColors();
 
+        documentAppBar = findViewById(R.id.document_appbar);
+        documentBottomChrome = findViewById(R.id.document_bottom_scroller);
         toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) getSupportActionBar().setDisplayHomeAsUpEnabled(true);
@@ -238,6 +246,13 @@ public class DocumentPageActivity extends AppCompatActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         loadFromIntent(intent);
+    }
+
+
+    private void updateLoadingIndicatorTheme() {
+        if (progressBar == null) return;
+        progressBar.setBackgroundColor(Color.TRANSPARENT);
+        progressBar.setIndeterminateTintList(ColorStateList.valueOf(readerFg));
     }
 
     @Override
@@ -339,6 +354,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
         if (webView != null) webView.setBackgroundColor(readerBg);
         if (pageStatus != null) pageStatus.setTextColor(readerFg);
+        updateLoadingIndicatorTheme();
         TextView[] buttons = {prevButton, nextButton, searchButton, pageButton, bookmarkButton, moreButton};
         for (TextView b : buttons) {
             if (b == null) continue;
@@ -360,6 +376,32 @@ public class DocumentPageActivity extends AppCompatActivity {
         wordRelationships.clear();
         executor.shutdownNow();
         super.onDestroy();
+    }
+
+    private boolean handleDocumentTapGesture(@NonNull MotionEvent event) {
+        if (documentGestureDetector == null) return false;
+        boolean handled = documentGestureDetector.onTouchEvent(event);
+        // Do not consume ACTION_DOWN; the WebView still needs the original down
+        // event for scrolling, text selection, and edge-swipe tracking.
+        return handled && event.getActionMasked() != MotionEvent.ACTION_DOWN;
+    }
+
+    private void toggleDocumentChrome() {
+        setDocumentChromeVisible(!documentChromeVisible);
+    }
+
+    private void setDocumentChromeVisible(boolean visible) {
+        documentChromeVisible = visible;
+        int visibility = visible ? View.VISIBLE : View.GONE;
+        if (documentAppBar != null && documentAppBar.getVisibility() != visibility) {
+            documentAppBar.setVisibility(visibility);
+        }
+        if (documentBottomChrome != null && documentBottomChrome.getVisibility() != visibility) {
+            documentBottomChrome.setVisibility(visibility);
+        }
+        View viewport = findViewById(R.id.document_viewport);
+        androidx.core.view.ViewCompat.requestApplyInsets(findViewById(R.id.document_root));
+        if (viewport != null) viewport.requestLayout();
     }
 
     private void destroyDocumentWebView() {
@@ -482,6 +524,17 @@ public class DocumentPageActivity extends AppCompatActivity {
         wordSwipeTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         documentGestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
+            public boolean onDown(@NonNull MotionEvent e) {
+                return true;
+            }
+
+            @Override
+            public boolean onSingleTapConfirmed(@NonNull MotionEvent e) {
+                toggleDocumentChrome();
+                return true;
+            }
+
+            @Override
             public boolean onDoubleTap(@NonNull MotionEvent e) {
                 resetDocumentZoom();
                 clearDocumentEdgeArm();
@@ -490,7 +543,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         });
 
         webView.setOnTouchListener((v, event) -> {
-            if (documentGestureDetector != null && documentGestureDetector.onTouchEvent(event)) {
+            if (handleDocumentTapGesture(event)) {
                 return true;
             }
 
@@ -2181,6 +2234,7 @@ public class DocumentPageActivity extends AppCompatActivity {
 
     private void loadFromIntent(Intent intent) {
         final int generation = ++loadGeneration;
+        updateLoadingIndicatorTheme();
         progressBar.setVisibility(View.VISIBLE);
         webView.setVisibility(View.INVISIBLE);
         closeResourceZip();

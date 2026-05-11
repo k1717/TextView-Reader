@@ -1,5 +1,6 @@
 package com.simpletext.reader;
 
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.pdf.PdfRenderer;
@@ -74,6 +75,9 @@ public class PdfReaderActivity extends AppCompatActivity {
     public static final String EXTRA_JUMP_TO_PAGE = ReaderActivity.EXTRA_JUMP_TO_POSITION;
 
     private View root;
+    private View pdfAppBar;
+    private View pdfBottomBar;
+    private boolean pdfChromeVisible = true;
     private ImageView pageImage;
     private RecyclerView pdfContinuousList;
     private PdfContinuousPageAdapter pdfContinuousAdapter;
@@ -116,6 +120,8 @@ public class PdfReaderActivity extends AppCompatActivity {
     private float pendingZoomFocusYRatio = 0.5f;
     private float pendingZoomViewportX = 0.5f;
     private float pendingZoomViewportY = 0.5f;
+    private float activePinchFocusRawX = -1f;
+    private float activePinchFocusRawY = -1f;
 
     private int readerBg = Color.rgb(18, 18, 18);
     private int readerFg = Color.rgb(232, 234, 237);
@@ -162,10 +168,12 @@ public class PdfReaderActivity extends AppCompatActivity {
         // installs an OnApplyWindowInsetsListener that pads the AppBarLayout and
         // bottom bar by the matching system inset, which is exactly what is
         // needed here.
-        com.simpletext.reader.util.EdgeToEdgeUtil.applyStandardInsets(this,
+        com.simpletext.reader.util.EdgeToEdgeUtil.applyFoldableChromeInsets(this,
                 findViewById(R.id.pdf_root),
                 findViewById(R.id.pdf_appbar),
-                findViewById(R.id.pdf_bottom_bar));
+                findViewById(R.id.pdf_bottom_bar),
+                findViewById(R.id.pdf_viewport),
+                () -> pdfChromeVisible);
         applyDocumentSystemBarColors();
 
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -177,6 +185,8 @@ public class PdfReaderActivity extends AppCompatActivity {
         toolbar.setNavigationIcon(tintedBackIcon());
 
         root = findViewById(R.id.pdf_root);
+        pdfAppBar = findViewById(R.id.pdf_appbar);
+        pdfBottomBar = findViewById(R.id.pdf_bottom_bar);
         pageImage = findViewById(R.id.pdf_page_image);
         pdfContinuousList = findViewById(R.id.pdf_continuous_list);
         progressBar = findViewById(R.id.pdf_progress);
@@ -393,7 +403,7 @@ public class PdfReaderActivity extends AppCompatActivity {
                     return true;
                 }
             }
-            if (insideViewport && gestureDetector != null && gestureDetector.onTouchEvent(event)) {
+            if (handlePdfTapGesture(event, insideViewport)) {
                 resetViewportGesture();
                 return true;
             }
@@ -446,7 +456,7 @@ public class PdfReaderActivity extends AppCompatActivity {
                     return false;
             }
         }
-        if (insideViewport && gestureDetector != null && gestureDetector.onTouchEvent(event)) {
+        if (handlePdfTapGesture(event, insideViewport)) {
             resetViewportGesture();
             return true;
         }
@@ -547,6 +557,32 @@ public class PdfReaderActivity extends AppCompatActivity {
         gestureStartedAtRightEdge = true;
         gestureStartedAtTopEdge = true;
         gestureStartedAtBottomEdge = true;
+    }
+
+    private boolean handlePdfTapGesture(@NonNull MotionEvent event, boolean insideViewport) {
+        if (!insideViewport || gestureDetector == null) return false;
+        boolean handled = gestureDetector.onTouchEvent(event);
+        // Keep ACTION_DOWN available for the pan/swipe tracker. GestureDetector may
+        // return true on down once onDown() is enabled for reliable single-tap
+        // confirmation, but consuming down here breaks page swipes and zoom panning.
+        return handled && event.getActionMasked() != MotionEvent.ACTION_DOWN;
+    }
+
+    private void togglePdfChrome() {
+        setPdfChromeVisible(!pdfChromeVisible);
+    }
+
+    private void setPdfChromeVisible(boolean visible) {
+        pdfChromeVisible = visible;
+        int visibility = visible ? View.VISIBLE : View.GONE;
+        if (pdfAppBar != null && pdfAppBar.getVisibility() != visibility) {
+            pdfAppBar.setVisibility(visibility);
+        }
+        if (pdfBottomBar != null && pdfBottomBar.getVisibility() != visibility) {
+            pdfBottomBar.setVisibility(visibility);
+        }
+        androidx.core.view.ViewCompat.requestApplyInsets(root);
+        if (pdfViewport != null) pdfViewport.requestLayout();
     }
 
     private boolean isPdfContentScrollable() {
@@ -728,18 +764,19 @@ public class PdfReaderActivity extends AppCompatActivity {
     private void styleControls() {
         resolveReaderThemeColors();
         if (root != null) root.setBackgroundColor(readerBg);
-        View appbar = findViewById(R.id.pdf_appbar);
-        if (appbar != null) appbar.setBackgroundColor(readerBg);
+        if (pdfAppBar == null) pdfAppBar = findViewById(R.id.pdf_appbar);
+        if (pdfAppBar != null) pdfAppBar.setBackgroundColor(readerBg);
         Toolbar toolbar = findViewById(R.id.toolbar);
         if (toolbar != null) {
             toolbar.setBackgroundColor(readerBg);
             toolbar.setTitleTextColor(readerFg);
             toolbar.setNavigationIcon(tintedBackIcon());
         }
-        View bottom = findViewById(R.id.pdf_bottom_bar);
-        if (bottom != null) bottom.setBackgroundColor(readerPanel);
+        if (pdfBottomBar == null) pdfBottomBar = findViewById(R.id.pdf_bottom_bar);
+        if (pdfBottomBar != null) pdfBottomBar.setBackgroundColor(readerPanel);
         if (pdfViewport != null) pdfViewport.setBackgroundColor(readerPanel);
         if (pageStatus != null) pageStatus.setTextColor(readerFg);
+        updateLoadingIndicatorTheme();
 
         TextView[] buttons = {prevButton, nextButton, slideModeButton, pageButton, bookmarkButton, zoomMoreButton};
         for (TextView b : buttons) {
@@ -747,6 +784,13 @@ public class PdfReaderActivity extends AppCompatActivity {
             b.setTextColor(readerFg);
             b.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(readerFg));
         }
+    }
+
+
+    private void updateLoadingIndicatorTheme() {
+        if (progressBar == null) return;
+        progressBar.setBackgroundColor(Color.TRANSPARENT);
+        progressBar.setIndeterminateTintList(ColorStateList.valueOf(readerFg));
     }
 
     private void setupControls() {
@@ -766,11 +810,8 @@ public class PdfReaderActivity extends AppCompatActivity {
         scaleGestureDetector = new ScaleGestureDetector(this, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override
             public boolean onScaleBegin(ScaleGestureDetector detector) {
-                if (pageImage != null) {
-                    pageImage.animate().cancel();
-                    pageImage.setPivotX(detector.getFocusX());
-                    pageImage.setPivotY(detector.getFocusY());
-                }
+                capturePinchZoomFocus(detector);
+                applyPageImagePivotFromRaw(activePinchFocusRawX, activePinchFocusRawY);
                 return true;
             }
 
@@ -793,12 +834,25 @@ public class PdfReaderActivity extends AppCompatActivity {
             public void onScaleEnd(ScaleGestureDetector detector) {
                 if (pinchZoomChanged) {
                     pinchZoomChanged = false;
+                    activePinchFocusRawX = -1f;
+                    activePinchFocusRawY = -1f;
                     renderCurrentPage();
                 }
             }
         });
 
         gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onDown(MotionEvent e) {
+                return true;
+            }
+
+            @Override
+            public boolean onSingleTapConfirmed(MotionEvent e) {
+                togglePdfChrome();
+                return true;
+            }
+
             @Override
             public boolean onDoubleTap(MotionEvent e) {
                 toggleDoubleTapZoom(e);
@@ -818,16 +872,16 @@ public class PdfReaderActivity extends AppCompatActivity {
             renderContinuousPages();
             return;
         }
-        prepareDoubleTapZoomFocus(focusEvent);
+        if (focusEvent != null) {
+            prepareDoubleTapZoomFocus(focusEvent);
+            applyPageImagePivotFromRaw(focusEvent.getRawX(), focusEvent.getRawY());
+        } else {
+            prepareZoomFocusFromViewportCenter();
+            applyPageImagePivotFromPreparedFocus();
+        }
         if (pageImage != null) {
             float displayScale = Math.max(0.55f, Math.min(4.5f, zoom / Math.max(0.1f, renderedZoom)));
             pageImage.animate().cancel();
-            if (focusEvent != null) {
-                int[] imageLoc = new int[2];
-                pageImage.getLocationOnScreen(imageLoc);
-                pageImage.setPivotX(Math.max(0f, Math.min(pageImage.getWidth(), focusEvent.getRawX() - imageLoc[0])));
-                pageImage.setPivotY(Math.max(0f, Math.min(pageImage.getHeight(), focusEvent.getRawY() - imageLoc[1])));
-            }
             pageImage.animate()
                     .scaleX(displayScale)
                     .scaleY(displayScale)
@@ -840,7 +894,27 @@ public class PdfReaderActivity extends AppCompatActivity {
     }
 
     private void prepareDoubleTapZoomFocus(MotionEvent focusEvent) {
-        if (focusEvent == null || pageImage == null || pdfViewport == null) {
+        if (focusEvent == null) {
+            pendingZoomFocus = false;
+            return;
+        }
+        prepareZoomFocusFromRaw(focusEvent.getRawX(), focusEvent.getRawY());
+    }
+
+    private void prepareZoomFocusFromViewportCenter() {
+        if (pdfViewport == null) {
+            pendingZoomFocus = false;
+            return;
+        }
+        int[] viewportLoc = new int[2];
+        pdfViewport.getLocationOnScreen(viewportLoc);
+        prepareZoomFocusFromRaw(
+                viewportLoc[0] + pdfViewport.getWidth() * 0.5f,
+                viewportLoc[1] + pdfViewport.getHeight() * 0.5f);
+    }
+
+    private void prepareZoomFocusFromRaw(float rawX, float rawY) {
+        if (rawX < 0f || rawY < 0f || pageImage == null || pdfViewport == null) {
             pendingZoomFocus = false;
             return;
         }
@@ -853,14 +927,46 @@ public class PdfReaderActivity extends AppCompatActivity {
         pageImage.getLocationOnScreen(imageLoc);
         pdfViewport.getLocationOnScreen(viewportLoc);
 
-        float localX = Math.max(0f, Math.min(imageWidth, focusEvent.getRawX() - imageLoc[0]));
-        float localY = Math.max(0f, Math.min(imageHeight, focusEvent.getRawY() - imageLoc[1]));
+        float localX = Math.max(0f, Math.min(imageWidth, rawX - imageLoc[0]));
+        float localY = Math.max(0f, Math.min(imageHeight, rawY - imageLoc[1]));
 
         pendingZoomFocusXRatio = localX / imageWidth;
         pendingZoomFocusYRatio = localY / imageHeight;
-        pendingZoomViewportX = Math.max(0f, Math.min(pdfViewport.getWidth(), focusEvent.getRawX() - viewportLoc[0]));
-        pendingZoomViewportY = Math.max(0f, Math.min(pdfViewport.getHeight(), focusEvent.getRawY() - viewportLoc[1]));
+        pendingZoomViewportX = Math.max(0f, Math.min(pdfViewport.getWidth(), rawX - viewportLoc[0]));
+        pendingZoomViewportY = Math.max(0f, Math.min(pdfViewport.getHeight(), rawY - viewportLoc[1]));
         pendingZoomFocus = true;
+    }
+
+    private void capturePinchZoomFocus(ScaleGestureDetector detector) {
+        if (detector == null || root == null) {
+            activePinchFocusRawX = -1f;
+            activePinchFocusRawY = -1f;
+            pendingZoomFocus = false;
+            return;
+        }
+        int[] rootLoc = new int[2];
+        root.getLocationOnScreen(rootLoc);
+        activePinchFocusRawX = rootLoc[0] + detector.getFocusX();
+        activePinchFocusRawY = rootLoc[1] + detector.getFocusY();
+        prepareZoomFocusFromRaw(activePinchFocusRawX, activePinchFocusRawY);
+    }
+
+    private void applyPageImagePivotFromPreparedFocus() {
+        if (!pendingZoomFocus || pdfViewport == null) return;
+        int[] viewportLoc = new int[2];
+        pdfViewport.getLocationOnScreen(viewportLoc);
+        applyPageImagePivotFromRaw(
+                viewportLoc[0] + pendingZoomViewportX,
+                viewportLoc[1] + pendingZoomViewportY);
+    }
+
+    private void applyPageImagePivotFromRaw(float rawX, float rawY) {
+        if (rawX < 0f || rawY < 0f || pageImage == null) return;
+        pageImage.animate().cancel();
+        int[] imageLoc = new int[2];
+        pageImage.getLocationOnScreen(imageLoc);
+        pageImage.setPivotX(Math.max(0f, Math.min(pageImage.getWidth(), rawX - imageLoc[0])));
+        pageImage.setPivotY(Math.max(0f, Math.min(pageImage.getHeight(), rawY - imageLoc[1])));
     }
 
     private void showMoreDialog() {
@@ -1299,6 +1405,7 @@ public class PdfReaderActivity extends AppCompatActivity {
 
     private void loadPdfFromIntent() {
         if (activityDestroyed) return;
+        updateLoadingIndicatorTheme();
         progressBar.setVisibility(View.VISIBLE);
         pageStatus.setText(getString(R.string.loading));
 
@@ -1433,6 +1540,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         final float zoomToRender = zoom;
         final int generation = ++renderGeneration;
 
+        updateLoadingIndicatorTheme();
         progressBar.setVisibility(View.VISIBLE);
         updatePageStatus();
 

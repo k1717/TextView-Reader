@@ -19,6 +19,9 @@ import android.widget.OverScroller;
 
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * TekView-style custom scroll reader.
  *
@@ -70,6 +73,7 @@ public class CustomReaderView extends View {
 
     private int readerScrollY = 0;
     private int maxScrollY = 0;
+    private final List<Integer> pageAnchors = new ArrayList<>();
     private float downX;
     private float downY;
     private float lastY;
@@ -171,7 +175,13 @@ public class CustomReaderView extends View {
     }
 
     public void setOverlapLines(int overlapLines) {
-        this.overlapLines = Math.max(0, Math.min(8, overlapLines));
+        int next = Math.max(0, Math.min(8, overlapLines));
+        if (this.overlapLines == next) return;
+        this.overlapLines = next;
+        rebuildPageAnchors();
+        readerScrollY = clampScrollY(readerScrollY);
+        invalidate();
+        notifyScrollChanged();
     }
 
     public void setTextZoneAdjustments(int topOffsetPx, int bottomOffsetPx, int leftInsetPx, int rightInsetPx) {
@@ -248,8 +258,8 @@ public class CustomReaderView extends View {
         int contentHeight = getContentHeight();
         int viewport = getViewportHeight();
         maxScrollY = Math.max(0, contentHeight - viewport);
-        if (readerScrollY > maxScrollY) readerScrollY = maxScrollY;
-        if (readerScrollY < 0) readerScrollY = 0;
+        rebuildPageAnchors();
+        readerScrollY = clampScrollY(readerScrollY);
     }
 
     private int getContentHeight() {
@@ -409,27 +419,185 @@ public class CustomReaderView extends View {
         return readerScrollY;
     }
 
+    /**
+     * Returns the top edge, in this view's coordinate space, of the first text
+     * line currently visible in the TXT viewport.  This is intentionally based
+     * on the actual StaticLayout line selected by readerScrollY, not just on
+     * padding/margins, because page anchors after page 1 can start on different
+     * layout line boundaries.
+     */
+    public int getFirstVisibleLineTopInView() {
+        if (layout == null || layout.getLineCount() <= 0) {
+            return getTextViewportTopY() + marginVerticalPx;
+        }
+        int layoutY = Math.max(0, readerScrollY - marginVerticalPx);
+        int line = Math.max(0, Math.min(layout.getLineCount() - 1, layout.getLineForVertical(layoutY)));
+        return getTextViewportTopY() + marginVerticalPx - readerScrollY + layout.getLineTop(line);
+    }
+
+    /**
+     * Returns the bottom edge, in this view's coordinate space, of the first
+     * visible text line.  This is useful for text selection/highlight behavior,
+     * but overlay chrome should not depend on it because the last page can be
+     * clamped to maxScrollY and shift the actual visible line grid.
+     */
+    public int getFirstVisibleLineBottomInView() {
+        if (layout == null || layout.getLineCount() <= 0) {
+            return getFirstVisibleLineTopInView() + Math.max(1, Math.round(getLineHeightPx()));
+        }
+        int layoutY = Math.max(0, readerScrollY - marginVerticalPx);
+        int line = Math.max(0, Math.min(layout.getLineCount() - 1, layout.getLineForVertical(layoutY)));
+        return getTextViewportTopY() + marginVerticalPx - readerScrollY + layout.getLineBottom(line);
+    }
+
+    /**
+     * Stable visual slot for the first TXT row.  Unlike getFirstVisibleLine*(),
+     * this does not depend on readerScrollY, so it stays fixed on the last page
+     * even when the final page's scroll position is clamped.
+     */
+    public int getStableFirstRowTopInView() {
+        return getTextViewportTopY();
+    }
+
+    public int getStableFirstRowBottomInView() {
+        int top = getStableFirstRowTopInView();
+        int rowHeight = Math.max(1, Math.round(getLineHeightPx()));
+        return Math.min(getHeight(), top + rowHeight);
+    }
+
     public int getMaxScrollY() {
         return maxScrollY;
     }
 
+    /**
+     * StaticLayout includes extra top font padding on the very first line when
+     * includePad=true.  Later page-start lines do not include that same leading
+     * pad in their baseline offset, so page 1 can look slightly lower than page
+     * 2+.  Compensate only the minimum/page-1 anchor by that extra first-line
+     * pad; this keeps page 1 on the same visual row grid as the later pages
+     * without changing the real line-boundary anchors used for pagination.
+     */
+    private int getFirstPageTopPadCompensationPx() {
+        if (layout == null || layout.getLineCount() < 2) {
+            return 0;
+        }
+        int firstBaselineOffset = layout.getLineBaseline(0) - layout.getLineTop(0);
+        int normalBaselineOffset = layout.getLineBaseline(1) - layout.getLineTop(1);
+        return Math.max(0, firstBaselineOffset - normalBaselineOffset);
+    }
+
+    private int getMinPageScrollY() {
+        if (layout == null || layout.getLineCount() <= 0 || maxScrollY <= 0) {
+            return 0;
+        }
+        int firstPageAnchor = marginVerticalPx + getFirstPageTopPadCompensationPx();
+        return Math.max(0, Math.min(maxScrollY, firstPageAnchor));
+    }
+
+    private int rawScrollYForLine(int line) {
+        if (layout == null || layout.getLineCount() <= 0) {
+            return 0;
+        }
+        int clampedLine = Math.max(0, Math.min(layout.getLineCount() - 1, line));
+        return layout.getLineTop(clampedLine) + marginVerticalPx;
+    }
+
+    private int scrollYForLine(int line) {
+        int raw = rawScrollYForLine(line);
+        return Math.max(getMinPageScrollY(), Math.min(maxScrollY, raw));
+    }
+
+    /**
+     * Builds page anchors from actual StaticLayout line boundaries.  A page starts
+     * on the first line that was not fully visible on the previous page.  This
+     * avoids both duplicated boundary lines and skipped lines, which can happen
+     * when a fixed pixel step is snapped back to the nearest line top.
+     */
+    private void rebuildPageAnchors() {
+        pageAnchors.clear();
+        if (layout == null || layout.getLineCount() <= 0) {
+            pageAnchors.add(0);
+            return;
+        }
+
+        int lineCount = layout.getLineCount();
+        int viewportHeight = Math.max(1, getViewportHeight());
+        int overlap = Math.max(0, overlapLines);
+
+        int startLine = 0;
+        while (startLine < lineCount) {
+            int anchor = Math.max(getMinPageScrollY(), rawScrollYForLine(startLine));
+            if (pageAnchors.isEmpty() || pageAnchors.get(pageAnchors.size() - 1) != anchor) {
+                pageAnchors.add(anchor);
+            }
+
+            int pageTop = layout.getLineTop(startLine);
+            int pageBottomLimit = pageTop + viewportHeight;
+
+            int lastFullLine = startLine - 1;
+            for (int line = startLine; line < lineCount; line++) {
+                if (layout.getLineBottom(line) <= pageBottomLimit) {
+                    lastFullLine = line;
+                } else {
+                    break;
+                }
+            }
+
+            int nextStartLine = Math.max(startLine + 1, lastFullLine + 1 - overlap);
+            if (nextStartLine <= startLine || nextStartLine >= lineCount) {
+                break;
+            }
+            startLine = nextStartLine;
+        }
+
+        if (pageAnchors.isEmpty()) {
+            pageAnchors.add(getMinPageScrollY());
+        }
+
+        // The natural max scroll can land between StaticLayout line tops on the
+        // final page.  If the final page anchor is forced down to that fractional
+        // clamp, the top row can be clipped.  Keep enough virtual bottom space so
+        // the last page can still start on its real line boundary.
+        if (pageAnchors.size() > 1) {
+            int lastAnchor = pageAnchors.get(pageAnchors.size() - 1);
+            if (lastAnchor > maxScrollY) {
+                maxScrollY = lastAnchor;
+            }
+        }
+    }
+
+    private void ensurePageAnchors() {
+        if (pageAnchors.isEmpty()) {
+            rebuildPageAnchors();
+        }
+    }
+
     private int clampScrollY(int y) {
-        return Math.max(0, Math.min(maxScrollY, y));
+        int minScrollY = getMinPageScrollY();
+        if (maxScrollY <= minScrollY) {
+            return 0;
+        }
+        return Math.max(minScrollY, Math.min(maxScrollY, y));
     }
 
     private int snapScrollYToLineTop(int y) {
         if (layout == null || text.isEmpty()) return clampScrollY(y);
 
         int clamped = clampScrollY(y);
-        if (clamped <= 0) return 0;
-        if (clamped >= maxScrollY) return maxScrollY;
+        int minScrollY = getMinPageScrollY();
+        if (clamped <= minScrollY) return minScrollY;
 
         int layoutY = Math.max(0, clamped - marginVerticalPx);
         int line = layout.getLineForVertical(layoutY);
+        int aligned = rawScrollYForLine(line);
+        if (aligned > clamped && line > 0) {
+            aligned = rawScrollYForLine(line - 1);
+        }
 
         // Align the visible top edge to a real StaticLayout line boundary.
-        // This prevents the top line from being clipped in half after tap paging.
-        return clampScrollY(layout.getLineTop(line) + marginVerticalPx);
+        // This prevents the top line from being clipped in half after tap paging,
+        // including the last page where the natural max scroll may be between rows.
+        return clampScrollY(aligned);
     }
 
     private int getFullLineClipBottom() {
@@ -475,32 +643,31 @@ public class CustomReaderView extends View {
     }
 
     public int getTotalPageCount() {
-        int step = getPageStepPx();
-        return Math.max(1, (maxScrollY / step) + 1);
+        ensurePageAnchors();
+        return Math.max(1, pageAnchors.size());
     }
 
     public int getCurrentPageNumber() {
-        int step = getPageStepPx();
-        int total = getTotalPageCount();
-        int page = Math.round(readerScrollY / (float) step) + 1;
+        ensurePageAnchors();
+        int total = pageAnchors.size();
+        if (total <= 1) return 1;
+
+        int page = 1;
+        for (int i = 0; i < total; i++) {
+            if (readerScrollY + 1 >= pageAnchors.get(i)) {
+                page = i + 1;
+            } else {
+                break;
+            }
+        }
         return Math.max(1, Math.min(total, page));
     }
 
     private int getPageAnchorScrollY(int page) {
-        int total = getTotalPageCount();
+        ensurePageAnchors();
+        int total = Math.max(1, pageAnchors.size());
         int clampedPage = Math.max(1, Math.min(total, page));
-
-        // Page 1 must be the absolute top. Snapping 0 to a line top can otherwise
-        // become marginVerticalPx, which makes the first page drift down by one row
-        // after paging back to the beginning.
-        if (clampedPage <= 1) {
-            return 0;
-        }
-
-        // Keep counted pages on normal page-step anchors. Do not force the last
-        // counted page directly to maxScrollY; otherwise the content between the
-        // last full page anchor and the physical end can be skipped.
-        return snapScrollYToLineTop((clampedPage - 1) * getPageStepPx());
+        return pageAnchors.get(clampedPage - 1);
     }
 
     public void scrollToPage(int page) {
@@ -514,12 +681,12 @@ public class CustomReaderView extends View {
         int current = getCurrentPageNumber();
 
         if (direction > 0 && current >= total) {
-            setReaderScrollY(maxScrollY);
+            setReaderScrollY(getPageAnchorScrollY(total));
             return;
         }
 
         if (direction < 0 && current <= 1) {
-            setReaderScrollY(0);
+            setReaderScrollY(getPageAnchorScrollY(1));
             return;
         }
 

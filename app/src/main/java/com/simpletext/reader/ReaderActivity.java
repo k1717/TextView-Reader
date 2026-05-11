@@ -102,12 +102,14 @@ public class ReaderActivity extends AppCompatActivity {
     private CustomReaderView readerView;
     private ProgressBar progressBar;
     private TextView progressText;
+    private View loadingBox;
     private View bottomBar;
     private View navBarSpacer;
     private View pageDragPanel;
     private SeekBar seekBar;
     private TextView positionLabel;
     private TextView readerPageStatus;
+    private TextView readerFileTitle;
     private Toolbar toolbar;
 
     private String filePath;
@@ -123,6 +125,9 @@ public class ReaderActivity extends AppCompatActivity {
 
     private boolean toolbarVisible = false;
     private int currentReaderBackgroundColor = Color.BLACK;
+    private int lastReaderTopInset = 0;
+    private int lastReaderBottomInset = 0;
+    private int lastStatusOffExtraTopPadding = 0;
     private boolean scrollUpdateScheduled = false;
     private boolean suppressSeekCallback = false;
     private long lastViewerBackPressedTime = 0L;
@@ -183,6 +188,7 @@ public class ReaderActivity extends AppCompatActivity {
         toolbar.setVisibility(View.GONE);
 
         readerView = findViewById(R.id.reader_view);
+        loadingBox = findViewById(R.id.loading_box);
         progressBar = findViewById(R.id.loading_progress);
         progressText = findViewById(R.id.loading_text);
         bottomBar = findViewById(R.id.bottom_bar);
@@ -191,6 +197,9 @@ public class ReaderActivity extends AppCompatActivity {
         seekBar = findViewById(R.id.seek_bar);
         positionLabel = findViewById(R.id.position_label);
         readerPageStatus = findViewById(R.id.reader_page_status);
+        readerFileTitle = findViewById(R.id.reader_file_title);
+        updateReaderFileTitle();
+        updateReaderFileTitleVisibility();
         updateLoadingIndicatorColors(currentReaderBackgroundColor);
 
         bookmarkManager = BookmarkManager.getInstance(this);
@@ -364,6 +373,11 @@ public class ReaderActivity extends AppCompatActivity {
             readerPageStatus.setBackgroundColor(backgroundColor);
             readerPageStatus.setTextColor(textColor);
         }
+        if (readerFileTitle != null) {
+            readerFileTitle.setBackgroundColor(backgroundColor);
+            readerFileTitle.setTextColor(textColor);
+            readerFileTitle.setTextSize(14f);
+        }
 
         updateLoadingIndicatorColors(backgroundColor);
         updateBottomMenuBackground();
@@ -391,11 +405,17 @@ public class ReaderActivity extends AppCompatActivity {
     private void updateLoadingIndicatorColors(int backgroundColor) {
         int fg = readableTextColorForBackground(backgroundColor);
 
+        if (loadingBox != null) {
+            loadingBox.setBackgroundColor(backgroundColor);
+        }
+
         if (progressText != null) {
             progressText.setTextColor(fg);
+            progressText.setBackgroundColor(backgroundColor);
         }
 
         if (progressBar != null) {
+            progressBar.setBackgroundColor(backgroundColor);
             progressBar.setIndeterminateTintList(ColorStateList.valueOf(fg));
         }
     }
@@ -1287,6 +1307,8 @@ public class ReaderActivity extends AppCompatActivity {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             int topInset = (prefs != null && prefs.getShowStatusBar()) ? bars.top : 0;
             int bottomInset = bars.bottom;
+            lastReaderTopInset = topInset;
+            lastReaderBottomInset = bottomInset;
 
             if (navBarSpacer != null) {
                 FrameLayout.LayoutParams spacerLp =
@@ -1299,6 +1321,19 @@ public class ReaderActivity extends AppCompatActivity {
             // Always reserve the page-indicator row height. The "Do not show" option
             // makes the indicator invisible, but it should not move the text upward.
             int pageStatusHeight = topInset + dpToPx(28);
+
+            int readerLineHeight = Math.round(
+                    prefs.getFontSize()
+                            * prefs.getLineSpacing()
+                            * getResources().getDisplayMetrics().scaledDensity);
+            int statusOffExtraTopPadding = 0;
+            if (prefs != null && !prefs.getShowStatusBar()) {
+                // When the Android status bar is hidden, the content can start too close
+                // to the punch-hole/cutout area. Add roughly one text row of top padding.
+                statusOffExtraTopPadding = readerLineHeight;
+            }
+            lastStatusOffExtraTopPadding = statusOffExtraTopPadding;
+
             if (readerPageStatus != null) {
                 FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) readerPageStatus.getLayoutParams();
                 lp.topMargin = 0;
@@ -1306,21 +1341,17 @@ public class ReaderActivity extends AppCompatActivity {
                 readerPageStatus.setLayoutParams(lp);
                 applyPageStatusAlignment(topInset);
             }
-
-            int statusOffExtraTopPadding = 0;
-            if (prefs != null && !prefs.getShowStatusBar()) {
-                // When the Android status bar is hidden, the content can start too close
-                // to the punch-hole/cutout area. Add roughly one text row of top padding.
-                statusOffExtraTopPadding = Math.round(prefs.getFontSize()
-                        * prefs.getLineSpacing()
-                        * getResources().getDisplayMetrics().scaledDensity);
+            if (readerFileTitle != null) {
+                readerFileTitle.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+                readerFileTitle.setIncludeFontPadding(false);
+                // Keep the mask at the first-line row, but pin the title text to the
+                // top of that row so it sits closer to the page indicator.
+                readerFileTitle.setPadding(dpToPx(36), 0, dpToPx(36), 0);
+                updateReaderFileTitleMaskBounds();
+                updateReaderFileTitleVisibility();
             }
 
-            readerView.setPadding(
-                    readerView.getPaddingLeft(),
-                    pageStatusHeight + dpToPx(8) + statusOffExtraTopPadding,
-                    readerView.getPaddingRight(),
-                    bottomInset + dpToPx(12));
+            updateReaderContentTopPadding();
 
             bottomBar.setPadding(
                     dpToPx(20),
@@ -1340,6 +1371,53 @@ public class ReaderActivity extends AppCompatActivity {
             return insets;
         });
         ViewCompat.requestApplyInsets(readerRoot);
+    }
+
+    private void updateReaderFileTitleMaskBounds() {
+        if (readerFileTitle == null || readerView == null) return;
+        if (readerView.getWidth() <= 0 || readerView.getHeight() <= 0) {
+            readerView.post(this::updateReaderFileTitleMaskBounds);
+            return;
+        }
+
+        FrameLayout.LayoutParams titleLp = (FrameLayout.LayoutParams) readerFileTitle.getLayoutParams();
+
+        // Keep the filename overlay in a fixed visual first-row slot.  Do not
+        // follow getFirstVisibleLineTopInView(): on the final page, readerScrollY
+        // can be clamped to maxScrollY and the actual first visible line shifts,
+        // which made the title jump upward only on the last page.
+        int pageStatusBottom = lastReaderTopInset + dpToPx(28);
+        int rowTop = readerView.getStableFirstRowTopInView();
+        int rowBottom = readerView.getStableFirstRowBottomInView();
+        int top = Math.max(pageStatusBottom, rowTop);
+        int bottom = Math.max(top + dpToPx(24), rowBottom + dpToPx(2));
+        bottom = Math.min(readerView.getHeight(), bottom);
+
+        titleLp.topMargin = top;
+        titleLp.height = Math.max(dpToPx(24), bottom - top);
+        readerFileTitle.setLayoutParams(titleLp);
+    }
+
+    private boolean shouldShowReaderFileTitle() {
+        if (readerFileTitle == null) return false;
+        boolean hasTitle = readerFileTitle.getText() != null
+                && readerFileTitle.getText().toString().trim().length() > 0;
+        return toolbarVisible && hasTitle;
+    }
+
+    private void updateReaderContentTopPadding() {
+        if (readerView == null) return;
+
+        // The title is an overlay strip in the existing top gap.
+        // Do not push the TXT content downward: when the Android status bar is visible,
+        // the title deliberately masks the first text row instead of changing the
+        // reader pagination/anchor position.
+        int pageStatusHeight = lastReaderTopInset + dpToPx(28);
+        readerView.setPadding(
+                readerView.getPaddingLeft(),
+                pageStatusHeight + dpToPx(8) + lastStatusOffExtraTopPadding,
+                readerView.getPaddingRight(),
+                lastReaderBottomInset + dpToPx(12));
     }
 
     private void applyPageStatusAlignment(int topInset) {
@@ -1383,6 +1461,30 @@ public class ReaderActivity extends AppCompatActivity {
         // Smaller bottom padding moves the page indicator slightly downward.
         readerPageStatus.setPadding(startPadding, topInset, endPadding, dpToPx(1));
     }
+
+    private void updateReaderFileTitle() {
+        if (readerFileTitle == null) return;
+        String title = fileName;
+        if ((title == null || title.trim().isEmpty()) && filePath != null) {
+            title = new File(filePath).getName();
+        }
+        readerFileTitle.setText(title != null ? title : "");
+        updateReaderFileTitleVisibility();
+    }
+
+    private void updateReaderFileTitleVisibility() {
+        if (readerFileTitle == null) return;
+        boolean showTitle = shouldShowReaderFileTitle();
+        if (showTitle) updateReaderFileTitleMaskBounds();
+        readerFileTitle.setVisibility(showTitle ? View.VISIBLE : View.GONE);
+        updateReaderContentTopPadding();
+        if (showTitle) {
+            readerFileTitle.bringToFront();
+            if (readerPageStatus != null) readerPageStatus.bringToFront();
+            if (bottomBar != null) bottomBar.bringToFront();
+        }
+    }
+
 
     private void openFileBrowserFromViewer() {
         Intent intent = new Intent(this, MainActivity.class);
@@ -1662,6 +1764,7 @@ public class ReaderActivity extends AppCompatActivity {
     private void loadFileFromIntent(@NonNull Intent sourceIntent) {
         final int generation = loadGeneration.incrementAndGet();
         activityDestroyed = false;
+        updateLoadingIndicatorColors(currentReaderBackgroundColor);
         progressBar.setVisibility(View.VISIBLE);
         progressText.setVisibility(View.VISIBLE);
         progressText.setText(getString(R.string.loading));
@@ -1932,6 +2035,7 @@ public class ReaderActivity extends AppCompatActivity {
 
         filePath = loadedFilePath;
         fileName = loadedFileName != null ? loadedFileName : getString(R.string.app_name);
+        updateReaderFileTitle();
 
         if (getSupportActionBar() != null) getSupportActionBar().setTitle(fileName);
 
@@ -2007,6 +2111,7 @@ public class ReaderActivity extends AppCompatActivity {
 
         filePath = loadedFilePath;
         fileName = loadedFileName != null ? loadedFileName : getString(R.string.app_name);
+        updateReaderFileTitle();
 
         if (getSupportActionBar() != null) getSupportActionBar().setTitle(fileName);
 
@@ -2043,7 +2148,10 @@ public class ReaderActivity extends AppCompatActivity {
 
     // --- Scroll & position ---
 
-    private void onScrollChanged() { schedulePositionUpdate(); }
+    private void onScrollChanged() {
+        updateReaderFileTitleMaskBounds();
+        schedulePositionUpdate();
+    }
 
     private void schedulePositionUpdate() {
         if (scrollUpdateScheduled) return;
@@ -2354,6 +2462,8 @@ public class ReaderActivity extends AppCompatActivity {
         toolbar.setVisibility(View.GONE);
         bottomBar.setVisibility(toolbarVisible ? View.VISIBLE : View.GONE);
         if (readerPageStatus != null) readerPageStatus.setVisibility(View.VISIBLE);
+        updateReaderFileTitleVisibility();
+        if (readerRoot != null) ViewCompat.requestApplyInsets(readerRoot);
         updateBottomMenuBackground();
         updateNavigationBarForBottomMenu();
         handler.postDelayed(this::updateNavigationBarForBottomMenu, 60);
