@@ -63,6 +63,20 @@
         android:textSize="12sp"
         android:textStyle="bold" />
 
+    <TextView
+        android:id="@+id/reader_file_title"
+        android:layout_width="match_parent"
+        android:layout_height="30dp"
+        android:layout_gravity="top"
+        android:background="#000000"
+        android:ellipsize="middle"
+        android:gravity="center"
+        android:maxLines="1"
+        android:paddingStart="36dp"
+        android:paddingEnd="36dp"
+        android:textColor="#E0E0E0"
+        android:textSize="14sp"
+        android:visibility="gone" />
 
     <View
         android:id="@+id/nav_bar_spacer"
