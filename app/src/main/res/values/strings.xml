@@ -10,7 +10,7 @@
     <string name="backup_description">Export/import bookmarks and reading positions as JSON.</string>
     <string name="bookmark">Bookmark</string>
     <string name="bottom_page">Page</string>
-    <string name="bookmark_folder_hint">Tap file folder: expand/shrink\nTap bookmark: move\nLong press: edit memo</string>
+    <string name="bookmark_folder_hint">Tap file folder: expand/shrink\nLong-press folder: delete that bookmark folder\nTap bookmark: move\nLong-press bookmark: edit memo</string>
     <string name="bookmark_label">Bookmark label</string>
     <string name="bookmark_saved">Bookmark saved</string>
     <string name="bookmark_updated">Bookmark updated</string>
@@ -30,6 +30,9 @@
     <string name="decrease_font">Decrease Font</string>
     <string name="delete">Delete</string>
     <string name="delete_bookmark">Delete Bookmark</string>
+    <string name="delete_bookmark_folder">Delete Bookmark Folder</string>
+    <string name="delete_bookmark_folder_message">Delete all %1$d bookmarks in this folder?</string>
+    <string name="delete_bookmark_folder_note">Only the saved bookmarks will be removed. The document file will not be deleted.</string>
     <string name="delete_failed">Delete failed</string>
     <string name="delete_file_confirm">Delete “%1$s”?</string>
     <string name="delete_this_bookmark">Delete this bookmark?</string>
