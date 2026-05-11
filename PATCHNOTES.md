@@ -38,8 +38,3 @@ This release focuses on bookmark-window polish, TXT dialog/card styling, sort-po
 - Reused the same bottom-positioned rounded dialog behavior used by other fixed windows.
 - Disabled unstable popup window animation paths that caused hard-landing or position movement.
 
-### Build and Version
-
-- Updated app version metadata to:
-  - `versionCode 205`
-  - `versionName "2.0.5"`
