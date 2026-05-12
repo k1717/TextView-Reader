@@ -43,6 +43,22 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
         replaceFiles(new ArrayList<>(fileList));
     }
 
+    /**
+     * Fast replacement used when navigating to a different folder. Directory
+     * switches do not need item-by-item DiffUtil animation, and very large
+     * folders can make DiffUtil noticeably block the UI thread.
+     */
+    public void setFilesFastPresorted(List<File> fileList) {
+        files.clear();
+        files.addAll(fileList);
+        notifyDataSetChanged();
+    }
+
+    /** Updates the stored sort mode without re-sorting the currently visible list. */
+    public void setSortModeSilently(int mode) {
+        this.sortMode = mode;
+    }
+
     public void setSortMode(int mode) {
         if (this.sortMode == mode) return;
         this.sortMode = mode;

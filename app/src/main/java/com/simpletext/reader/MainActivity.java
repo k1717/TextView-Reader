@@ -127,10 +127,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private static final int FILTER_WORD = 4;
     private int activeFileFilter = FILTER_ALL;
     private final ExecutorService fileSearchExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService folderLoadExecutor = Executors.newSingleThreadExecutor();
     private final Handler fileSearchHandler = new Handler(Looper.getMainLooper());
     private Runnable pendingFileSearchRunnable;
     private volatile boolean activityDestroyed = false;
     private final AtomicInteger fileSearchGeneration = new AtomicInteger(0);
+    private final AtomicInteger folderLoadGeneration = new AtomicInteger(0);
     private boolean searchMode = false;
     private boolean searchReturnToHome = true;
     private File searchReturnDirectory = null;
@@ -405,7 +407,9 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (drawerFixedList != null) drawerFixedList.setAdapter(null);
         if (drawerStorageList != null) drawerStorageList.setAdapter(null);
 
+        folderLoadGeneration.incrementAndGet();
         fileSearchExecutor.shutdownNow();
+        folderLoadExecutor.shutdownNow();
         super.onDestroy();
     }
 
@@ -702,6 +706,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     }
 
     private void startFileSearch(@NonNull String query, boolean allStorage) {
+        cancelPendingFolderLoad();
         final int generation = fileSearchGeneration.incrementAndGet();
         if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.VISIBLE);
         if (fileSearchClearButton != null) {
@@ -1265,7 +1270,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         return Math.max(dpToPx(220), Math.min(Math.round(screenWidth * 0.85f), dpToPx(460)));
     }
 
-    private android.app.Dialog createStableBottomDialog(@NonNull View content, int yPx, float dimAmount) {
+    private android.app.Dialog createStablePositionedDialog(@NonNull View content, int gravity, int yPx, float dimAmount) {
         android.app.Dialog dialog = new android.app.Dialog(this);
         dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         dialog.setCanceledOnTouchOutside(true);
@@ -1282,7 +1287,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         android.view.Window window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-            window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            window.setGravity(gravity);
             android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
             lp.copyFrom(window.getAttributes());
             lp.width = txtReaderDialogWidthPx();
@@ -1295,6 +1300,14 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         }
         return dialog;
+    }
+
+    private android.app.Dialog createStableBottomDialog(@NonNull View content, int yPx, float dimAmount) {
+        return createStablePositionedDialog(content, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, yPx, dimAmount);
+    }
+
+    private android.app.Dialog createStableCenterDialog(@NonNull View content, int yPx, float dimAmount) {
+        return createStablePositionedDialog(content, Gravity.CENTER, yPx, dimAmount);
     }
 
     private void queueDrawerNavigation(@NonNull DrawerEntry entry) {
@@ -1585,6 +1598,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     // -------------------------------------------------------------------------
 
     private void showHomeMode() {
+        cancelPendingFolderLoad();
         searchMode = false;
         searchReturnToHome = true;
         searchReturnDirectory = null;
@@ -1611,7 +1625,6 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         updateFileSearchClearButtonVisibility();
         if (prefs != null) prefs.addRecentFolder(dir.getAbsolutePath());
         loadDirectory(dir);
-        rebuildDrawerStorageEntries();
         invalidateOptionsMenu();
     }
 
@@ -1821,33 +1834,110 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     // File list / recent list
     // -------------------------------------------------------------------------
 
+    private void cancelPendingFolderLoad() {
+        folderLoadGeneration.incrementAndGet();
+    }
+
     private void loadDirectory(File dir) {
-        currentDirectory = dir;
-        prefs.setLastDirectory(dir.getAbsolutePath());
-        prefs.addRecentFolder(dir.getAbsolutePath());
-        pathText.setText(dir.getAbsolutePath());
+        if (dir == null) return;
+
+        final int generation = folderLoadGeneration.incrementAndGet();
+        final File targetDir = dir;
+        final boolean showHidden = prefs != null && prefs.getShowHiddenFiles();
+        final int sortMode = prefs != null ? prefs.getSortMode() : PrefsManager.SORT_NAME_ASC;
+
+        currentDirectory = targetDir;
+        if (prefs != null) {
+            prefs.setLastDirectory(targetDir.getAbsolutePath());
+            prefs.addRecentFolder(targetDir.getAbsolutePath());
+        }
+        if (pathText != null) pathText.setText(targetDir.getAbsolutePath());
         if (getSupportActionBar() != null) {
-            getSupportActionBar().setTitle(dir.getName().isEmpty() ? "/" : dir.getName());
+            getSupportActionBar().setTitle(targetDir.getName().isEmpty() ? "/" : targetDir.getName());
         }
 
-        File[] fileArray = dir.listFiles();
-        List<File> fileList = new ArrayList<>();
-        boolean showHidden = prefs.getShowHiddenFiles();
-
-        if (fileArray != null) {
-            for (File f : fileArray) {
-                if (!showHidden && f.getName().startsWith(".")) continue;
-                if (f.isDirectory() || FileUtils.isSupportedReadableFile(f.getName())) fileList.add(f);
-            }
+        if (fileAdapter != null) {
+            fileAdapter.setSortModeSilently(sortMode);
+            fileAdapter.setFilesFastPresorted(new ArrayList<>());
         }
-
-        if (fileAdapter != null && prefs != null) {
-            fileAdapter.setSortMode(prefs.getSortMode());
+        if (emptyText != null) {
+            emptyText.setText(getString(R.string.loading));
+            emptyText.setVisibility(View.VISIBLE);
         }
-        fileAdapter.setFiles(fileList);
         scrollListToTop(fileRecyclerView);
-        emptyText.setVisibility(fileList.isEmpty() ? View.VISIBLE : View.GONE);
-        if (fileList.isEmpty()) emptyText.setText(getString(R.string.no_text_files_in_directory));
+
+        folderLoadExecutor.execute(() -> {
+            List<File> fileList = new ArrayList<>();
+            try {
+                File[] fileArray = targetDir.listFiles();
+                if (fileArray != null) {
+                    for (File f : fileArray) {
+                        if (activityDestroyed || generation != folderLoadGeneration.get()) return;
+                        if (!showHidden && f.getName().startsWith(".")) continue;
+                        if (f.isDirectory() || FileUtils.isSupportedReadableFile(f.getName())) {
+                            fileList.add(f);
+                        }
+                    }
+                }
+                sortFilesForMainList(fileList, sortMode);
+            } catch (SecurityException ignored) {
+                fileList.clear();
+            }
+
+            fileSearchHandler.post(() -> {
+                if (activityDestroyed || generation != folderLoadGeneration.get()) return;
+                if (!targetDir.equals(currentDirectory)) return;
+
+                if (fileAdapter != null) {
+                    fileAdapter.setSortModeSilently(sortMode);
+                    fileAdapter.setFilesFastPresorted(fileList);
+                }
+                scrollListToTop(fileRecyclerView);
+                if (emptyText != null) {
+                    emptyText.setVisibility(fileList.isEmpty() ? View.VISIBLE : View.GONE);
+                    if (fileList.isEmpty()) {
+                        emptyText.setText(getString(R.string.no_text_files_in_directory));
+                    }
+                }
+                rebuildDrawerStorageEntries();
+            });
+        });
+    }
+
+    private void sortFilesForMainList(@NonNull List<File> target, int sortMode) {
+        target.sort((a, b) -> {
+            if (a.isDirectory() && !b.isDirectory()) return -1;
+            if (!a.isDirectory() && b.isDirectory()) return 1;
+
+            switch (sortMode) {
+                case PrefsManager.SORT_NAME_DESC:
+                    return compareMainFileNames(b, a);
+                case PrefsManager.SORT_DATE_NEW:
+                    return Long.compare(b.lastModified(), a.lastModified());
+                case PrefsManager.SORT_DATE_OLD:
+                    return Long.compare(a.lastModified(), b.lastModified());
+                case PrefsManager.SORT_SIZE_LARGE:
+                    return Long.compare(b.length(), a.length());
+                case PrefsManager.SORT_SIZE_SMALL:
+                    return Long.compare(a.length(), b.length());
+                case PrefsManager.SORT_TYPE:
+                    String extA = getMainFileExtension(a.getName());
+                    String extB = getMainFileExtension(b.getName());
+                    int cmp = extA.compareToIgnoreCase(extB);
+                    return cmp != 0 ? cmp : compareMainFileNames(a, b);
+                default:
+                    return compareMainFileNames(a, b);
+            }
+        });
+    }
+
+    private int compareMainFileNames(@NonNull File a, @NonNull File b) {
+        return a.getName().compareToIgnoreCase(b.getName());
+    }
+
+    private String getMainFileExtension(String name) {
+        int dot = name.lastIndexOf('.');
+        return dot > 0 ? name.substring(dot + 1) : "";
     }
 
     private boolean isRootStorage(File dir) {
@@ -2102,7 +2192,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         inputLp.setMargins(0, 0, 0, dpToPx(12));
         box.addView(input, inputLp);
 
-        final AlertDialog[] ref = new AlertDialog[1];
+        final android.app.Dialog[] ref = new android.app.Dialog[1];
         addFileOpsRow(box, getString(R.string.rename), fg, panel, () -> {
             String newName = input.getText().toString().trim();
             if (newName.isEmpty()) return;
@@ -2126,19 +2216,20 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         cancel.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         box.addView(cancel, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(48)));
 
-        AlertDialog dialog = new AlertDialog.Builder(this).create();
+        android.app.Dialog dialog = createStableBottomDialog(box, dpToPx(112), 0.22f);
         ref[0] = dialog;
-        dialog.setView(box);
         dialog.setOnShowListener(d -> {
             if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-                android.view.WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
-                lp.dimAmount = 0.22f;
-                dialog.getWindow().setAttributes(lp);
-                dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-                dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+                dialog.getWindow().setSoftInputMode(
+                        android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
+                                | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
             }
             input.requestFocus();
+            input.postDelayed(() -> {
+                android.view.inputmethod.InputMethodManager imm =
+                        (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showSoftInput(input, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+            }, 120);
         });
         cancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
@@ -2178,7 +2269,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         message.setPadding(dpToPx(6), 0, dpToPx(6), dpToPx(14));
         box.addView(message, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        final AlertDialog[] ref = new AlertDialog[1];
+        final android.app.Dialog[] ref = new android.app.Dialog[1];
         addFileOpsRow(box, getString(R.string.delete), danger, panel, () -> {
             if (deleteRecursive(file)) {
                 if (ref[0] != null) ref[0].dismiss();
@@ -2197,18 +2288,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         cancel.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         box.addView(cancel, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(48)));
 
-        AlertDialog dialog = new AlertDialog.Builder(this).create();
+        android.app.Dialog dialog = createStableCenterDialog(box, dpToPx(34), 0.22f);
         ref[0] = dialog;
-        dialog.setView(box);
-        dialog.setOnShowListener(d -> {
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-                android.view.WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
-                lp.dimAmount = 0.22f;
-                dialog.getWindow().setAttributes(lp);
-                dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            }
-        });
         cancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
     }
@@ -2285,17 +2366,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         closeLp.setMargins(0, dpToPx(4), 0, 0);
         box.addView(close, closeLp);
 
-        AlertDialog dialog = new AlertDialog.Builder(this).create();
-        dialog.setView(box);
-        dialog.setOnShowListener(d -> {
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-                android.view.WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
-                lp.dimAmount = 0.22f;
-                dialog.getWindow().setAttributes(lp);
-                dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            }
-        });
+        android.app.Dialog dialog = createStableBottomDialog(box, dpToPx(74), 0.22f);
         close.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
     }

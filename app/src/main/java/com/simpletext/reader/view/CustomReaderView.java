@@ -300,12 +300,13 @@ public class CustomReaderView extends View {
 
         canvas.save();
         int viewportTop = getTextViewportTopY();
+        int visualScrollY = getVisualScrollYForDraw();
         canvas.clipRect(getPaddingLeft() + marginHorizontalPx + leftTextInsetPx,
                 viewportTop,
                 getWidth() - getPaddingRight() - marginHorizontalPx - rightTextInsetPx,
                 getFullLineClipBottom());
         canvas.translate(getPaddingLeft() + marginHorizontalPx + leftTextInsetPx,
-                viewportTop + marginVerticalPx - readerScrollY);
+                viewportTop + marginVerticalPx - visualScrollY);
         drawSearchHighlights(canvas);
         layout.draw(canvas);
         canvas.restore();
@@ -490,8 +491,23 @@ public class CustomReaderView extends View {
         if (layout == null || layout.getLineCount() <= 0 || maxScrollY <= 0) {
             return 0;
         }
-        int firstPageAnchor = marginVerticalPx + getFirstPageTopPadCompensationPx();
+        int firstPageAnchor = getFirstPageVisualAnchorY();
         return Math.max(0, Math.min(maxScrollY, firstPageAnchor));
+    }
+
+    private int getFirstPageVisualAnchorY() {
+        if (layout == null || layout.getLineCount() <= 0) {
+            return 0;
+        }
+        return marginVerticalPx + getFirstPageTopPadCompensationPx();
+    }
+
+    private int getVisualScrollYForDraw() {
+        int firstPageAnchor = getFirstPageVisualAnchorY();
+        if (firstPageAnchor > 0 && maxScrollY <= firstPageAnchor) {
+            return firstPageAnchor;
+        }
+        return readerScrollY;
     }
 
     private int rawScrollYForLine(int line) {
@@ -531,7 +547,12 @@ public class CustomReaderView extends View {
                 pageAnchors.add(anchor);
             }
 
-            int pageTop = layout.getLineTop(startLine);
+            // Use the actual layout Y visible at this page anchor.  Page 1 can use
+            // a small visual top-pad compensation while later pages start directly
+            // on a line boundary; basing page capacity on lineTop(startLine) alone
+            // can make page 2 repeat the last fully visible line from page 1 when
+            // the TXT bottom boundary reduces the viewport.
+            int pageTop = Math.max(0, anchor - marginVerticalPx);
             int pageBottomLimit = pageTop + viewportHeight;
 
             int lastFullLine = startLine - 1;
@@ -609,7 +630,8 @@ public class CustomReaderView extends View {
         int viewBottom = getTextViewportBottomY();
         int viewportHeight = Math.max(1, viewBottom - viewTop);
 
-        int layoutTopY = Math.max(0, readerScrollY - marginVerticalPx);
+        int visualScrollY = getVisualScrollYForDraw();
+        int layoutTopY = Math.max(0, visualScrollY - marginVerticalPx);
         int visibleBottomInLayout = Math.min(layout.getHeight(), layoutTopY + viewportHeight);
 
         int line = layout.getLineForVertical(Math.max(0, visibleBottomInLayout));
@@ -617,7 +639,7 @@ public class CustomReaderView extends View {
 
         if (lineBottom > visibleBottomInLayout) {
             int fullBottomInLayout = Math.max(0, layout.getLineTop(line));
-            int screenBottom = viewTop + marginVerticalPx - readerScrollY + fullBottomInLayout;
+            int screenBottom = viewTop + marginVerticalPx - visualScrollY + fullBottomInLayout;
             return Math.max(viewTop, Math.min(viewBottom, screenBottom));
         }
 
