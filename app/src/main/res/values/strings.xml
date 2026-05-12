@@ -7,15 +7,21 @@
     <string name="all_bookmarks_status">All bookmarks: %1$d files / %2$d bookmarks\nCurrent: Page %3$d / %4$d</string>
     <string name="app_name">TextView</string>
     <string name="auto_save_position">Auto-save Reading Position</string>
-    <string name="backup_description">Export/import bookmarks and reading positions as JSON.</string>
+    <string name="backup_description">Export/import bookmarks, reading positions, settings, and custom reading themes as JSON.</string>
     <string name="bookmark">Bookmark</string>
     <string name="bottom_page">Page</string>
+    <string name="bookmark_hints_show">Hints</string>
     <string name="bookmark_folder_hint">Tap file folder: expand/shrink\nLong-press folder: delete that bookmark folder\nTap bookmark: move\nLong-press bookmark: edit memo</string>
     <string name="bookmark_label">Bookmark label</string>
     <string name="bookmark_saved">Bookmark saved</string>
     <string name="bookmark_updated">Bookmark updated</string>
     <string name="built_in_theme">Built-in reading theme</string>
-    <string name="custom_theme_hint">Custom theme • long press to edit</string>
+    <string name="custom_theme_hint">Custom theme • long press for options</string>
+    <string name="custom_theme_options_message">Edit or remove this custom reading theme.</string>
+    <string name="edit_theme">Edit Theme</string>
+    <string name="delete_theme">Delete Theme</string>
+    <string name="delete_theme_confirm">Delete “%1$s”? This only removes the custom theme.</string>
+    <string name="theme_deleted">Theme deleted</string>
     <string name="brightness">Brightness</string>
     <string name="cancel">Cancel</string>
     <string name="change_pin">Change PIN</string>
@@ -75,6 +81,7 @@
     <string name="go_to_percentage">Go to percentage:</string>
     <string name="go_to_position">Go To Position</string>
     <string name="import_bookmarks">Import Bookmarks</string>
+    <string name="import_backup">Import Backup</string>
     <string name="import_failed_prefix">Import failed: </string>
     <string name="import_label">Import</string>
     <string name="imported_merged">Imported (merged)</string>
@@ -95,7 +102,7 @@
     <string name="lines">Lines</string>
     <string name="loading">Loading...</string>
     <string name="merge">Merge</string>
-    <string name="merge_or_replace">Merge with existing or replace all?</string>
+    <string name="merge_or_replace">Merge with existing data/settings or replace backed-up items?</string>
     <string name="more">More</string>
     <string name="new_folder">New Folder</string>
     <string name="no_bookmarks_hint">No bookmarks yet.\nUse the button above to save this position.</string>
@@ -155,6 +162,7 @@
     <string name="tap_zone_trailing_default">Next zone: 35%%</string>
     <string name="tap_zone_leading_format">Previous zone: %1$d%%</string>
     <string name="tap_zone_trailing_format">Next zone: %1$d%%</string>
+    <string name="settings_section_txt_layout">TXT layout</string>
     <string name="txt_top_offset_default">TXT top boundary: 0px</string>
     <string name="txt_top_offset_format">TXT top boundary: %1$dpx</string>
     <string name="txt_bottom_offset_default">TXT bottom boundary: 0px</string>
@@ -163,6 +171,16 @@
     <string name="txt_left_inset_format">TXT left boundary: %1$dpx</string>
     <string name="txt_right_inset_default">TXT right boundary: 0px</string>
     <string name="txt_right_inset_format">TXT right boundary: %1$dpx</string>
+
+    <string name="settings_section_epub_layout">EPUB layout</string>
+    <string name="epub_left_spacing_default">EPUB left boundary: 30px</string>
+    <string name="epub_left_spacing_format">EPUB left boundary: %1$dpx</string>
+    <string name="epub_right_spacing_default">EPUB right boundary: 30px</string>
+    <string name="epub_right_spacing_format">EPUB right boundary: %1$dpx</string>
+    <string name="epub_top_spacing_default">EPUB top boundary: 0px</string>
+    <string name="epub_top_spacing_format">EPUB top boundary: %1$dpx</string>
+    <string name="epub_bottom_spacing_default">EPUB bottom boundary: 0px</string>
+    <string name="epub_bottom_spacing_format">EPUB bottom boundary: %1$dpx</string>
     <string name="title_bookmarks">Bookmarks</string>
     <string name="title_lock">Lock</string>
     <string name="title_reader">Reader</string>
@@ -204,6 +222,7 @@ Open a text, PDF, EPUB, or Word file to get started.</string>
     <string name="search_recent_storage_roots">Recent folders and storage roots</string>
     <string name="search_all_storage">All available storage</string>
     <string name="zoom">Zoom</string>
+    <string name="reset_font_size">Reset Font Size</string>
     <string name="reset_zoom">Reset zoom</string>
     <string name="file_filter_all">All</string>
     <string name="file_filter_general">Text</string>

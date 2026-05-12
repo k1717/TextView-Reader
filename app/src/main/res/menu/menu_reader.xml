@@ -9,5 +9,6 @@
     <item android:id="@+id/action_font" android:title="Font" app:showAsAction="never" />
     <item android:id="@+id/action_font_increase" android:title="Increase Font" app:showAsAction="never" />
     <item android:id="@+id/action_font_decrease" android:title="Decrease Font" app:showAsAction="never" />
+    <item android:id="@+id/action_font_reset" android:title="Reset Font Size" app:showAsAction="never" />
     <item android:id="@+id/action_file_info" android:title="File Info" app:showAsAction="never" />
 </menu>

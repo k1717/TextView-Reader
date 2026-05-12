@@ -141,6 +141,7 @@
                 android:id="@+id/font_size_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
                 android:text="@string/font_size_default"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="14sp" />
@@ -164,6 +165,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="18dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/settings_section_txt_layout"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/txt_top_offset_label"
@@ -217,6 +228,72 @@
 
             <SeekBar
                 android:id="@+id/txt_right_inset_seekbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="18dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/settings_section_epub_layout"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/epub_left_spacing_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/epub_left_spacing_default"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="14sp" />
+
+            <SeekBar
+                android:id="@+id/epub_left_spacing_seekbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="18dp" />
+
+            <TextView
+                android:id="@+id/epub_right_spacing_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/epub_right_spacing_default"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="14sp" />
+
+            <SeekBar
+                android:id="@+id/epub_right_spacing_seekbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="18dp" />
+
+            <TextView
+                android:id="@+id/epub_top_spacing_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/epub_top_spacing_default"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="14sp" />
+
+            <SeekBar
+                android:id="@+id/epub_top_spacing_seekbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="18dp" />
+
+            <TextView
+                android:id="@+id/epub_bottom_spacing_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/epub_bottom_spacing_default"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="14sp" />
+
+            <SeekBar
+                android:id="@+id/epub_bottom_spacing_seekbar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="24dp" />
