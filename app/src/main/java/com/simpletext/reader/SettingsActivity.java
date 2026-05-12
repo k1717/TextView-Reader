@@ -1153,7 +1153,7 @@ public class SettingsActivity extends AppCompatActivity {
                 }
             }
         } catch (Exception e) {
-            Toast.makeText(this, getString(R.string.export_failed_prefix) + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.export_failed_prefix) + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -1173,7 +1173,7 @@ public class SettingsActivity extends AppCompatActivity {
                     })
                     .setNeutralButton(getString(R.string.cancel), null).show();
         } catch (Exception e) {
-            Toast.makeText(this, getString(R.string.import_failed_prefix) + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.import_failed_prefix) + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 

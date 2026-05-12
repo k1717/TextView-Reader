@@ -1439,7 +1439,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     }
 
     private void showClearAllRecentFilesDialog() {
-        if (bookmarkManager == null || bookmarkManager.getRecentFiles(Integer.MAX_VALUE).isEmpty()) {
+        if (bookmarkManager == null || !bookmarkManager.hasRecentFiles()) {
             Toast.makeText(this, getString(R.string.no_recent_files_to_clear), Toast.LENGTH_SHORT).show();
             return;
         }
@@ -1887,7 +1887,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             recentEmptyText.setVisibility(recentFiles.isEmpty() ? View.VISIBLE : View.GONE);
         }
         if (recentClearAllButton != null) {
-            boolean hasAnyRecent = bookmarkManager != null && !bookmarkManager.getRecentFiles(Integer.MAX_VALUE).isEmpty();
+            boolean hasAnyRecent = bookmarkManager != null && bookmarkManager.hasRecentFiles();
             recentClearAllButton.setVisibility(hasAnyRecent ? View.VISIBLE : View.INVISIBLE);
         }
     }

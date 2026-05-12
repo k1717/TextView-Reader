@@ -15,6 +15,7 @@ import android.text.InputType;
 import android.util.LruCache;
 import android.util.SparseIntArray;
 import android.view.MenuItem;
+import android.view.KeyEvent;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
@@ -809,6 +810,76 @@ public class PdfReaderActivity extends AppCompatActivity {
         if (zoomMoreButton != null) zoomMoreButton.setOnClickListener(v -> showMoreDialog());
     }
 
+    // --- Hardware page-turn keys ---
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (handlePdfPageTurnKey(event)) return true;
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // Fallback for devices that route hardware keys through onKeyDown() instead
+        // of dispatchKeyEvent(). dispatchKeyEvent() normally consumes these first.
+        if (handlePdfPageTurnKey(event)) return true;
+        return super.onKeyDown(keyCode, event);
+    }
+
+    private boolean handlePdfPageTurnKey(KeyEvent event) {
+        if (event == null || prefs == null || !prefs.getVolumeKeyScroll()) return false;
+
+        int direction = pageTurnDirectionForKey(event.getKeyCode());
+        if (direction == 0) return false;
+
+        int action = event.getAction();
+        if (action == KeyEvent.ACTION_DOWN) {
+            if (event.getRepeatCount() == 0) {
+                pagePdfBy(direction);
+            }
+            return true;
+        }
+
+        // Consume ACTION_UP too so Android/e-reader firmware does not also treat
+        // volume keys as volume changes after the app has used them for paging.
+        return action == KeyEvent.ACTION_UP;
+    }
+
+    private int pageTurnDirectionForKey(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_VOLUME_DOWN:
+            case KeyEvent.KEYCODE_PAGE_DOWN:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_FORWARD:
+            case KeyEvent.KEYCODE_MEDIA_NEXT:
+            case KeyEvent.KEYCODE_BUTTON_R1:
+            case KeyEvent.KEYCODE_NAVIGATE_NEXT:
+                return +1;
+
+            case KeyEvent.KEYCODE_VOLUME_UP:
+            case KeyEvent.KEYCODE_PAGE_UP:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
+            case KeyEvent.KEYCODE_BUTTON_L1:
+            case KeyEvent.KEYCODE_NAVIGATE_PREVIOUS:
+                return -1;
+
+            default:
+                return 0;
+        }
+    }
+
+    private void pagePdfBy(int direction) {
+        if (pageCount <= 0) return;
+        int target = Math.max(0, Math.min(pageCount - 1, currentPage + direction));
+        if (target != currentPage) {
+            goToPage(target, Integer.compare(target, currentPage));
+        }
+    }
+
 
     private void installPdfGestures() {
         scaleGestureDetector = new ScaleGestureDetector(this, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -1524,7 +1595,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         progressBar.setVisibility(View.GONE);
         String message = getString(R.string.error_prefix) + (e.getMessage() != null ? e.getMessage() : e.toString());
         pageStatus.setText(message);
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
     private int clampPage(int page) {
@@ -1993,13 +2064,13 @@ public class PdfReaderActivity extends AppCompatActivity {
     private void navigateToBookmark(@NonNull Bookmark b) {
         String path = b.getFilePath();
         if (path == null || path.trim().isEmpty()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + "(missing path)", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.file_not_found_prefix) + "(missing path)", Toast.LENGTH_SHORT).show();
             return;
         }
 
         File target = new File(path.trim());
         if (!target.exists()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_SHORT).show();
             return;
         }
         if (path.equals(filePath) || target.getAbsolutePath().equals(filePath)) {

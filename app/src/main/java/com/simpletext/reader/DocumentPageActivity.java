@@ -17,6 +17,7 @@ import android.os.Bundle;
 import android.annotation.SuppressLint;
 import android.text.InputType;
 import android.view.MenuItem;
+import android.view.KeyEvent;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.view.GestureDetector;
@@ -591,6 +592,76 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
     }
 
+    // --- Hardware page-turn keys ---
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (handleDocumentPageTurnKey(event)) return true;
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // Fallback for devices that route hardware keys through onKeyDown() instead
+        // of dispatchKeyEvent(). dispatchKeyEvent() normally consumes these first.
+        if (handleDocumentPageTurnKey(event)) return true;
+        return super.onKeyDown(keyCode, event);
+    }
+
+    private boolean handleDocumentPageTurnKey(KeyEvent event) {
+        if (event == null || prefs == null || !prefs.getVolumeKeyScroll()) return false;
+
+        int direction = pageTurnDirectionForKey(event.getKeyCode());
+        if (direction == 0) return false;
+
+        int action = event.getAction();
+        if (action == KeyEvent.ACTION_DOWN) {
+            if (event.getRepeatCount() == 0) {
+                pageDocumentBy(direction);
+            }
+            return true;
+        }
+
+        // Consume ACTION_UP too so Android/e-reader firmware does not also treat
+        // volume keys as volume changes after the app has used them for paging.
+        return action == KeyEvent.ACTION_UP;
+    }
+
+    private int pageTurnDirectionForKey(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_VOLUME_DOWN:
+            case KeyEvent.KEYCODE_PAGE_DOWN:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_FORWARD:
+            case KeyEvent.KEYCODE_MEDIA_NEXT:
+            case KeyEvent.KEYCODE_BUTTON_R1:
+            case KeyEvent.KEYCODE_NAVIGATE_NEXT:
+                return +1;
+
+            case KeyEvent.KEYCODE_VOLUME_UP:
+            case KeyEvent.KEYCODE_PAGE_UP:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
+            case KeyEvent.KEYCODE_BUTTON_L1:
+            case KeyEvent.KEYCODE_NAVIGATE_PREVIOUS:
+                return -1;
+
+            default:
+                return 0;
+        }
+    }
+
+    private void pageDocumentBy(int direction) {
+        if (pages == null || pages.isEmpty()) return;
+        int target = Math.max(0, Math.min(pages.size() - 1, currentPage + direction));
+        if (target != currentPage) {
+            showPage(target, Integer.compare(target, currentPage));
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     private void installSwipePaging() {
         wordSwipeTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
@@ -1113,7 +1184,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         List<String> fontNames = new ArrayList<>();
         try {
             FontManager fontManager = FontManager.getInstance();
-            fontManager.scanFontsSync(this);
+            if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
             fontNames.addAll(fontManager.getFontNames());
         } catch (Throwable ignored) {
             // Keep the dialog usable even if a device blocks one of the font paths.
@@ -2555,7 +2626,7 @@ public class DocumentPageActivity extends AppCompatActivity {
     private void showLoadError(Exception e) {
         if (activityDestroyed) return;
         if (progressBar != null) progressBar.setVisibility(View.GONE);
-        Toast.makeText(this, getString(R.string.error_prefix) + e.getMessage(), Toast.LENGTH_LONG).show();
+        Toast.makeText(this, getString(R.string.error_prefix) + e.getMessage(), Toast.LENGTH_SHORT).show();
         finish();
     }
 
@@ -2906,13 +2977,13 @@ public class DocumentPageActivity extends AppCompatActivity {
     private void navigateToBookmark(@NonNull Bookmark b) {
         String path = b.getFilePath();
         if (path == null || path.trim().isEmpty()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + "(missing path)", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.file_not_found_prefix) + "(missing path)", Toast.LENGTH_SHORT).show();
             return;
         }
 
         File target = new File(path.trim());
         if (!target.exists()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_SHORT).show();
             return;
         }
         if (path.equals(filePath) || target.getAbsolutePath().equals(filePath)) {

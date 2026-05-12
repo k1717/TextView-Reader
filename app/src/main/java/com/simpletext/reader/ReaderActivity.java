@@ -25,6 +25,7 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -68,7 +69,7 @@ import com.simpletext.reader.view.CustomReaderView;
 
 import java.io.File;
 import java.io.ByteArrayOutputStream;
-import java.io.FileInputStream;
+import java.io.RandomAccessFile;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -100,6 +101,87 @@ public class ReaderActivity extends AppCompatActivity {
     public static final String EXTRA_JUMP_TO_POSITION = "jump_position";
     public static final String EXTRA_JUMP_DISPLAY_PAGE = "jump_display_page";
     public static final String EXTRA_JUMP_TOTAL_PAGES = "jump_total_pages";
+
+    private static final String STATE_RESTORE_FROM_MEMORY = "restore_txt_from_memory";
+    private static volatile LoadedTextSnapshot lastLoadedTextSnapshot;
+
+    private static final class LoadedTextSnapshot {
+        final String sourcePath;
+        final String sourceUri;
+        final String filePath;
+        final String fileName;
+        final String fileContent;
+        final int totalChars;
+        final int totalLines;
+        final int charPosition;
+        final String activeSearchQuery;
+        final int activeSearchIndex;
+        final boolean largeTextEstimateActive;
+        final int largeTextEstimatedTotalPages;
+        final int pendingLargeTextRestorePosition;
+        final int largeTextPreviewBaseCharOffset;
+        final int largeTextEstimatedBasePageOffset;
+        final int largeTextEstimatedTotalChars;
+        final boolean hugeTextPreviewOnly;
+        final int pendingLargeTextCachedDisplayPage;
+        final int pendingLargeTextCachedTotalPages;
+
+        LoadedTextSnapshot(String sourcePath,
+                           String sourceUri,
+                           String filePath,
+                           String fileName,
+                           String fileContent,
+                           int totalChars,
+                           int totalLines,
+                           int charPosition,
+                           String activeSearchQuery,
+                           int activeSearchIndex,
+                           boolean largeTextEstimateActive,
+                           int largeTextEstimatedTotalPages,
+                           int pendingLargeTextRestorePosition,
+                           int largeTextPreviewBaseCharOffset,
+                           int largeTextEstimatedBasePageOffset,
+                           int largeTextEstimatedTotalChars,
+                           boolean hugeTextPreviewOnly,
+                           int pendingLargeTextCachedDisplayPage,
+                           int pendingLargeTextCachedTotalPages) {
+            this.sourcePath = sourcePath;
+            this.sourceUri = sourceUri;
+            this.filePath = filePath;
+            this.fileName = fileName;
+            this.fileContent = fileContent != null ? fileContent : "";
+            this.totalChars = totalChars;
+            this.totalLines = totalLines;
+            this.charPosition = Math.max(0, charPosition);
+            this.activeSearchQuery = activeSearchQuery != null ? activeSearchQuery : "";
+            this.activeSearchIndex = activeSearchIndex;
+            this.largeTextEstimateActive = largeTextEstimateActive;
+            this.largeTextEstimatedTotalPages = largeTextEstimatedTotalPages;
+            this.pendingLargeTextRestorePosition = pendingLargeTextRestorePosition;
+            this.largeTextPreviewBaseCharOffset = largeTextPreviewBaseCharOffset;
+            this.largeTextEstimatedBasePageOffset = largeTextEstimatedBasePageOffset;
+            this.largeTextEstimatedTotalChars = largeTextEstimatedTotalChars;
+            this.hugeTextPreviewOnly = hugeTextPreviewOnly;
+            this.pendingLargeTextCachedDisplayPage = pendingLargeTextCachedDisplayPage;
+            this.pendingLargeTextCachedTotalPages = pendingLargeTextCachedTotalPages;
+        }
+
+        boolean matches(@NonNull Intent intent) {
+            String path = intent.getStringExtra(EXTRA_FILE_PATH);
+            String uri = intent.getStringExtra(EXTRA_FILE_URI);
+
+            if (path != null && sourcePath != null) {
+                return path.equals(sourcePath) || path.equals(filePath);
+            }
+            if (uri != null && sourceUri != null) {
+                return uri.equals(sourceUri);
+            }
+            if (path != null && filePath != null) {
+                return path.equals(filePath);
+            }
+            return false;
+        }
+    }
 
     private View readerRoot;
     private CustomReaderView readerView;
@@ -233,7 +315,9 @@ public class ReaderActivity extends AppCompatActivity {
             getWindow().setAttributes(lp);
         }
 
-        loadFileFromIntent(getIntent());
+        if (!restoreLoadedTextSnapshotIfAvailable(getIntent(), savedInstanceState)) {
+            loadFileFromIntent(getIntent());
+        }
     }
 
     @Override
@@ -260,7 +344,86 @@ public class ReaderActivity extends AppCompatActivity {
         activeSearchQuery = "";
         activeSearchIndex = -1;
         applySearchHighlight();
+        clearLoadedTextSnapshot();
         loadFileFromIntent(intent);
+    }
+
+    private void cacheLoadedTextSnapshot() {
+        if (readerView == null || fileContent == null || fileContent.isEmpty() || filePath == null) {
+            return;
+        }
+
+        Intent intent = getIntent();
+        lastLoadedTextSnapshot = new LoadedTextSnapshot(
+                intent != null ? intent.getStringExtra(EXTRA_FILE_PATH) : null,
+                intent != null ? intent.getStringExtra(EXTRA_FILE_URI) : null,
+                filePath,
+                fileName,
+                fileContent,
+                totalChars,
+                totalLines,
+                getCurrentCharPosition(),
+                activeSearchQuery,
+                activeSearchIndex,
+                largeTextEstimateActive,
+                largeTextEstimatedTotalPages,
+                pendingLargeTextRestorePosition,
+                largeTextPreviewBaseCharOffset,
+                largeTextEstimatedBasePageOffset,
+                largeTextEstimatedTotalChars,
+                hugeTextPreviewOnly,
+                pendingLargeTextCachedDisplayPage,
+                pendingLargeTextCachedTotalPages);
+    }
+
+    private void clearLoadedTextSnapshot() {
+        LoadedTextSnapshot snapshot = lastLoadedTextSnapshot;
+        if (snapshot == null) return;
+        if (filePath == null || filePath.equals(snapshot.filePath)) {
+            lastLoadedTextSnapshot = null;
+        }
+    }
+
+    private boolean restoreLoadedTextSnapshotIfAvailable(@NonNull Intent intent, Bundle savedInstanceState) {
+        if (savedInstanceState == null || !savedInstanceState.getBoolean(STATE_RESTORE_FROM_MEMORY, false)) {
+            return false;
+        }
+
+        LoadedTextSnapshot snapshot = lastLoadedTextSnapshot;
+        if (snapshot == null || !snapshot.matches(intent)) return false;
+
+        activityDestroyed = false;
+        progressBar.setVisibility(View.GONE);
+        progressText.setVisibility(View.GONE);
+
+        filePath = snapshot.filePath;
+        fileName = snapshot.fileName != null ? snapshot.fileName : getString(R.string.app_name);
+        fileContent = snapshot.fileContent;
+        totalChars = snapshot.totalChars;
+        totalLines = snapshot.totalLines;
+        activeSearchQuery = snapshot.activeSearchQuery;
+        activeSearchIndex = snapshot.activeSearchIndex;
+        largeTextEstimateActive = snapshot.largeTextEstimateActive;
+        largeTextEstimatedTotalPages = snapshot.largeTextEstimatedTotalPages;
+        pendingLargeTextRestorePosition = snapshot.pendingLargeTextRestorePosition;
+        largeTextPreviewBaseCharOffset = snapshot.largeTextPreviewBaseCharOffset;
+        largeTextEstimatedBasePageOffset = snapshot.largeTextEstimatedBasePageOffset;
+        largeTextEstimatedTotalChars = snapshot.largeTextEstimatedTotalChars;
+        hugeTextPreviewOnly = snapshot.hugeTextPreviewOnly;
+        pendingLargeTextCachedDisplayPage = snapshot.pendingLargeTextCachedDisplayPage;
+        pendingLargeTextCachedTotalPages = snapshot.pendingLargeTextCachedTotalPages;
+
+        updateReaderFileTitle();
+        if (getSupportActionBar() != null) getSupportActionBar().setTitle(fileName);
+
+        readerView.setTextContent(fileContent);
+        applySearchHighlight();
+        readerView.post(() -> {
+            if (activityDestroyed) return;
+            scrollToCharPosition(snapshot.charPosition);
+            updatePositionLabel();
+        });
+        return true;
     }
 
     private void setupSeekBar() {
@@ -1482,11 +1645,72 @@ public class ReaderActivity extends AppCompatActivity {
     }
 
     private void setupBottomControls() {
-        findViewById(R.id.btn_open_file).setOnClickListener(v -> showTextSearch());
-        findViewById(R.id.btn_page_move).setOnClickListener(v -> showPageMoveBubble());
-        findViewById(R.id.btn_bookmark).setOnClickListener(v -> showBookmarksForFile());
-        findViewById(R.id.btn_settings).setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
-        findViewById(R.id.btn_more).setOnClickListener(v -> showMoreDialog());
+        if (bottomBar != null) {
+            // E-ink devices can have slower touch dispatch and occasional parent-intercept
+            // timing issues. Keep the whole toolbar in the touch layer and make every
+            // action consume its own tap from ACTION_DOWN through ACTION_UP.
+            bottomBar.setClickable(true);
+            bottomBar.setFocusable(false);
+            bottomBar.bringToFront();
+        }
+
+        setupBottomToolbarButton(R.id.btn_open_file, this::showTextSearch);
+        setupBottomToolbarButton(R.id.btn_page_move, this::showPageMoveBubble);
+        setupBottomToolbarButton(R.id.btn_bookmark, this::showBookmarksForFile);
+        setupBottomToolbarButton(R.id.btn_settings,
+                () -> startActivity(new Intent(this, SettingsActivity.class)));
+        setupBottomToolbarButton(R.id.btn_more, this::showMoreDialog);
+    }
+
+    private void setupBottomToolbarButton(int viewId, Runnable action) {
+        View button = findViewById(viewId);
+        if (button == null) return;
+
+        button.setClickable(true);
+        button.setFocusable(true);
+        button.setLongClickable(false);
+        button.setHapticFeedbackEnabled(false);
+        button.setOnClickListener(v -> {
+            if (action != null) action.run();
+        });
+        button.setOnTouchListener((v, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    if (v.getParent() != null) {
+                        v.getParent().requestDisallowInterceptTouchEvent(true);
+                    }
+                    if (bottomBar != null) bottomBar.bringToFront();
+                    // Keep the e-ink tap-consumption fallback, but do not enter the
+                    // pressed state. This removes the toolbar hold/ripple animation.
+                    return true;
+
+                case MotionEvent.ACTION_UP:
+                    if (v.getParent() != null) {
+                        v.getParent().requestDisallowInterceptTouchEvent(false);
+                    }
+                    if (isTouchInsideView(v, event)) {
+                        v.performClick();
+                    }
+                    return true;
+
+                case MotionEvent.ACTION_CANCEL:
+                    if (v.getParent() != null) {
+                        v.getParent().requestDisallowInterceptTouchEvent(false);
+                    }
+                    return true;
+
+                default:
+                    return true;
+            }
+        });
+    }
+
+    private boolean isTouchInsideView(View view, MotionEvent event) {
+        int slop = dpToPx(10);
+        return event.getX() >= -slop
+                && event.getX() <= view.getWidth() + slop
+                && event.getY() >= -slop
+                && event.getY() <= view.getHeight() + slop;
     }
 
     private void showPageMoveBubble() {
@@ -1852,7 +2076,7 @@ public class ReaderActivity extends AppCompatActivity {
                 handler.post(() -> {
                     if (activityDestroyed || generation != loadGeneration.get()) return;
                     progressText.setText(String.format(Locale.getDefault(), "%s%s", getString(R.string.error_prefix), e.getMessage()));
-                    Toast.makeText(this, getString(R.string.error_prefix) + e.getMessage(), Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, getString(R.string.error_prefix) + e.getMessage(), Toast.LENGTH_SHORT).show();
                 });
             }
         });
@@ -1963,16 +2187,8 @@ public class ReaderActivity extends AppCompatActivity {
 
         byte[] buffer = new byte[Math.min(64 * 1024, limit)];
         int remaining = limit;
-        try (FileInputStream input = new FileInputStream(file)) {
-            long skipped = 0L;
-            while (skipped < clampedStart) {
-                long n = input.skip(clampedStart - skipped);
-                if (n <= 0L) {
-                    if (input.read() < 0) break;
-                    n = 1L;
-                }
-                skipped += n;
-            }
+        try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+            input.seek(clampedStart);
 
             while (remaining > 0) {
                 int read = input.read(buffer, 0, Math.min(buffer.length, remaining));
@@ -2446,6 +2662,10 @@ public class ReaderActivity extends AppCompatActivity {
         toolbarVisible = !toolbarVisible;
         toolbar.setVisibility(View.GONE);
         bottomBar.setVisibility(toolbarVisible ? View.VISIBLE : View.GONE);
+        if (toolbarVisible && bottomBar != null) {
+            bottomBar.bringToFront();
+            bottomBar.post(bottomBar::bringToFront);
+        }
         if (readerPageStatus != null) readerPageStatus.setVisibility(View.VISIBLE);
         updateReaderFileTitleVisibility();
         if (readerRoot != null) ViewCompat.requestApplyInsets(readerRoot);
@@ -2454,15 +2674,66 @@ public class ReaderActivity extends AppCompatActivity {
         handler.postDelayed(this::updateNavigationBarForBottomMenu, 60);
     }
 
-    // --- Volume key scrolling ---
+    // --- Hardware page-turn keys ---
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (handleReaderPageTurnKey(event)) return true;
+        return super.dispatchKeyEvent(event);
+    }
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (prefs.getVolumeKeyScroll()) {
-            if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) { pageDown(); return true; }
-            else if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) { pageUp(); return true; }
-        }
+        // Fallback for devices that route hardware keys through onKeyDown() instead
+        // of dispatchKeyEvent(). dispatchKeyEvent() normally consumes these first.
+        if (handleReaderPageTurnKey(event)) return true;
         return super.onKeyDown(keyCode, event);
+    }
+
+    private boolean handleReaderPageTurnKey(KeyEvent event) {
+        if (event == null || prefs == null || !prefs.getVolumeKeyScroll()) return false;
+
+        int direction = pageTurnDirectionForKey(event.getKeyCode());
+        if (direction == 0) return false;
+
+        int action = event.getAction();
+        if (action == KeyEvent.ACTION_DOWN) {
+            if (event.getRepeatCount() == 0) {
+                pageBy(direction);
+            }
+            return true;
+        }
+
+        // Consume ACTION_UP too so Android/e-reader firmware does not also treat
+        // volume keys as volume changes after the app has used them for paging.
+        return action == KeyEvent.ACTION_UP;
+    }
+
+    private int pageTurnDirectionForKey(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_VOLUME_DOWN:
+            case KeyEvent.KEYCODE_PAGE_DOWN:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_FORWARD:
+            case KeyEvent.KEYCODE_MEDIA_NEXT:
+            case KeyEvent.KEYCODE_BUTTON_R1:
+            case KeyEvent.KEYCODE_NAVIGATE_NEXT:
+                return +1;
+
+            case KeyEvent.KEYCODE_VOLUME_UP:
+            case KeyEvent.KEYCODE_PAGE_UP:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
+            case KeyEvent.KEYCODE_BUTTON_L1:
+            case KeyEvent.KEYCODE_NAVIGATE_PREVIOUS:
+                return -1;
+
+            default:
+                return 0;
+        }
     }
 
     // --- Bookmark operations ---
@@ -2710,7 +2981,7 @@ public class ReaderActivity extends AppCompatActivity {
                 if (!targetFile.exists()) {
                     Toast.makeText(ReaderActivity.this,
                             getString(R.string.file_not_found_prefix) + b.getFilePath(),
-                            Toast.LENGTH_LONG).show();
+                            Toast.LENGTH_SHORT).show();
                     return;
                 }
 
@@ -3694,7 +3965,7 @@ public class ReaderActivity extends AppCompatActivity {
         List<String> fontNames = new ArrayList<>();
         try {
             FontManager fontManager = FontManager.getInstance();
-            fontManager.scanFontsSync(this);
+            if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
             fontNames.addAll(fontManager.getFontNames());
         } catch (Throwable ignored) {
             // Keep the dialog usable even if a device blocks one of the font paths.
@@ -4299,7 +4570,20 @@ public class ReaderActivity extends AppCompatActivity {
 
     // --- Lifecycle ---
 
-    @Override protected void onPause() { super.onPause(); saveReadingState(); }
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        cacheLoadedTextSnapshot();
+        outState.putBoolean(STATE_RESTORE_FROM_MEMORY, true);
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        saveReadingState();
+        cacheLoadedTextSnapshot();
+    }
+
     @Override protected void onDestroy() {
         activityDestroyed = true;
         loadGeneration.incrementAndGet();
@@ -4309,9 +4593,13 @@ public class ReaderActivity extends AppCompatActivity {
             viewerBackToast = null;
         }
         saveReadingState();
+        cacheLoadedTextSnapshot();
         if (notificationHelper != null) notificationHelper.dismiss();
         releaseReaderMemory();
         executor.shutdownNow();
+        if (isFinishing()) {
+            clearLoadedTextSnapshot();
+        }
         ViewerRegistry.unregister(this);
         super.onDestroy();
     }

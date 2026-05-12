@@ -160,6 +160,14 @@ public class BookmarkManager {
         return states;
     }
 
+    /**
+     * Fast existence check for UI visibility / clear-all actions.
+     * Avoids sorting the whole recent-file map when only emptiness matters.
+     */
+    public boolean hasRecentFiles() {
+        return !readingStates.isEmpty();
+    }
+
     // ========== Export / Import ==========
 
     /**
