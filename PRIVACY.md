@@ -34,7 +34,7 @@ Folder shortcuts store local folder paths selected by the user. They are used on
 
 ## Bookmark export/import
 
-Bookmark backup/export uses JSON. The exported JSON can include file paths, file names, reading positions, bookmark labels, and excerpts. Treat exported bookmark files as user data.
+Backup/export uses JSON. The exported JSON can include file paths, file names, reading positions, bookmark labels, excerpts, app settings, layout settings, and custom reading themes. Treat exported backup files as user data. Lock PIN data is intentionally excluded from the plain JSON backup.
 
 ## File permissions
 

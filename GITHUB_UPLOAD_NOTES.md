@@ -1,6 +1,4 @@
-# TextView Reader 2.0.6 GitHub Upload Notes
-
-# GitHub Upload Notes
+# TextView Reader 2.0.7 GitHub Upload Notes
 
 Use this checklist before replacing files on GitHub through the web interface.
 
@@ -22,6 +20,7 @@ CONTRIBUTING.md
 ANDROID_STUDIO_SETUP_FOR_BEGINNERS.md
 BUILD_FIX_NOTES.md
 GITHUB_UPLOAD_NOTES.md
+PATCHNOTES.md
 build.gradle
 gradle.properties
 gradlew
@@ -75,7 +74,7 @@ captures/
 9. Commit with a message such as:
 
 ```text
-Update TextView Reader 2.0.6 source
+Update TextView Reader 2.0.7 source
 ```
 
 ## Important limitation
@@ -107,18 +106,25 @@ Before uploading, confirm the package does not contain:
 - signing keys;
 - secret/environment files.
 
-## Release notes summary for v2.0.6
+## Release notes summary for v2.0.7
 
 Use this if GitHub asks for a short release description:
 
 ```markdown
-## TextView Reader 2.0.6
+## TextView Reader 2.0.7
 
-- Fixed TXT page-boundary behavior so pages do not duplicate or skip lines.
-- Improved TXT first-page and last-page row alignment.
-- Added TXT file-title overlay under the top page indicator when controls are open.
-- Updated TXT/PDF/EPUB/Word loading indicators to blend with the active viewer theme.
-- Added single-tap toolbar fold/return for PDF, EPUB, and Word viewers.
-- Added folded-mode safe-area padding for punch-hole/status-bar and 3-button navigation-bar areas.
-- Improved PDF zoom focus so pinch and menu zoom preserve the selected/visible spot.
+- Moved EPUB boundary controls into Settings > EPUB layout.
+- EPUB now supports separate left, right, top, and bottom boundaries from 0px to 240px in 5px steps.
+- EPUB bottom boundary now accounts for the visible bottom toolbar instead of pushing the page upward by the full boundary value.
+- Fixed EPUB/Word theme refresh after returning from Settings, preserving page and scroll position.
+- Added EPUB More controls for Increase Font, Decrease Font, and Reset Font Size.
+- Added Reset Font Size to TXT More.
+- Moved shared Font Size and Line Spacing settings above the TXT layout section.
+- Unified TXT popup UI with PDF/EPUB/Word rounded dialog styling, thinner borders, and matching text tone.
+- Reworked bookmark popups so the bookmark list stays above Add Bookmark, with hints shown in a small rounded popup.
+- Added Open File next to Close in PDF/EPUB/Word More popups.
+- Backup export/import now includes app settings and custom reading themes, while excluding lock PIN data from plain JSON.
+- Custom reading themes can be long-pressed for Edit/Delete options using rounded popup UI.
+- Fixed Theme Editor Save Theme button contrast in light mode.
+- Centered rounded action-box labels in custom-theme and file-operation popups.
 ```

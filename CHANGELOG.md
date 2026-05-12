@@ -1,5 +1,48 @@
 # Changelog
 
+## 2.0.7 - 2026-05-11
+
+### EPUB reader
+
+- Moved EPUB boundary control from the viewer **More** menu into **Settings**.
+- Added **Settings > EPUB layout** controls for separate left, right, top, and bottom EPUB reading boundaries.
+- EPUB boundary sliders use raw px units, support **0px to 240px**, and move in **5px** steps.
+- EPUB top/bottom boundaries now work as viewer-edge boundaries, matching the TXT boundary behavior instead of acting as HTML body padding.
+- EPUB boundary changes apply when returning to the EPUB viewer from Settings.
+- Fixed EPUB/Word page content so changing the reader theme in Settings refreshes the already-open WebView page after returning to the viewer, while preserving the current page/scroll position.
+- Adjusted EPUB bottom boundary behavior so the visible bottom toolbar counts toward the requested boundary; extra bottom margin is only added when the boundary value is larger than the toolbar height.
+- Added EPUB **More** menu controls for **Increase Font**, **Decrease Font**, and **Reset Font Size**; these adjust the EPUB WebView text zoom and refresh the current page.
+- Moved shared **Font Size** and **Line Spacing** controls above the **TXT layout** section in Settings so TXT layout only contains TXT-specific boundary controls.
+- Kept Word/DOCX padding unchanged; the EPUB layout controls only affect EPUB files.
+- Added **Open File** next to **Close** in the PDF, EPUB, and Word **More** popups for quicker return to the file browser.
+- Backup export/import now includes app settings and custom reading themes in addition to bookmarks and reading positions; lock PIN data is intentionally not written to plain JSON backups.
+- Custom reading themes can now be long-pressed and removed through the same rounded popup UI used by the other theme windows.
+- Fixed custom-theme option popups so they open directly in their final centered position instead of first appearing on the right and then snapping into place.
+- Moved the custom-theme options and delete-confirmation popups slightly below center while keeping the no-jump rounded-window behavior.
+- Centered custom-theme popup button labels inside their rounded button boxes.
+- Centered main file-operation popup action labels inside their rounded boxes, including shortcut and clear/remove confirmation actions.
+- Fixed the Theme Editor **Save Theme** button text contrast in light/main-white mode.
+
+### TXT viewer UI
+
+- Updated the TXT bottom overlay to better match the document viewer control style while keeping the TXT-specific Find, Page, Bookmark, Settings, and More controls.
+- Kept the slider/button area continuous without adding a horizontal separator between the middle control area and the bottom button row.
+- Removed the remaining horizontal divider from TXT popup bottom action areas so Page/More/File Info-style windows use the same continuous card surface as the PDF/EPUB/Word viewer dialogs.
+- Matched TXT popup outer borders to the PDF/EPUB/Word viewer dialogs by using the same thin theme-derived outline instead of the heavier TXT-only border.
+- Matched TXT popup text tone to PDF/EPUB/Word dialogs by using the active reader theme text color instead of a generic black/white readable fallback.
+- Changed the TXT **Go to Page** popup action from **Close** to **Go**.
+- Reordered TXT/PDF/EPUB/Word bookmark popups so the saved-bookmark list stays as the main section and the **Add current bookmark** button sits below it.
+- Changed bookmark hints from inline collapse/expand text to a separate small rounded popup in TXT, PDF, EPUB, and Word viewers.
+- Moved TXT toolbar-triggered popups and their More-menu subsections slightly lower while keeping bookmark windows at their existing bookmark position.
+- Matched PDF/EPUB/Word toolbar-triggered Find, More, File Info, and font popup positions to the same bottom offset used by the Go to Page popup.
+- Kept the Font picker horizontal header/action separators while reducing font-page outer and row-card borders to 1px so the outline looks thinner on high-density screens.
+- Added **Reset Font Size** to the TXT viewer **More** popup.
+
+### Version metadata
+
+- Updated Android version metadata to `versionCode 207` and `versionName "2.0.7"`.
+- Kept the 2.0.6 changelog entry unchanged below this release section.
+
 ## 2.0.6 - 2026-05-11
 
 ### TXT Viewer
@@ -35,6 +78,16 @@
 - Improved PDF pinch-zoom so it preserves the selected pinch/focal spot instead of drifting toward the upper-left corner.
 - Improved PDF More-menu Zoom In/Zoom Out/Reset behavior so zoom changes preserve the current viewport center.
 - Preserved existing double-tap zoom focus behavior.
+
+### TXT viewer UI
+
+- Updated the TXT bottom overlay to better match the document viewer control style while keeping the TXT-specific Find, Page, Bookmark, Settings, and More controls.
+- Kept the slider/button area continuous without adding a horizontal separator between the middle control area and the bottom button row.
+
+### Version metadata
+
+- Updated Android version metadata to `versionCode 206` and `versionName "2.0.6"`.
+- Updated `README.md`, `CHANGELOG.md`, `PATCHNOTES.md`, and `GITHUB_UPLOAD_NOTES.md` for the 2.0.6 release.
 
 ## 2.0.5 - 2026-05-10
 
@@ -190,7 +243,7 @@
 - Reused viewer activities with `singleTop` / `onNewIntent` handling to avoid repeated viewer stacks.
 - Improved lifecycle cleanup for handlers, executor services, PDF bitmaps/renderers, WebView resources, and selection state.
 - Kept Word/DOCX rendering on WebView after testing showed selectable-TextView rendering degraded document layout.
-- Improved DOCX/Word page behavior and left/right swipe page movement.
+- Improved DOCX/Word page behavior and left and right swipe page movement.
 
 ### Documentation and release hygiene
 

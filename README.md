@@ -2,7 +2,7 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.0.6**
+Current version: **2.0.7**
 
 ## Quick UI map
 
@@ -35,6 +35,7 @@ Current version: **2.0.6**
 - PDF popups use the same compact dialog width style as the TXT reader.
 - Bookmarks remain wider so long bookmark/file information is easier to read.
 - Single-tap the page area to fold or restore the top toolbar and bottom controls.
+- The **More** popup includes **Open File** next to **Close** for returning to the file browser.
 - Folded toolbar mode keeps 6dp extra safe-area padding around punch-hole/status-bar and navigation-bar regions.
 
 ### EPUB / Word reader
@@ -43,13 +44,16 @@ Current version: **2.0.6**
 - The bottom control bar includes **Previous**, **Next**, **Find**, **Go to Page**, **Bookmarks**, and **More**.
 - **Find** searches within the current document and wraps across pages.
 - **More > Font** uses the same structure as the TXT font selector.
+- EPUB **More** includes **Increase Font**, **Decrease Font**, and **Reset Font Size** controls.
+- EPUB boundary is controlled from **Settings > EPUB layout**, including separate left, right, top, and bottom boundaries from 0–240px.
 - EPUB and Word files can use **Default font** first when the file declares its own font.
 - Multiple user-added fonts can be kept in the compact font picker.
 - Long-press an added font in **Font** to remove it from the compact font list.
 - Double-tap resets the document view to the default/original size.
 - Single-tap the page area to fold or restore the top toolbar and bottom controls.
+- The **More** popup includes **Open File** next to **Close** for returning to the file browser.
 - Folded toolbar mode keeps 6dp extra safe-area padding around punch-hole/status-bar and navigation-bar regions.
-- Zoom controls were removed from the Word/EPUB **More** menu because they duplicated gesture behavior.
+- Word keeps gesture-style viewing controls; EPUB uses font-size controls in **More** for reader text size.
 
 ## Features
 
@@ -101,6 +105,7 @@ Current version: **2.0.6**
 - Search popup uses reader-style input, custom cursor/handle styling, match counter, Previous/Next, and wrap behavior.
 - Font selector follows the TXT reader font-dialog structure.
 - EPUB file-declared fonts can be used as **Default font**.
+- EPUB boundary can be adjusted from **Settings > EPUB layout** for left, right, top, and bottom boundaries without changing Word/DOCX padding.
 - Word file-declared fonts can be used as **Default font** when detected from DOCX style/font metadata.
 - Imported/system fonts are served to WebView through the internal local font route instead of direct file access.
 - Multiple added fonts are preserved in the compact font picker.
@@ -120,7 +125,7 @@ Current version: **2.0.6**
 - Long-press a bookmark folder to delete all bookmarks inside that folder.
 - Folder-delete confirmation uses the rounded/bordered dialog style.
 - Bookmark memo dialogs include **Cancel**, **Clear memo**, and **Save**.
-- Export/import support.
+- Export/import support for bookmarks, reading positions, app settings, layout settings, and custom reading themes.
 - Reading-position persistence per file.
 - Bookmark cleanup and cache cleanup are separate.
 
@@ -128,8 +133,9 @@ Current version: **2.0.6**
 
 - Built-in reading themes.
 - Custom theme editor.
+- Long-press custom reading themes to edit or delete them with rounded popup controls.
 - Light/dark/follow-system behavior.
-- Theme state refreshes correctly when returning from Settings to a viewer popup.
+- Theme state refreshes correctly when returning from Settings to viewer popups and already-open EPUB/Word WebView pages.
 - Font selection shared across TXT, EPUB, and Word where applicable.
 - EPUB/Word can preserve file-declared default fonts.
 - Dialogs, popup windows, and loading indicators are theme-matched and sized consistently across viewers.
