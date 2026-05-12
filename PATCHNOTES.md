@@ -1,49 +1,34 @@
-## TextView Reader 2.0.8
+## TextView Reader 2.0.9
 
-This patch note lists only the changes made **after 2.0.7**. The 2.0.7 EPUB boundary, TXT popup UI, bookmark popup, backup/settings, and custom-theme changes are not repeated here.
+### TXT small-file row alignment
 
-### Hardware page-turn and e-ink reader fixes
+- Fixed very small TXT files whose content is shorter than the viewport so their first text row uses the same visual row grid as normal TXT files.
+- This avoids the short-file case sitting slightly lower than normal files.
+- The fix keeps very small TXT files as single-page content and does not add artificial paging behavior.
+- Normal TXT paging, row anchors, and large-file behavior are unchanged.
 
-- Hardened TXT bottom-toolbar tap handling for e-ink devices such as iReader-class readers.
-- TXT bottom toolbar buttons now consume their own tap events from press to release, reducing missed taps on buttons such as **More / 더보기**.
-- The TXT bottom toolbar is explicitly kept in the front touch layer when visible.
-- Expanded the **Volume Keys Page Up/Down** behavior beyond only Android volume keys.
-- When the setting is enabled, TXT now handles common e-reader/page-turn key codes:
-  - Volume Up / Down
-  - Page Up / Down
-  - D-pad Left / Right / Up / Down
-  - Space
-  - Media Next / Previous
-  - Forward
-  - L1/R1-style page buttons
-  - Navigate Previous / Next
-- Page-turn key handling now consumes key-up events too, reducing the chance that device firmware also changes system volume.
-- Applied the same hardware page-turn key behavior to **PDF, EPUB, and Word/DOCX** viewers, not only TXT.
+### TXT page-boundary alignment
 
-### Viewer toolbar behavior
+- Fixed a second-page-only TXT pagination case where page 2 could repeat page 1's last fully visible sentence after increasing the TXT bottom boundary, such as around 80px.
+- The page-anchor builder now uses the actual visible layout top for each page, including the first-page top-pad compensation, so page 2 starts after the true last fully visible line of page 1.
+- This keeps the existing line-boundary pagination logic and does not change normal page-turn controls.
 
-- Removed hold/ripple animation from TXT, PDF, EPUB, and Word bottom toolbar buttons.
-- Disabled long-click/haptic behavior on the shared viewer toolbar button style.
-- Kept normal tap behavior unchanged.
-- Kept the TXT e-ink tap-consumption fallback, but removed the pressed-state visual so toolbar buttons no longer show the hold animation.
+### Main-screen long-press dialog positioning
 
-### TXT theme-return reload fix
+- Fixed hard-landing behavior for main-screen long-press follow-up windows:
+  - **Delete / 삭제**
+  - **Rename / 이름 변경**
+  - **File Info / 파일 정보**
+- Moved the **Delete / 삭제** confirmation window slightly below center, while keeping it clearly above the **Rename / 이름 변경** window.
+- Moved the **Rename / 이름 변경** window slightly upward from its previous bottom position.
+- The rounded-window UI is preserved; this only stabilizes and refines first-open placement.
 
-- Fixed TXT viewer behavior after changing reader theme/settings and returning to the viewer.
-- During normal Activity recreation, the TXT viewer now restores the already-loaded text from memory instead of showing the loading flow and reading the file from disk again.
-- Restored state includes current character position, search state, large-text preview state, file title, and page label.
-- If the app process is actually killed and the memory snapshot is gone, the old safe disk-reload fallback still remains.
 
-### Safe optimization cleanup
+### Main-screen folder loading
 
-- Enabled `shrinkResources true` for release builds.
-- Removed stale PdfBox ProGuard keep rules because the current PDF path uses Android `PdfRenderer`.
-- Added a fast recent-file existence check so the UI does not sort the full recent-file list just to test whether recent files exist.
-- Replaced large TXT preview stream skipping with direct `RandomAccessFile.seek()`.
-- Avoided repeated full font-folder rescans after fonts have already been scanned during the current app session.
-- Converted every remaining long-duration Toast to short-duration Toast.
+- Improved folder-opening responsiveness from the drawer and main browser by moving directory scanning off the UI thread.
+- Large folders now show a loading state while files are collected and sorted in the background.
+- Added stale-load cancellation so tapping another folder/search/home before the previous folder scan finishes cannot overwrite the current view.
+- Replaced DiffUtil animation for full folder switches with direct list replacement, which avoids expensive item-by-item comparison when opening a different directory.
+- File opening, sorting choices, folder shortcuts, and drawer structure are unchanged.
 
-### Version metadata
-
-- Android `versionCode`: `208`
-- Android `versionName`: `2.0.8`

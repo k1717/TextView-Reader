@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.0.9 - 2026-05-11
+
+### TXT small-file row alignment
+
+- Fixed very small TXT files so the first row aligns to the same visual row grid as normal TXT files instead of sitting lower when the content is shorter than the viewport.
+- Kept very small TXT files as single-page content; this does not change paging logic for normal files.
+
+### TXT page-boundary alignment
+
+- Fixed a second-page-only TXT pagination case where page 2 could repeat page 1's last fully visible sentence after increasing the TXT bottom boundary.
+- Page anchors now calculate page capacity from the actual visible layout top at each page anchor, including first-page visual compensation.
+
+### Main-screen long-press dialog positioning
+
+- Fixed hard-landing behavior for main-screen long-press follow-up windows: **Delete / 삭제**, **Rename / 이름 변경**, and **File Info / 파일 정보**.
+- Moved the **Delete / 삭제** confirmation window slightly below center, while keeping it clearly above the **Rename / 이름 변경** window.
+- Moved the **Rename / 이름 변경** window slightly upward from its previous bottom position.
+
+
+### Main-screen folder loading
+
+- Improved folder-opening responsiveness by loading directory contents on a background thread instead of blocking the UI thread.
+- Added stale-load cancellation so older folder scans are ignored if the user navigates elsewhere before they finish.
+- Switched full folder navigation updates to direct list replacement instead of DiffUtil animation to reduce delay on large folders.
+- Kept existing sorting options, file-opening behavior, drawer shortcuts, and viewer logic unchanged.
+
 ## 2.0.8 - 2026-05-11
 
 This entry lists the functional difference from **2.0.7** only. The full 2.0.7 UI/settings changes remain in the 2.0.7 entry below.
@@ -33,10 +59,6 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 - Avoided repeated full font-folder rescans once fonts have already been scanned in the current app session.
 - Converted all remaining `Toast.LENGTH_LONG` messages to `Toast.LENGTH_SHORT`.
 
-### Version metadata
-
-- Updated Android version metadata to `versionCode 208` and `versionName "2.0.8"`.
-
 ## 2.0.7 - 2026-05-11
 
 ### EPUB reader
@@ -62,6 +84,8 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 
 ### TXT viewer UI
 
+- Updated the TXT bottom overlay to better match the document viewer control style while keeping the TXT-specific Find, Page, Bookmark, Settings, and More controls.
+- Kept the slider/button area continuous without adding a horizontal separator between the middle control area and the bottom button row.
 - Removed the remaining horizontal divider from TXT popup bottom action areas so Page/More/File Info-style windows use the same continuous card surface as the PDF/EPUB/Word viewer dialogs.
 - Matched TXT popup outer borders to the PDF/EPUB/Word viewer dialogs by using the same thin theme-derived outline instead of the heavier TXT-only border.
 - Matched TXT popup text tone to PDF/EPUB/Word dialogs by using the active reader theme text color instead of a generic black/white readable fallback.

@@ -2,16 +2,16 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.0.8**
+Current version: **2.0.9**
 
-## What changed in 2.0.8 from 2.0.7
+## What changed in 2.0.9 from 2.0.8
 
-- Improved e-ink reader support by hardening TXT toolbar taps and expanding hardware page-turn key handling.
-- Applied the volume-key/page-turn setting to PDF, EPUB, and Word/DOCX viewers as well as TXT.
-- Removed bottom-toolbar hold/ripple animations across viewers.
-- Fixed TXT theme/settings return behavior so normal Activity recreation restores already-loaded text instead of reloading the file.
-- Added release cleanup: resource shrinking, stale ProGuard cleanup, faster recent-file checks, direct large-TXT preview seeking, reduced repeated font scans, and short Toast messages.
-
+- Fixed very small TXT files so their first row aligns to the same visual row grid as normal TXT files.
+- Kept very small TXT files as single-page content; this does not change normal TXT paging logic.
+- Fixed a second-page-only TXT pagination case where page 2 could repeat page 1's last fully visible sentence after increasing the TXT bottom boundary.
+- Fixed hard-landing behavior for main-screen long-press follow-up windows: **Delete / 삭제**, **Rename / 이름 변경**, and **File Info / 파일 정보**.
+- Moved **Delete / 삭제** to the screen center and moved **Rename / 이름 변경** slightly upward.
+- Improved drawer/folder opening responsiveness by loading folder contents in the background and ignoring stale folder-scan results.
 
 ## Quick UI map
 
