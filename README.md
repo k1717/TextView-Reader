@@ -4,6 +4,15 @@ TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents
 
 Current version: **2.0.8**
 
+## What changed in 2.0.8 from 2.0.7
+
+- Improved e-ink reader support by hardening TXT toolbar taps and expanding hardware page-turn key handling.
+- Applied the volume-key/page-turn setting to PDF, EPUB, and Word/DOCX viewers as well as TXT.
+- Removed bottom-toolbar hold/ripple animations across viewers.
+- Fixed TXT theme/settings return behavior so normal Activity recreation restores already-loaded text instead of reloading the file.
+- Added release cleanup: resource shrinking, stale ProGuard cleanup, faster recent-file checks, direct large-TXT preview seeking, reduced repeated font scans, and short Toast messages.
+
+
 ## Quick UI map
 
 ### Main screen

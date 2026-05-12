@@ -2,6 +2,43 @@
 
 ## 2.0.8 - 2026-05-11
 
+This entry lists the functional difference from **2.0.7** only. The full 2.0.7 UI/settings changes remain in the 2.0.7 entry below.
+
+### E-ink and hardware page-turn support
+
+- Hardened TXT bottom-toolbar tap handling for e-ink readers so toolbar buttons, including **More / 더보기**, are less likely to miss taps.
+- Kept the TXT bottom toolbar in the front touch layer when visible.
+- Expanded TXT hardware page-turn handling from volume keys only to common e-reader key codes, including Page Up/Down, D-pad keys, Space, media next/previous, L1/R1-style page buttons, and navigate previous/next.
+- Consumed key-up events after page-turn handling to reduce accidental system volume changes on e-reader firmware.
+- Applied the same **Volume Keys Page Up/Down** setting to **PDF, EPUB, and Word/DOCX** viewers.
+
+### Toolbar interaction cleanup
+
+- Removed hold/ripple animation from TXT, PDF, EPUB, and Word viewer bottom toolbar buttons.
+- Disabled long-click/haptic behavior for the shared viewer toolbar button style while preserving normal tap actions.
+- Kept the TXT e-ink touch fallback but removed the visible pressed-state animation.
+
+### TXT viewer reload behavior
+
+- Fixed TXT viewer return-from-theme/settings behavior so normal Activity recreation restores the loaded text from memory instead of reloading the text file from disk.
+- Restored TXT state includes character position, search state, large-text preview state, file title, and page label.
+- Kept disk reload as a fallback if the app process was killed and the memory snapshot is unavailable.
+
+### Safe optimization cleanup
+
+- Enabled release resource shrinking.
+- Removed stale PdfBox ProGuard rules because the app uses Android `PdfRenderer`.
+- Added a fast `hasRecentFiles()` check to avoid sorting all recent-file states when only checking whether any recent file exists.
+- Replaced large-TXT preview stream skipping with direct file seeking.
+- Avoided repeated full font-folder rescans once fonts have already been scanned in the current app session.
+- Converted all remaining `Toast.LENGTH_LONG` messages to `Toast.LENGTH_SHORT`.
+
+### Version metadata
+
+- Updated Android version metadata to `versionCode 208` and `versionName "2.0.8"`.
+
+## 2.0.7 - 2026-05-11
+
 ### EPUB reader
 
 - Moved EPUB boundary control from the viewer **More** menu into **Settings**.
@@ -37,17 +74,6 @@
 - Matched PDF/EPUB/Word toolbar-triggered Find, More, File Info, and font popup positions to the same bottom offset used by the Go to Page popup.
 - Kept the Font picker horizontal header/action separators while reducing font-page outer and row-card borders to 1px so the outline looks thinner on high-density screens.
 - Added **Reset Font Size** to the TXT viewer **More** popup.
-- Hardened TXT bottom-toolbar touch handling for e-ink readers so buttons such as **More** consume their own tap events reliably.
-- Expanded hardware page-turn handling for e-reader devices: the volume-key page setting now also consumes Page Up/Down, common D-pad page keys, media next/previous, and shoulder/page-button key codes before Android changes system volume.
-- Applied the same volume-key / hardware page-turn setting to PDF, EPUB, and Word viewers, not only the TXT viewer.
-- Removed the long-press/hold ripple animation from viewer bottom toolbar buttons while keeping normal tap actions intact.
-- Changed remaining long-duration Toast messages to short Toast messages across TXT, PDF, EPUB/Word, and Settings flows.
-- Fixed TXT viewer theme return behavior so normal Activity recreation can restore the already-loaded text from memory instead of showing the loading flow and reading the file again.
-
-### Version metadata
-
-- Updated Android version metadata to `versionCode 208` and `versionName "2.0.8"`.
-- Kept the 2.0.6 changelog entry unchanged below this release section.
 
 ## 2.0.6 - 2026-05-11
 
@@ -89,11 +115,6 @@
 
 - Updated the TXT bottom overlay to better match the document viewer control style while keeping the TXT-specific Find, Page, Bookmark, Settings, and More controls.
 - Kept the slider/button area continuous without adding a horizontal separator between the middle control area and the bottom button row.
-
-### Version metadata
-
-- Updated Android version metadata to `versionCode 206` and `versionName "2.0.6"`.
-- Updated `README.md`, `CHANGELOG.md`, `PATCHNOTES.md`, and `GITHUB_UPLOAD_NOTES.md` for the 2.0.6 release.
 
 ## 2.0.5 - 2026-05-10
 
@@ -256,12 +277,3 @@
 - Rebuilt the public documentation set with readable Markdown formatting.
 - Added repository hygiene guidance and privacy notes.
 - Expanded `.gitignore` for Android local/generated/private files.
-
-### 2.0.8 optimization cleanup
-- Enabled release resource shrinking to reduce packaged APK resources.
-- Removed stale PdfBox ProGuard rules because the app now uses Android PdfRenderer.
-- Avoided sorting all recent-file states when the UI only needs to know whether recent files exist.
-- Replaced large-TXT preview stream skipping with direct file seeking.
-- Avoided repeated full font-folder rescans when the font list has already been scanned in the current app session.
-- Standardized all app Toast messages to short duration.
-
