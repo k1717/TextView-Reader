@@ -42,10 +42,10 @@ public class SettingsActivity extends AppCompatActivity {
 
     private final ActivityResultLauncher<String> exportLauncher =
             registerForActivityResult(new ActivityResultContracts.CreateDocument("application/json"),
-                    uri -> { if (uri != null) exportBookmarksTo(uri); });
+                    uri -> { if (uri != null) exportBackupTo(uri); });
     private final ActivityResultLauncher<String[]> importLauncher =
             registerForActivityResult(new ActivityResultContracts.OpenDocument(),
-                    uri -> { if (uri != null) importBookmarksFrom(uri); });
+                    uri -> { if (uri != null) importBackupFrom(uri); });
     private final ActivityResultLauncher<Intent> lockSetLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
                 if (result.getResultCode() == RESULT_OK) {
@@ -81,6 +81,7 @@ public class SettingsActivity extends AppCompatActivity {
         setupFontSize();
         setupLineSpacing();
         setupTextZoneTuning();
+        setupEpubBoundary();
         setupSwitches();
         setupLock();
         setupExportImport();
@@ -362,6 +363,100 @@ public class SettingsActivity extends AppCompatActivity {
         return Math.round(clamped / (float) stepPx) * stepPx;
     }
 
+    private void setupEpubBoundary() {
+        SeekBar leftSeekBar = findViewById(R.id.epub_left_spacing_seekbar);
+        TextView leftLabel = findViewById(R.id.epub_left_spacing_label);
+        SeekBar rightSeekBar = findViewById(R.id.epub_right_spacing_seekbar);
+        TextView rightLabel = findViewById(R.id.epub_right_spacing_label);
+        SeekBar topSeekBar = findViewById(R.id.epub_top_spacing_seekbar);
+        TextView topLabel = findViewById(R.id.epub_top_spacing_label);
+        SeekBar bottomSeekBar = findViewById(R.id.epub_bottom_spacing_seekbar);
+        TextView bottomLabel = findViewById(R.id.epub_bottom_spacing_label);
+        if (leftSeekBar == null || leftLabel == null
+                || rightSeekBar == null || rightLabel == null
+                || topSeekBar == null || topLabel == null
+                || bottomSeekBar == null || bottomLabel == null) {
+            return;
+        }
+
+        final int epubBoundaryStepPx = 5;
+        final int epubBoundaryMaxPx = 240;
+        final int epubBoundaryMaxProgress = epubBoundaryMaxPx / epubBoundaryStepPx;
+
+        leftSeekBar.setMax(epubBoundaryMaxProgress);
+        rightSeekBar.setMax(epubBoundaryMaxProgress);
+        topSeekBar.setMax(epubBoundaryMaxProgress);
+        bottomSeekBar.setMax(epubBoundaryMaxProgress);
+
+        int left = clampEpubBoundaryPx(prefs.getEpubLeftPaddingDp());
+        int right = clampEpubBoundaryPx(prefs.getEpubRightPaddingDp());
+        int top = clampEpubBoundaryPx(prefs.getEpubTopPaddingDp());
+        int bottom = clampEpubBoundaryPx(prefs.getEpubBottomPaddingDp());
+
+        leftSeekBar.setProgress(left / epubBoundaryStepPx);
+        rightSeekBar.setProgress(right / epubBoundaryStepPx);
+        topSeekBar.setProgress(top / epubBoundaryStepPx);
+        bottomSeekBar.setProgress(bottom / epubBoundaryStepPx);
+
+        leftLabel.setText(getString(R.string.epub_left_spacing_format, left));
+        rightLabel.setText(getString(R.string.epub_right_spacing_format, right));
+        topLabel.setText(getString(R.string.epub_top_spacing_format, top));
+        bottomLabel.setText(getString(R.string.epub_bottom_spacing_format, bottom));
+
+        leftSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int value = clampEpubBoundaryPx(progress * epubBoundaryStepPx);
+                leftLabel.setText(getString(R.string.epub_left_spacing_format, value));
+                if (fromUser) prefs.setEpubLeftPaddingDp(value);
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                prefs.setEpubLeftPaddingDp(clampEpubBoundaryPx(seekBar.getProgress() * epubBoundaryStepPx));
+            }
+        });
+
+        rightSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int value = clampEpubBoundaryPx(progress * epubBoundaryStepPx);
+                rightLabel.setText(getString(R.string.epub_right_spacing_format, value));
+                if (fromUser) prefs.setEpubRightPaddingDp(value);
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                prefs.setEpubRightPaddingDp(clampEpubBoundaryPx(seekBar.getProgress() * epubBoundaryStepPx));
+            }
+        });
+
+        topSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int value = clampEpubBoundaryPx(progress * epubBoundaryStepPx);
+                topLabel.setText(getString(R.string.epub_top_spacing_format, value));
+                if (fromUser) prefs.setEpubTopPaddingDp(value);
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                prefs.setEpubTopPaddingDp(clampEpubBoundaryPx(seekBar.getProgress() * epubBoundaryStepPx));
+            }
+        });
+
+        bottomSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int value = clampEpubBoundaryPx(progress * epubBoundaryStepPx);
+                bottomLabel.setText(getString(R.string.epub_bottom_spacing_format, value));
+                if (fromUser) prefs.setEpubBottomPaddingDp(value);
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                prefs.setEpubBottomPaddingDp(clampEpubBoundaryPx(seekBar.getProgress() * epubBoundaryStepPx));
+            }
+        });
+    }
+
+    private int clampEpubBoundaryPx(int px) {
+        int clamped = Math.max(0, Math.min(240, px));
+        return Math.round(clamped / 5f) * 5;
+    }
+
     private void setupSwitches() {
         Switch switchScreenOn = findViewById(R.id.switch_keep_screen_on);
         switchScreenOn.setChecked(prefs.getKeepScreenOn());
@@ -595,6 +690,14 @@ public class SettingsActivity extends AppCompatActivity {
         if (leftInset != null) leftInset.setTextColor(sub);
         TextView rightInset = findViewById(R.id.txt_right_inset_label);
         if (rightInset != null) rightInset.setTextColor(sub);
+        TextView epubLeft = findViewById(R.id.epub_left_spacing_label);
+        if (epubLeft != null) epubLeft.setTextColor(sub);
+        TextView epubRight = findViewById(R.id.epub_right_spacing_label);
+        if (epubRight != null) epubRight.setTextColor(sub);
+        TextView epubTop = findViewById(R.id.epub_top_spacing_label);
+        if (epubTop != null) epubTop.setTextColor(sub);
+        TextView epubBottom = findViewById(R.id.epub_bottom_spacing_label);
+        if (epubBottom != null) epubBottom.setTextColor(sub);
         TextView ratio = findViewById(R.id.tap_zone_ratio_label);
         if (ratio != null) ratio.setTextColor(sub);
         TextView leading = findViewById(R.id.tap_zone_leading_label);
@@ -744,9 +847,7 @@ public class SettingsActivity extends AppCompatActivity {
             });
             if (!theme.isBuiltIn()) {
                 row.setOnLongClickListener(v -> {
-                    Intent edit = new Intent(this, ThemeEditorActivity.class);
-                    edit.putExtra(ThemeEditorActivity.EXTRA_THEME_ID, theme.getId());
-                    startActivity(edit);
+                    showCustomThemeActionsDialog(theme);
                     return true;
                 });
             }
@@ -830,11 +931,219 @@ public class SettingsActivity extends AppCompatActivity {
         return row;
     }
 
+    private void showCustomThemeActionsDialog(@NonNull Theme theme) {
+        final android.app.Dialog dialog = createRoundedSettingsDialog();
+        LinearLayout panel = createRoundedSettingsDialogPanel();
+
+        int text = dialogTextColor();
+        int sub = dialogSubTextColor();
+        int rowBg = dialogRowBackgroundColor();
+        int outline = dialogOutlineColor();
+
+        TextView title = makeSettingsDialogTitle(theme.getName(), text);
+        panel.addView(title);
+
+        TextView message = makeSettingsDialogMessage(getString(R.string.custom_theme_options_message), sub);
+        panel.addView(message);
+
+        MaterialButton edit = makeSettingsDialogButton(getString(R.string.edit_theme), text, rowBg, outline);
+        edit.setOnClickListener(v -> {
+            dialog.dismiss();
+            Intent editIntent = new Intent(this, ThemeEditorActivity.class);
+            editIntent.putExtra(ThemeEditorActivity.EXTRA_THEME_ID, theme.getId());
+            startActivity(editIntent);
+        });
+        panel.addView(edit);
+
+        MaterialButton delete = makeSettingsDialogButton(getString(R.string.delete_theme), text, rowBg, outline);
+        delete.setOnClickListener(v -> {
+            dialog.dismiss();
+            showDeleteCustomThemeDialog(theme);
+        });
+        panel.addView(delete);
+
+        MaterialButton cancel = makeSettingsDialogButton(getString(R.string.cancel), text, rowBg, outline);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        panel.addView(cancel);
+
+        showRoundedSettingsDialog(dialog, panel);
+    }
+
+    private void showDeleteCustomThemeDialog(@NonNull Theme theme) {
+        final android.app.Dialog dialog = createRoundedSettingsDialog();
+        LinearLayout panel = createRoundedSettingsDialogPanel();
+
+        int text = dialogTextColor();
+        int sub = dialogSubTextColor();
+        int rowBg = dialogRowBackgroundColor();
+        int outline = dialogOutlineColor();
+
+        TextView title = makeSettingsDialogTitle(getString(R.string.delete_theme), text);
+        panel.addView(title);
+
+        TextView message = makeSettingsDialogMessage(
+                getString(R.string.delete_theme_confirm, theme.getName()), sub);
+        panel.addView(message);
+
+        MaterialButton delete = makeSettingsDialogButton(getString(R.string.delete), text, rowBg, outline);
+        delete.setOnClickListener(v -> {
+            dialog.dismiss();
+            themeManager.deleteCustomTheme(theme.getId());
+            themeManager.reloadFromStorage();
+            applySettingsReadableTheme();
+            renderReadingThemeRows();
+            Toast.makeText(this, getString(R.string.theme_deleted), Toast.LENGTH_SHORT).show();
+        });
+        panel.addView(delete);
+
+        MaterialButton cancel = makeSettingsDialogButton(getString(R.string.cancel), text, rowBg, outline);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        panel.addView(cancel);
+
+        showRoundedSettingsDialog(dialog, panel);
+    }
+
+    private android.app.Dialog createRoundedSettingsDialog() {
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        return dialog;
+    }
+
+    private LinearLayout createRoundedSettingsDialogPanel() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        int pad = dpToPx(18);
+        panel.setPadding(pad, pad, pad, pad);
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(dialogPanelBackgroundColor());
+        bg.setCornerRadius(dpToPx(22));
+        bg.setStroke(dpToPx(1), dialogOutlineColor());
+        panel.setBackground(bg);
+
+        return panel;
+    }
+
+    private void showRoundedSettingsDialog(android.app.Dialog dialog, LinearLayout panel) {
+        dialog.setContentView(panel);
+        prepareRoundedSettingsDialogWindow(dialog, true);
+        dialog.setOnShowListener(d -> {
+            prepareRoundedSettingsDialogWindow(dialog, false);
+            android.view.Window shownWindow = dialog.getWindow();
+            if (shownWindow != null) {
+                shownWindow.getDecorView().post(() -> shownWindow.getDecorView().setAlpha(1f));
+            }
+        });
+        dialog.show();
+        prepareRoundedSettingsDialogWindow(dialog, false);
+    }
+
+    private void prepareRoundedSettingsDialogWindow(android.app.Dialog dialog, boolean hideUntilLaidOut) {
+        android.view.Window window = dialog.getWindow();
+        if (window == null) return;
+
+        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        window.setGravity(android.view.Gravity.CENTER);
+        window.setWindowAnimations(0);
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+
+        android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
+        lp.copyFrom(window.getAttributes());
+        lp.width = Math.min(
+                getResources().getDisplayMetrics().widthPixels - dpToPx(40),
+                dpToPx(420));
+        lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
+        lp.dimAmount = 0.18f;
+        lp.x = 0;
+        lp.y = dpToPx(44);
+        window.setAttributes(lp);
+        window.setLayout(lp.width, android.view.WindowManager.LayoutParams.WRAP_CONTENT);
+
+        if (hideUntilLaidOut) {
+            window.getDecorView().setAlpha(0f);
+        }
+    }
+
+    private TextView makeSettingsDialogTitle(String value, int color) {
+        TextView title = new TextView(this);
+        title.setText(value);
+        title.setTextColor(color);
+        title.setTextSize(18f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setGravity(android.view.Gravity.CENTER);
+        title.setSingleLine(false);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, 0, 0, dpToPx(10));
+        title.setLayoutParams(lp);
+        return title;
+    }
+
+    private TextView makeSettingsDialogMessage(String value, int color) {
+        TextView message = new TextView(this);
+        message.setText(value);
+        message.setTextColor(color);
+        message.setTextSize(14f);
+        message.setGravity(android.view.Gravity.CENTER);
+        message.setLineSpacing(0, 1.08f);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, 0, 0, dpToPx(12));
+        message.setLayoutParams(lp);
+        return message;
+    }
+
+    private MaterialButton makeSettingsDialogButton(String label, int text, int bg, int outline) {
+        MaterialButton button = new MaterialButton(this);
+        button.setAllCaps(false);
+        button.setText(label);
+        button.setTextSize(15f);
+        button.setTextColor(text);
+        button.setGravity(android.view.Gravity.CENTER);
+        button.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        button.setIncludeFontPadding(false);
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
+        button.setMinHeight(dpToPx(44));
+        button.setMinimumHeight(dpToPx(44));
+        button.setCornerRadius(dpToPx(14));
+        button.setStrokeWidth(dpToPx(1));
+        button.setStrokeColor(ColorStateList.valueOf(outline));
+        button.setBackgroundTintList(ColorStateList.valueOf(bg));
+        button.setRippleColor(ColorStateList.valueOf(isDarkUi()
+                ? Color.rgb(58, 58, 58) : Color.rgb(238, 238, 238)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dpToPx(6), 0, 0);
+        button.setLayoutParams(lp);
+        return button;
+    }
+
+    private int dialogPanelBackgroundColor() {
+        return isDarkUi() ? Color.rgb(16, 16, 16) : Color.rgb(255, 255, 255);
+    }
+
+    private int dialogRowBackgroundColor() {
+        return isDarkUi() ? Color.rgb(24, 24, 24) : Color.rgb(248, 249, 250);
+    }
+
+    private int dialogTextColor() {
+        return isDarkUi() ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
+    }
+
+    private int dialogSubTextColor() {
+        return isDarkUi() ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
+    }
+
+    private int dialogOutlineColor() {
+        return isDarkUi() ? Color.rgb(70, 70, 70) : Color.rgb(218, 220, 224);
+    }
+
     private int dpToPx(int dp) {
         return (int) (dp * getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    private void exportBookmarksTo(Uri uri) {
+    private void exportBackupTo(Uri uri) {
         try {
             String json = bookmarkManager.exportAll();
             try (OutputStream os = getContentResolver().openOutputStream(uri)) {
@@ -848,24 +1157,37 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    private void importBookmarksFrom(Uri uri) {
+    private void importBackupFrom(Uri uri) {
         try {
             String json = FileUtils.readTextFromUri(this, uri);
             new androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle(getString(R.string.import_bookmarks))
+                    .setTitle(getString(R.string.import_backup))
                     .setMessage(getString(R.string.merge_or_replace))
                     .setPositiveButton(getString(R.string.merge), (d, w) -> {
                         bookmarkManager.importAll(json, true);
-                        Toast.makeText(this, getString(R.string.imported_merged), Toast.LENGTH_SHORT).show();
+                        finishImportBackup(getString(R.string.imported_merged));
                     })
                     .setNegativeButton(getString(R.string.replace), (d, w) -> {
                         bookmarkManager.importAll(json, false);
-                        Toast.makeText(this, getString(R.string.imported_replaced), Toast.LENGTH_SHORT).show();
+                        finishImportBackup(getString(R.string.imported_replaced));
                     })
                     .setNeutralButton(getString(R.string.cancel), null).show();
         } catch (Exception e) {
             Toast.makeText(this, getString(R.string.import_failed_prefix) + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+
+    private void finishImportBackup(String message) {
+        if (prefs != null) {
+            prefs.applyLanguage(prefs.getLanguageMode());
+            prefs.applyDarkMode(prefs.getDarkMode());
+        }
+        if (themeManager != null) {
+            themeManager.reloadFromStorage();
+        }
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        recreate();
     }
 
     @Override public boolean onOptionsItemSelected(@NonNull MenuItem item) {

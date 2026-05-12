@@ -7,9 +7,16 @@ import androidx.core.os.LocaleListCompat;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class PrefsManager {
     private static final String PREFS_NAME = "simple_text_reader_prefs";
@@ -47,12 +54,159 @@ public class PrefsManager {
     }
     public SharedPreferences getPrefs() { return prefs; }
 
+    // ========== Backup / restore settings ==========
+    // Security PINs are intentionally not exported/imported. Restoring lock_enabled
+    // without a matching PIN can lock the user into a broken state, and exporting the
+    // PIN would place sensitive data in a plain JSON backup file.
+    private boolean isBackupExcludedKey(String key) {
+        return "lock_pin".equals(key) || "lock_enabled".equals(key);
+    }
+
+    public JSONObject exportSettingsToJson() throws JSONException {
+        JSONObject root = new JSONObject();
+        root.put("version", 1);
+
+        JSONObject values = new JSONObject();
+        for (Map.Entry<String, ?> entry : prefs.getAll().entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if (key == null || value == null || isBackupExcludedKey(key)) continue;
+
+            JSONObject item = new JSONObject();
+            if (value instanceof Boolean) {
+                item.put("type", "boolean");
+                item.put("value", value);
+            } else if (value instanceof Float) {
+                item.put("type", "float");
+                item.put("value", ((Float) value).doubleValue());
+            } else if (value instanceof Integer) {
+                item.put("type", "int");
+                item.put("value", value);
+            } else if (value instanceof Long) {
+                item.put("type", "long");
+                item.put("value", value);
+            } else if (value instanceof String) {
+                item.put("type", "string");
+                item.put("value", value);
+            } else if (value instanceof Set) {
+                item.put("type", "stringSet");
+                JSONArray arr = new JSONArray();
+                for (Object setItem : (Set<?>) value) {
+                    if (setItem != null) arr.put(String.valueOf(setItem));
+                }
+                item.put("value", arr);
+            } else {
+                item.put("type", "string");
+                item.put("value", String.valueOf(value));
+            }
+            values.put(key, item);
+        }
+
+        root.put("values", values);
+        return root;
+    }
+
+    public void importSettingsFromJson(JSONObject root, boolean merge) throws JSONException {
+        if (root == null) return;
+        JSONObject values = root.optJSONObject("values");
+        if (values == null) return;
+
+        SharedPreferences.Editor editor = prefs.edit();
+        if (!merge) {
+            for (String key : prefs.getAll().keySet()) {
+                if (!isBackupExcludedKey(key)) editor.remove(key);
+            }
+        }
+
+        Iterator<String> keys = values.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (key == null || isBackupExcludedKey(key)) continue;
+
+            JSONObject item = values.optJSONObject(key);
+            if (item == null) continue;
+            String type = item.optString("type", "string");
+
+            if ("boolean".equals(type)) {
+                editor.putBoolean(key, item.optBoolean("value", false));
+            } else if ("float".equals(type)) {
+                editor.putFloat(key, (float) item.optDouble("value", 0.0));
+            } else if ("int".equals(type)) {
+                editor.putInt(key, item.optInt("value", 0));
+            } else if ("long".equals(type)) {
+                editor.putLong(key, item.optLong("value", 0L));
+            } else if ("stringSet".equals(type)) {
+                JSONArray arr = item.optJSONArray("value");
+                LinkedHashSet<String> set = new LinkedHashSet<>();
+                if (arr != null) {
+                    for (int i = 0; i < arr.length(); i++) {
+                        String setItem = arr.optString(i, null);
+                        if (setItem != null) set.add(setItem);
+                    }
+                }
+                editor.putStringSet(key, set);
+            } else {
+                editor.putString(key, item.optString("value", ""));
+            }
+        }
+
+        editor.commit();
+    }
+
     public float getFontSize() { return prefs.getFloat("font_size", DEFAULT_FONT_SIZE); }
     public void setFontSize(float s) { prefs.edit().putFloat("font_size", Math.max(8f, Math.min(48f, s))).apply(); }
     public float getLineSpacing() { return prefs.getFloat("line_spacing", DEFAULT_LINE_SPACING); }
     public void setLineSpacing(float s) { prefs.edit().putFloat("line_spacing", s).apply(); }
     public String getFontFamily() { return prefs.getString("font_family", "default"); }
     public void setFontFamily(String f) { prefs.edit().putString("font_family", f).apply(); }
+
+    // EPUB WebView reader boundary. Stored in raw px units.
+    private int clampEpubPaddingDp(int px) {
+        int clamped = Math.max(0, Math.min(240, px));
+        return Math.round(clamped / 5f) * 5;
+    }
+
+    public int getEpubLeftPaddingDp() {
+        return clampEpubPaddingDp(prefs.getInt("epub_left_padding_dp",
+                prefs.getInt("epub_side_padding_dp",
+                        prefs.getInt("document_side_padding_dp", 30))));
+    }
+    public void setEpubLeftPaddingDp(int dp) {
+        prefs.edit().putInt("epub_left_padding_dp", clampEpubPaddingDp(dp)).apply();
+    }
+    public int getEpubRightPaddingDp() {
+        return clampEpubPaddingDp(prefs.getInt("epub_right_padding_dp",
+                prefs.getInt("epub_side_padding_dp",
+                        prefs.getInt("document_side_padding_dp", 30))));
+    }
+    public void setEpubRightPaddingDp(int dp) {
+        prefs.edit().putInt("epub_right_padding_dp", clampEpubPaddingDp(dp)).apply();
+    }
+
+    // Kept for migration/compatibility with older 2.0.7 builds that stored one side value.
+    public int getEpubSidePaddingDp() {
+        return Math.round((getEpubLeftPaddingDp() + getEpubRightPaddingDp()) / 2f);
+    }
+    public void setEpubSidePaddingDp(int dp) {
+        int value = clampEpubPaddingDp(dp);
+        prefs.edit()
+                .putInt("epub_left_padding_dp", value)
+                .putInt("epub_right_padding_dp", value)
+                .putInt("epub_side_padding_dp", value)
+                .apply();
+    }
+    public int getEpubTopPaddingDp() {
+        return clampEpubPaddingDp(prefs.getInt("epub_top_padding_dp", 0));
+    }
+    public void setEpubTopPaddingDp(int dp) {
+        prefs.edit().putInt("epub_top_padding_dp", clampEpubPaddingDp(dp)).apply();
+    }
+    public int getEpubBottomPaddingDp() {
+        return clampEpubPaddingDp(prefs.getInt("epub_bottom_padding_dp", 0));
+    }
+    public void setEpubBottomPaddingDp(int dp) {
+        prefs.edit().putInt("epub_bottom_padding_dp", clampEpubPaddingDp(dp)).apply();
+    }
 
     public int getDarkMode() { return prefs.getInt("dark_mode", DARK_MODE_FOLLOW_SYSTEM); }
     public void setDarkMode(int m) { prefs.edit().putInt("dark_mode", m).apply(); applyDarkMode(m); }

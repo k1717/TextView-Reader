@@ -6,6 +6,7 @@ import android.util.Log;
 import com.simpletext.reader.model.Theme;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -150,4 +151,43 @@ public class ThemeManager {
             Log.e(TAG, "Failed to save custom themes", e);
         }
     }
+
+    public synchronized JSONArray exportCustomThemesToJson() throws JSONException {
+        JSONArray arr = new JSONArray();
+        for (Theme t : customThemes) {
+            arr.put(t.toJson());
+        }
+        return arr;
+    }
+
+    public synchronized void importCustomThemesFromJson(JSONArray arr, boolean merge) throws JSONException {
+        if (arr == null) return;
+
+        if (!merge) {
+            customThemes.clear();
+        }
+
+        for (int i = 0; i < arr.length(); i++) {
+            Theme imported = Theme.fromJson(arr.getJSONObject(i));
+            if (imported.isBuiltIn()) continue;
+
+            int existingIndex = -1;
+            for (int j = 0; j < customThemes.size(); j++) {
+                if (customThemes.get(j).getId().equals(imported.getId())) {
+                    existingIndex = j;
+                    break;
+                }
+            }
+
+            if (existingIndex >= 0) {
+                customThemes.set(existingIndex, imported);
+            } else {
+                customThemes.add(imported);
+            }
+        }
+
+        saveCustomThemes();
+        syncActiveThemeIdFromPrefs();
+    }
+
 }

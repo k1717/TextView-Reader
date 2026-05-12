@@ -168,6 +168,21 @@ public class ThemeEditorActivity extends AppCompatActivity {
         applyThemeEditorColorsRecursive(root, text, sub,
                 ColorStateList.valueOf(accent),
                 ColorStateList.valueOf(outline));
+
+        // The Save Theme button is a filled action button. Do not reuse the
+        // page text color here, because in light/main-white mode that made
+        // black text sit on a dark filled button. Give the filled button an
+        // explicit high-contrast foreground/background pair instead.
+        MaterialButton saveButton = findViewById(R.id.btn_save_theme);
+        if (saveButton != null) {
+            int saveBg = dark ? Color.rgb(224, 224, 224) : Color.rgb(32, 33, 36);
+            int saveFg = dark ? Color.rgb(0, 0, 0) : Color.WHITE;
+            saveButton.setTextColor(saveFg);
+            saveButton.setBackgroundTintList(ColorStateList.valueOf(saveBg));
+            saveButton.setStrokeWidth(0);
+            saveButton.setRippleColor(ColorStateList.valueOf(
+                    dark ? Color.rgb(200, 200, 200) : Color.rgb(68, 68, 68)));
+        }
     }
 
     private void applyThemeEditorColorsRecursive(

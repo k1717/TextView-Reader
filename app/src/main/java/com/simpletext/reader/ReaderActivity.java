@@ -90,6 +90,9 @@ public class ReaderActivity extends AppCompatActivity {
     private static final long LARGE_TEXT_FAST_OPEN_THRESHOLD_BYTES = 3L * 1024L * 1024L;
     private static final long HUGE_TEXT_PREVIEW_ONLY_THRESHOLD_BYTES = 32L * 1024L * 1024L;
     private static final int LARGE_TEXT_PREVIEW_BYTES = 768 * 1024;
+    private static final int TXT_TOOLBAR_POPUP_Y_DP = 74;
+    private static final int TXT_BOOKMARK_POPUP_Y_DP = 34;
+    private static final int TXT_BOOKMARK_HINT_POPUP_Y_DP = 112;
     private static final String FONT_OPTION_SYSTEM_CURRENT = "system_current";
 
     public static final String EXTRA_FILE_PATH = "file_path";
@@ -125,6 +128,7 @@ public class ReaderActivity extends AppCompatActivity {
 
     private boolean toolbarVisible = false;
     private int currentReaderBackgroundColor = Color.BLACK;
+    private int currentReaderTextColor = Color.rgb(224, 224, 224);
     private int lastReaderTopInset = 0;
     private int lastReaderBottomInset = 0;
     private int lastStatusOffExtraTopPadding = 0;
@@ -427,6 +431,9 @@ public class ReaderActivity extends AppCompatActivity {
         Theme theme = themeManager.getActiveTheme();
         if (theme != null) {
             currentReaderBackgroundColor = theme.getBackgroundColor();
+            currentReaderTextColor = theme.getTextColor();
+        } else {
+            currentReaderTextColor = readableTextColorForBackground(currentReaderBackgroundColor);
         }
     }
 
@@ -448,25 +455,29 @@ public class ReaderActivity extends AppCompatActivity {
         // foreground, not by adding a white overlay. This keeps TXT More/Font
         // cards in the same tone family as the document viewers.
         int bg = readerDialogBgColor();
-        int fg = readableTextColorForBackground(bg);
+        int fg = readerDialogTextColor(bg);
         int blended = blendColors(bg, fg, isDarkColor(bg) ? 0.10f : 0.08f);
         return Color.rgb(Color.red(blended), Color.green(blended), Color.blue(blended));
     }
 
     private int readerDialogTextColor(int bgColor) {
-        return readableTextColorForBackground(bgColor);
+        syncReaderDialogThemeSnapshot();
+        return currentReaderTextColor;
     }
 
     private int readerDialogSubTextColor(int bgColor) {
-        return isLightColor(bgColor) ? Color.rgb(78, 78, 78) : Color.rgb(190, 190, 190);
+        syncReaderDialogThemeSnapshot();
+        return blendColors(currentReaderBackgroundColor, currentReaderTextColor,
+                isDarkColor(currentReaderBackgroundColor) ? 0.72f : 0.64f);
     }
 
     private int strongDialogBorderColor(int bgColor) {
-        int fg = readableTextColorForBackground(bgColor);
+        int fg = readerDialogTextColor(bgColor);
 
-        // Border for the MOST OUTER function dialog only.
-        // Mild enough for 더보기, but visible on black/dark and light/sepia themes.
-        return blendColors(bgColor, fg, isLightColor(bgColor) ? 0.58f : 0.78f);
+        // Match the PDF/EPUB/Word viewer dialog border tone.  The previous TXT
+        // border used a much stronger foreground blend, which made the outline
+        // look too heavy and separate from the document-viewer popups.
+        return blendColors(bgColor, fg, isDarkColor(bgColor) ? 0.28f : 0.20f);
     }
 
     private GradientDrawable pageMoveOuterBackground(int bgColor) {
@@ -483,10 +494,10 @@ public class ReaderActivity extends AppCompatActivity {
         TextView title = new TextView(this);
         title.setText(text);
         title.setTextColor(fgColor);
-        title.setTextSize(20f);
+        title.setTextSize(22f);
         title.setGravity(Gravity.CENTER_VERTICAL);
         title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setPadding(dpToPx(22), dpToPx(18), dpToPx(22), dpToPx(8));
+        title.setPadding(dpToPx(18), dpToPx(14), dpToPx(18), dpToPx(12));
         title.setBackgroundColor(Color.TRANSPARENT);
         return title;
     }
@@ -507,7 +518,7 @@ public class ReaderActivity extends AppCompatActivity {
         row.setTextColor(fgColor);
         row.setTextSize(16f);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dpToPx(18), 0, dpToPx(18), 0);
+        row.setPadding(dpToPx(14), 0, dpToPx(14), 0);
 
         // Match the EPUB/Word/PDF "More" window style: each TXT More row is a
         // separate rounded card, not a flat/bland text row.  The fill and stroke
@@ -524,6 +535,15 @@ public class ReaderActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(48));
         lp.setMargins(0, 0, 0, dpToPx(8));
         row.setLayoutParams(lp);
+        return row;
+    }
+
+    private TextView makeReaderCenteredActionButton(String text, int fgColor) {
+        TextView row = makeReaderActionRow(text, fgColor);
+        row.setGravity(Gravity.CENTER);
+        row.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        row.setIncludeFontPadding(false);
+        row.setPadding(0, 0, 0, 0);
         return row;
     }
 
@@ -568,7 +588,7 @@ public class ReaderActivity extends AppCompatActivity {
         // the selected row. Selection is shown by stronger text + stronger outline.
         bg.setColor(selected ? selectedFill : normalFill);
         bg.setCornerRadius(dpToPx(10));
-        bg.setStroke(Math.max(1, dpToPx(1)), selected ? selectedStroke : normalStroke);
+        bg.setStroke(1, selected ? selectedStroke : normalStroke);
         row.setBackground(bg);
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -592,13 +612,13 @@ public class ReaderActivity extends AppCompatActivity {
 
         GradientDrawable panelBg = new GradientDrawable();
         panelBg.setColor(bgColor);
-        panelBg.setCornerRadius(dpToPx(16));
-        panelBg.setStroke(dpToPx(1), borderColor);
+        panelBg.setCornerRadius(dpToPx(14));
+        panelBg.setStroke(Math.max(1, dpToPx(1)), borderColor);
 
         GradientDrawable foregroundBorder = new GradientDrawable();
         foregroundBorder.setColor(Color.TRANSPARENT);
-        foregroundBorder.setCornerRadius(dpToPx(16));
-        foregroundBorder.setStroke(dpToPx(2), borderColor);
+        foregroundBorder.setCornerRadius(dpToPx(14));
+        foregroundBorder.setStroke(Math.max(1, dpToPx(1)), borderColor);
 
         // No inner padding here. The overlay stroke sits exactly on the panel edge,
         // so any 2dp inset would push the content panel inward and cause a sub-pixel
@@ -649,8 +669,8 @@ public class ReaderActivity extends AppCompatActivity {
         if (decor.getWidth() <= 0 || decor.getHeight() <= 0) return;
 
         final float density = getResources().getDisplayMetrics().density;
-        final float strokePx = Math.max(1f, 1.5f * density);
-        final float outerRadiusPx = dpToPx(16);
+        final float strokePx = Math.max(1f, dpToPx(1));
+        final float outerRadiusPx = dpToPx(14);
 
         Drawable overlayBorder = new Drawable() {
             private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -719,35 +739,74 @@ public class ReaderActivity extends AppCompatActivity {
         styleReaderDialogButton(dialog.getButton(AlertDialog.BUTTON_NEUTRAL), subColor);
     }
 
+    private void prepareReaderAlertDialogWindowNoJump(AlertDialog dialog, boolean hideUntilLaidOut) {
+        if (dialog == null || dialog.getWindow() == null) return;
+
+        android.view.Window window = dialog.getWindow();
+        window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        window.setGravity(Gravity.CENTER);
+        window.setWindowAnimations(0);
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+        lp.copyFrom(window.getAttributes());
+        lp.width = Math.min(
+                getResources().getDisplayMetrics().widthPixels - dpToPx(40),
+                dpToPx(420));
+        lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        lp.dimAmount = 0.16f;
+        lp.x = 0;
+        lp.y = 0;
+        window.setAttributes(lp);
+        window.setLayout(lp.width, WindowManager.LayoutParams.WRAP_CONTENT);
+
+        if (hideUntilLaidOut) {
+            window.getDecorView().setAlpha(0f);
+        }
+    }
+
+    private void prepareReaderCustomThemeDialogWindowNoJump(AlertDialog dialog, boolean hideUntilLaidOut) {
+        prepareReaderAlertDialogWindowNoJump(dialog, hideUntilLaidOut);
+        if (dialog == null || dialog.getWindow() == null) return;
+
+        android.view.Window window = dialog.getWindow();
+        WindowManager.LayoutParams lp = window.getAttributes();
+        lp.y = dpToPx(44);
+        window.setAttributes(lp);
+    }
+
+
     private GradientDrawable positionedReaderDialogBackground(int bgColor) {
-        // Fill only. The visible border is drawn as a foreground overlay below.
-        // Drawing the stroke in the background can lose the top rounded corner
-        // because half of the stroke is clipped by the rounded outline.
+        // Same outer card geometry as the PDF/EPUB/Word viewer popups: the
+        // border is a thin theme-derived line, not the older heavy TXT outline.
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(bgColor);
-        drawable.setCornerRadius(dpToPx(16));
+        drawable.setCornerRadius(dpToPx(14));
         return drawable;
     }
 
     private Drawable positionedReaderDialogBorderOverlay(int bgColor) {
         final int borderColor = strongDialogBorderColor(bgColor);
+        final float strokeWidth = Math.max(1f, dpToPx(1));
+        final float radius = dpToPx(14);
         return new Drawable() {
             private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
             private final RectF rect = new RectF();
 
             {
                 paint.setStyle(Paint.Style.STROKE);
-                paint.setStrokeWidth(dpToPx(2));
+                paint.setStrokeWidth(strokeWidth);
                 paint.setColor(borderColor);
             }
 
             @Override
             public void draw(Canvas canvas) {
                 Rect bounds = getBounds();
-                float half = paint.getStrokeWidth() / 2f;
+                float half = strokeWidth / 2f;
                 rect.set(bounds.left + half, bounds.top + half,
                         bounds.right - half, bounds.bottom - half);
-                canvas.drawRoundRect(rect, dpToPx(16) - half, dpToPx(16) - half, paint);
+                canvas.drawRoundRect(rect, Math.max(0f, radius - half),
+                        Math.max(0f, radius - half), paint);
             }
 
             @Override public void setAlpha(int alpha) {
@@ -872,105 +931,30 @@ public class ReaderActivity extends AppCompatActivity {
 
 
     private int dialogActionPanelFillColor(int bgColor) {
-        return blendColors(bgColor, readableTextColorForBackground(bgColor),
-                isLightColor(bgColor) ? 0.025f : 0.040f);
+        // Match EPUB/Word/PDF positioned dialogs: the action area is part of the
+        // same rounded card, not a separately tinted bottom zone.
+        return bgColor;
     }
 
     private int dialogActionPanelLineColor(int bgColor) {
-        return blendColors(bgColor, readableTextColorForBackground(bgColor), 0.34f);
+        return strongDialogBorderColor(bgColor);
     }
 
     private Drawable actionPanelBackground(int fillColor, int lineColor) {
-        return new Drawable() {
-            private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-
-            {
-                fillPaint.setColor(fillColor);
-                fillPaint.setStyle(Paint.Style.FILL);
-                linePaint.setColor(lineColor);
-                linePaint.setStyle(Paint.Style.FILL);
-            }
-
-            @Override
-            public void draw(Canvas canvas) {
-                Rect bounds = getBounds();
-
-                // Flat fill + top divider line only.
-                // The dialog's outer rounded panel clips its children to the rounded
-                // outline (clipToOutline = true), so this rectangle naturally takes
-                // on the rounded-bottom shape from the parent's clip with NO second
-                // rounded path drawing on top of it. This removes the AA "chipping"
-                // that appeared where the panel's own curve met the parent's curve.
-                canvas.drawRect(bounds, fillPaint);
-
-                float h = getResources().getDisplayMetrics().density;
-                canvas.drawRect(bounds.left, bounds.top, bounds.right, bounds.top + h, linePaint);
-            }
-
-            @Override public void setAlpha(int alpha) {
-                fillPaint.setAlpha(alpha);
-                linePaint.setAlpha(alpha);
-            }
-
-            @Override public void setColorFilter(ColorFilter colorFilter) {
-                fillPaint.setColorFilter(colorFilter);
-                linePaint.setColorFilter(colorFilter);
-            }
-
-            @Override public int getOpacity() {
-                return PixelFormat.TRANSLUCENT;
-            }
-        };
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(fillColor);
+        drawable.setCornerRadius(0f);
+        return drawable;
     }
 
     private Drawable positionedActionPanelBackground(int fillColor, int lineColor) {
-        return new Drawable() {
-            private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            private final RectF rect = new RectF();
-            private final Path path = new Path();
-
-            {
-                fillPaint.setColor(fillColor);
-                fillPaint.setStyle(Paint.Style.FILL);
-                linePaint.setColor(lineColor);
-                linePaint.setStyle(Paint.Style.FILL);
-            }
-
-            @Override
-            public void draw(Canvas canvas) {
-                Rect bounds = getBounds();
-                rect.set(bounds.left, bounds.top, bounds.right, bounds.bottom);
-
-                float r = dpToPx(16);
-                path.reset();
-                path.addRoundRect(rect, new float[]{
-                        0, 0,   // top-left
-                        0, 0,   // top-right
-                        r, r,   // bottom-right
-                        r, r    // bottom-left
-                }, Path.Direction.CW);
-                canvas.drawPath(path, fillPaint);
-
-                float h = getResources().getDisplayMetrics().density;
-                canvas.drawRect(bounds.left, bounds.top, bounds.right, bounds.top + h, linePaint);
-            }
-
-            @Override public void setAlpha(int alpha) {
-                fillPaint.setAlpha(alpha);
-                linePaint.setAlpha(alpha);
-            }
-
-            @Override public void setColorFilter(ColorFilter colorFilter) {
-                fillPaint.setColorFilter(colorFilter);
-                linePaint.setColorFilter(colorFilter);
-            }
-
-            @Override public int getOpacity() {
-                return PixelFormat.TRANSLUCENT;
-            }
-        };
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(fillColor);
+        // The parent rounded dialog frame clips the lower corners. Keeping this
+        // rectangular removes the visible horizontal separator/strip that TXT
+        // dialogs had but the other document viewers do not.
+        drawable.setCornerRadius(0f);
+        return drawable;
     }
 
 
@@ -991,8 +975,8 @@ public class ReaderActivity extends AppCompatActivity {
         int lineColor = dialogActionPanelLineColor(bgColor);
         int panelFill = dialogActionPanelFillColor(bgColor);
 
-        // Natural fit: no outer rectangle. Use a full-width opaque action area
-        // with only a top divider line, like a clean native dialog separator.
+        // Natural fit: no outer rectangle or horizontal separator. The action
+        // buttons sit on the same card background as the rest of the TXT dialog.
         panel.setBackground(actionPanelBackground(panelFill, lineColor));
         panel.setPadding(dpToPx(12), dpToPx(6), dpToPx(12), dpToPx(6));
         panel.setMinimumHeight(dpToPx(50));
@@ -1028,7 +1012,7 @@ public class ReaderActivity extends AppCompatActivity {
     }
 
     private void styleReaderBorderedDialogWindow(AlertDialog dialog, int bgColor, int fgColor, int subColor) {
-        int borderColor = blendColors(bgColor, fgColor, 0.48f);
+        int borderColor = strongDialogBorderColor(bgColor);
 
         if (dialog.getWindow() != null) {
             applyOuterBorderToDialogPanel(dialog, bgColor, borderColor);
@@ -1592,7 +1576,7 @@ public class ReaderActivity extends AppCompatActivity {
                 dialogActionPanelLineColor(bubbleBg)));
         actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
 
-        TextView closeButton = makeReaderDialogActionText(getString(R.string.close), bubbleFg,
+        TextView closeButton = makeReaderDialogActionText(getString(R.string.go), bubbleFg,
                 Gravity.CENTER_VERTICAL | Gravity.END);
         actionRow.addView(closeButton, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1605,7 +1589,7 @@ public class ReaderActivity extends AppCompatActivity {
                 panel,
                 bubbleBg,
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
-                88,
+                TXT_TOOLBAR_POPUP_Y_DP,
                 0.85f,
                 460,
                 true);
@@ -1694,6 +1678,7 @@ public class ReaderActivity extends AppCompatActivity {
         addMoreActionRow(list, getString(R.string.font), fg, panel, this::showFontDialog, ref);
         addMoreActionRow(list, getString(R.string.increase_font), fg, panel, () -> changeFontSize(2f), ref);
         addMoreActionRow(list, getString(R.string.decrease_font), fg, panel, () -> changeFontSize(-2f), ref);
+        addMoreActionRow(list, getString(R.string.reset_font_size), fg, panel, this::resetFontSize, ref);
         addMoreActionRow(list, getString(R.string.file_info), fg, panel, this::showFileInfoDialog, ref);
 
         outer.addView(scroll, new LinearLayout.LayoutParams(
@@ -1730,7 +1715,7 @@ public class ReaderActivity extends AppCompatActivity {
                 outer,
                 bg,
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
-                88,
+                TXT_TOOLBAR_POPUP_Y_DP,
                 0.85f,
                 460,
                 false);
@@ -2565,15 +2550,16 @@ public class ReaderActivity extends AppCompatActivity {
         box.addView(currentInfo, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
-        TextView hint = new TextView(this);
-        hint.setText(getString(R.string.bookmark_folder_hint));
-        hint.setTextColor(sub);
-        hint.setTextSize(12f);
-        hint.setGravity(Gravity.CENTER);
-        hint.setSingleLine(false);
-        hint.setLineSpacing(0f, 1.08f);
-        hint.setPadding(0, dpToPx(8), 0, dpToPx(6));
-        box.addView(hint, new LinearLayout.LayoutParams(
+        TextView hintButton = new TextView(this);
+        hintButton.setText(getString(R.string.bookmark_hints_show));
+        hintButton.setContentDescription(getString(R.string.bookmark_hints_show));
+        hintButton.setTextColor(sub);
+        hintButton.setTextSize(12f);
+        hintButton.setTypeface(Typeface.DEFAULT_BOLD);
+        hintButton.setGravity(Gravity.CENTER);
+        hintButton.setPadding(0, dpToPx(6), 0, dpToPx(4));
+        hintButton.setOnClickListener(v -> showBookmarkHintsPopup());
+        box.addView(hintButton, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -2595,8 +2581,7 @@ public class ReaderActivity extends AppCompatActivity {
         LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
-        saveLp.setMargins(0, 0, 0, dpToPx(2));
-        box.addView(saveButton, saveLp);
+        saveLp.setMargins(0, dpToPx(8), 0, dpToPx(2));
 
         TextView emptyText = new TextView(this);
         emptyText.setText(getString(R.string.no_bookmarks_hint));
@@ -2627,6 +2612,7 @@ public class ReaderActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dpToPx(430));
         box.addView(rv, bookmarkListLp);
+        box.addView(saveButton, saveLp);
 
         final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
 
@@ -2683,7 +2669,7 @@ public class ReaderActivity extends AppCompatActivity {
         refresh.run();
 
         android.app.Dialog dialog = createPositionedReaderDialog(dialogPanel, bg,
-                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 34, 14, 460, false);
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, TXT_BOOKMARK_POPUP_Y_DP, 14, 460, false);
         dialogRef[0] = dialog;
         closeButton.setOnClickListener(v -> dialog.dismiss());
 
@@ -2763,6 +2749,60 @@ public class ReaderActivity extends AppCompatActivity {
         dialog.show();
     }
 
+
+    private void showBookmarkHintsPopup() {
+        final int bg = readerDialogBgColor();
+        final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+        panel.setPadding(0, 0, 0, 0);
+
+        TextView title = makeReaderDialogTitle(getString(R.string.bookmark_hints_show), bg, fg);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView message = makeReaderDialogLabel(getString(R.string.bookmark_folder_hint), sub, 13f);
+        message.setGravity(Gravity.START);
+        message.setSingleLine(false);
+        message.setLineSpacing(0f, 1.12f);
+        message.setPadding(dpToPx(18), dpToPx(2), dpToPx(18), dpToPx(14));
+        panel.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setBackground(positionedActionPanelBackground(
+                dialogActionPanelFillColor(bg),
+                dialogActionPanelLineColor(bg)));
+        actionRow.setPadding(dpToPx(18), 0, dpToPx(18), 0);
+
+        TextView ok = makeReaderDialogActionText(getString(R.string.ok), fg,
+                Gravity.CENTER_VERTICAL | Gravity.END);
+        actionRow.addView(ok, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT));
+        panel.addView(actionRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(52)));
+
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                panel,
+                bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                TXT_BOOKMARK_HINT_POPUP_Y_DP,
+                0.74f,
+                360,
+                false);
+        ok.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+    }
 
     private void showBookmarkFolderDeleteConfirm(String folderFilePath, String folderName, int bookmarkCount, Runnable afterDelete) {
         final int bg = readerDialogBgColor();
@@ -2965,7 +3005,7 @@ public class ReaderActivity extends AppCompatActivity {
                 panel,
                 bg,
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
-                88,
+                TXT_TOOLBAR_POPUP_Y_DP,
                 0.85f,
                 360,
                 false);
@@ -3027,6 +3067,13 @@ public class ReaderActivity extends AppCompatActivity {
                 themeManager.setActiveTheme(t.getId());
                 applyTheme();
             });
+            if (!t.isBuiltIn()) {
+                row.setOnLongClickListener(v -> {
+                    if (ref[0] != null) ref[0].dismiss();
+                    showReaderCustomThemeActionsDialog(t);
+                    return true;
+                });
+            }
             list.addView(row);
         }
 
@@ -3040,8 +3087,136 @@ public class ReaderActivity extends AppCompatActivity {
                 .create();
         ref[0] = dialog;
 
-        dialog.setOnShowListener(d -> styleReaderDialogWindow(dialog, bg, fg, sub));
+        prepareReaderAlertDialogWindowNoJump(dialog, true);
+        dialog.setOnShowListener(d -> {
+            styleReaderDialogWindow(dialog, bg, fg, sub);
+            prepareReaderAlertDialogWindowNoJump(dialog, false);
+            if (dialog.getWindow() != null) {
+                View decor = dialog.getWindow().getDecorView();
+                decor.post(() -> decor.setAlpha(1f));
+            }
+        });
         dialog.show();
+        prepareReaderAlertDialogWindowNoJump(dialog, false);
+    }
+
+    private void showReaderCustomThemeActionsDialog(@NonNull Theme theme) {
+        final int bg = readerDialogBgColor();
+        final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setBackgroundColor(Color.TRANSPARENT);
+        int pad = dpToPx(14);
+        list.setPadding(pad, dpToPx(8), pad, dpToPx(8));
+
+        TextView message = new TextView(this);
+        message.setText(getString(R.string.custom_theme_options_message));
+        message.setTextColor(sub);
+        message.setTextSize(14f);
+        message.setGravity(Gravity.CENTER);
+        message.setPadding(dpToPx(8), 0, dpToPx(8), dpToPx(12));
+        list.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView edit = makeReaderCenteredActionButton(getString(R.string.edit_theme), fg);
+        TextView delete = makeReaderCenteredActionButton(getString(R.string.delete_theme), fg);
+        TextView cancel = makeReaderCenteredActionButton(getString(R.string.cancel), sub);
+        list.addView(edit);
+        list.addView(delete);
+        list.addView(cancel);
+
+        TextView title = makeReaderDialogTitle(theme.getName(), bg, fg);
+        final AlertDialog[] ref = new AlertDialog[1];
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setCustomTitle(title)
+                .setView(list)
+                .create();
+        ref[0] = dialog;
+
+        edit.setOnClickListener(v -> {
+            if (ref[0] != null) ref[0].dismiss();
+            Intent editIntent = new Intent(this, ThemeEditorActivity.class);
+            editIntent.putExtra(ThemeEditorActivity.EXTRA_THEME_ID, theme.getId());
+            startActivity(editIntent);
+        });
+        delete.setOnClickListener(v -> {
+            if (ref[0] != null) ref[0].dismiss();
+            showReaderDeleteCustomThemeDialog(theme);
+        });
+        cancel.setOnClickListener(v -> {
+            if (ref[0] != null) ref[0].dismiss();
+        });
+
+        prepareReaderCustomThemeDialogWindowNoJump(dialog, true);
+        dialog.setOnShowListener(d -> {
+            styleReaderDialogWindow(dialog, bg, fg, sub);
+            prepareReaderCustomThemeDialogWindowNoJump(dialog, false);
+            if (dialog.getWindow() != null) {
+                View decor = dialog.getWindow().getDecorView();
+                decor.post(() -> decor.setAlpha(1f));
+            }
+        });
+        dialog.show();
+        prepareReaderCustomThemeDialogWindowNoJump(dialog, false);
+    }
+
+    private void showReaderDeleteCustomThemeDialog(@NonNull Theme theme) {
+        final int bg = readerDialogBgColor();
+        final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setBackgroundColor(Color.TRANSPARENT);
+        int pad = dpToPx(14);
+        list.setPadding(pad, dpToPx(8), pad, dpToPx(8));
+
+        TextView message = new TextView(this);
+        message.setText(getString(R.string.delete_theme_confirm, theme.getName()));
+        message.setTextColor(sub);
+        message.setTextSize(14f);
+        message.setGravity(Gravity.CENTER);
+        message.setPadding(dpToPx(8), 0, dpToPx(8), dpToPx(12));
+        list.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView delete = makeReaderCenteredActionButton(getString(R.string.delete), fg);
+        TextView cancel = makeReaderCenteredActionButton(getString(R.string.cancel), sub);
+        list.addView(delete);
+        list.addView(cancel);
+
+        TextView title = makeReaderDialogTitle(getString(R.string.delete_theme), bg, fg);
+        final AlertDialog[] ref = new AlertDialog[1];
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setCustomTitle(title)
+                .setView(list)
+                .create();
+        ref[0] = dialog;
+
+        delete.setOnClickListener(v -> {
+            if (ref[0] != null) ref[0].dismiss();
+            themeManager.deleteCustomTheme(theme.getId());
+            themeManager.reloadFromStorage();
+            applyTheme();
+            Toast.makeText(this, getString(R.string.theme_deleted), Toast.LENGTH_SHORT).show();
+        });
+        cancel.setOnClickListener(v -> {
+            if (ref[0] != null) ref[0].dismiss();
+        });
+
+        prepareReaderCustomThemeDialogWindowNoJump(dialog, true);
+        dialog.setOnShowListener(d -> {
+            styleReaderDialogWindow(dialog, bg, fg, sub);
+            prepareReaderCustomThemeDialogWindowNoJump(dialog, false);
+            if (dialog.getWindow() != null) {
+                View decor = dialog.getWindow().getDecorView();
+                decor.post(() -> decor.setAlpha(1f));
+            }
+        });
+        dialog.show();
+        prepareReaderCustomThemeDialogWindowNoJump(dialog, false);
     }
 
     // --- Font selection ---
@@ -3324,10 +3499,8 @@ public class ReaderActivity extends AppCompatActivity {
 
     private Drawable fontDialogFrameBorderOverlay(int bgColor) {
         final int borderColor = strongDialogBorderColor(bgColor);
-        // Match the 2dp outer boundary used by the other stable reader dialogs.
-        // The font picker and full-system-font dialog share this frame, so this
-        // keeps both windows from looking thinner than More/Page/Bookmark.
-        final float strokeWidth = Math.max(1f, dpToPx(2));
+        // Match the thin outer boundary used by PDF/EPUB/Word dialog frames.
+        final float strokeWidth = 1f;
         final float radius = dpToPx(16);
         return new Drawable() {
             private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -3400,7 +3573,7 @@ public class ReaderActivity extends AppCompatActivity {
             int cappedWidth = Math.min(Math.round(screenWidth * 0.85f), dpToPx(maxWidthDp));
             lp.width = Math.max(dpToPx(220), cappedWidth);
             lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-            lp.y = dpToPx(88);
+            lp.y = dpToPx(TXT_TOOLBAR_POPUP_Y_DP);
             lp.dimAmount = 0.16f;
             window.setAttributes(lp);
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
@@ -3795,8 +3968,17 @@ public class ReaderActivity extends AppCompatActivity {
                 .setNegativeButton(getString(R.string.cancel), null)
                 .create();
 
-        dialog.setOnShowListener(d -> styleReaderDialogWindow(dialog, bg, fg, sub));
+        prepareReaderAlertDialogWindowNoJump(dialog, true);
+        dialog.setOnShowListener(d -> {
+            styleReaderDialogWindow(dialog, bg, fg, sub);
+            prepareReaderAlertDialogWindowNoJump(dialog, false);
+            if (dialog.getWindow() != null) {
+                View decor = dialog.getWindow().getDecorView();
+                decor.post(() -> decor.setAlpha(1f));
+            }
+        });
         dialog.show();
+        prepareReaderAlertDialogWindowNoJump(dialog, false);
     }
 
     private void showTextSearch() {
@@ -3887,14 +4069,14 @@ public class ReaderActivity extends AppCompatActivity {
                 panel,
                 bg,
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
-                88,
+                TXT_TOOLBAR_POPUP_Y_DP,
                 0.85f,
                 460,
                 true);
 
-        // Keep the find dialog at one stable position. Do not move it in response
+        // Keep the find dialog at one stable lower position. Do not move it in response
         // to keyboard visibility; the previous delayed restore caused bounce.
-        updatePositionedReaderDialogYOffset(dialog, 88);
+        updatePositionedReaderDialogYOffset(dialog, TXT_TOOLBAR_POPUP_Y_DP);
 
         prevButton.setOnClickListener(v -> performTextSearchMove(
                 input.getText().toString(), false, matchStatus));
@@ -4071,7 +4253,7 @@ public class ReaderActivity extends AppCompatActivity {
                 panel,
                 bg,
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
-                88,
+                TXT_TOOLBAR_POPUP_Y_DP,
                 0.85f,
                 360,
                 false);
@@ -4185,6 +4367,7 @@ public class ReaderActivity extends AppCompatActivity {
         else if (id == R.id.action_font) { showFontDialog(); return true; }
         else if (id == R.id.action_font_increase) { changeFontSize(2f); return true; }
         else if (id == R.id.action_font_decrease) { changeFontSize(-2f); return true; }
+        else if (id == R.id.action_font_reset) { resetFontSize(); return true; }
         else if (id == R.id.action_file_info) { showFileInfoDialog(); return true; }
         return super.onOptionsItemSelected(item);
     }
@@ -4192,6 +4375,12 @@ public class ReaderActivity extends AppCompatActivity {
     private void changeFontSize(float delta) {
         float newSize = Math.max(8f, Math.min(48f, prefs.getFontSize() + delta));
         prefs.setFontSize(newSize);
+        applyPreferences();
+        updatePositionLabel();
+    }
+
+    private void resetFontSize() {
+        prefs.setFontSize(PrefsManager.DEFAULT_FONT_SIZE);
         applyPreferences();
         updatePositionLabel();
     }

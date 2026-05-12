@@ -35,6 +35,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
+import android.widget.Space;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -108,6 +109,8 @@ public class DocumentPageActivity extends AppCompatActivity {
     private static final String DOCUMENT_FONT_DEFAULT = "document_default";
     private static final String FONT_OPTION_SYSTEM_CURRENT = "system_current";
     private static final int WORD_PARAGRAPHS_PER_PAGE = 28;
+    // Match toolbar-triggered document popups to the Go to Page bottom offset.
+    private static final int DOCUMENT_TOOLBAR_POPUP_Y_DP = 74;
 
     private Toolbar toolbar;
     private View documentAppBar;
@@ -127,6 +130,10 @@ public class DocumentPageActivity extends AppCompatActivity {
     private int readerSub = Color.rgb(176, 176, 176);
     private int readerPanel = Color.rgb(32, 33, 36);
     private int readerLine = Color.rgb(84, 86, 90);
+    private String lastAppliedDocumentThemeSignature = null;
+    private boolean restoreDocumentScrollAfterThemeRefresh = false;
+    private int pendingThemeRefreshScrollX = 0;
+    private int pendingThemeRefreshScrollY = 0;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final List<Page> pages = new ArrayList<>();
@@ -137,6 +144,12 @@ public class DocumentPageActivity extends AppCompatActivity {
     private String filePath;
     private String fileName;
     private String docType = "Document";
+    private int lastAppliedEpubLeftPaddingDp = Integer.MIN_VALUE;
+    private int lastAppliedEpubRightPaddingDp = Integer.MIN_VALUE;
+    private int lastAppliedEpubTopPaddingDp = Integer.MIN_VALUE;
+    private int lastAppliedEpubBottomPaddingDp = Integer.MIN_VALUE;
+    private int lastAppliedEpubBottomToolbarHeightPx = Integer.MIN_VALUE;
+    private int lastAppliedEpubEffectiveBottomMarginPx = Integer.MIN_VALUE;
     private int currentPage = 0;
     private int pendingSlideDirection = 0;
     private int wordSwipeTouchSlop = 0;
@@ -216,6 +229,14 @@ public class DocumentPageActivity extends AppCompatActivity {
 
         documentAppBar = findViewById(R.id.document_appbar);
         documentBottomChrome = findViewById(R.id.document_bottom_scroller);
+        if (documentBottomChrome != null) {
+            documentBottomChrome.addOnLayoutChangeListener((v, left, top, right, bottom,
+                    oldLeft, oldTop, oldRight, oldBottom) -> {
+                if ("EPUB".equals(docType) && (bottom - top) != (oldBottom - oldTop)) {
+                    applyEpubBoundaryMarginsIfNeeded();
+                }
+            });
+        }
         toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) getSupportActionBar().setDisplayHomeAsUpEnabled(true);
@@ -259,12 +280,17 @@ public class DocumentPageActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         ThemeManager.getInstance(this).reloadFromStorage();
+        String currentThemeSignature = documentThemeSignature();
+        boolean pageThemeChanged = lastAppliedDocumentThemeSignature != null
+                && !lastAppliedDocumentThemeSignature.equals(currentThemeSignature);
         if (webView != null) {
             webView.onResume();
             webView.resumeTimers();
         }
         applyDocumentSystemBarColors();
         applyDocumentThemeToViews();
+        refreshEpubSpacingIfNeeded();
+        refreshDocumentPageThemeIfNeeded(currentThemeSignature, pageThemeChanged);
     }
 
     @Override
@@ -288,6 +314,50 @@ public class DocumentPageActivity extends AppCompatActivity {
         readerSub = blendColors(readerBg, readerFg, isDarkColor(readerBg) ? 0.72f : 0.64f);
         readerPanel = blendColors(readerBg, readerFg, isDarkColor(readerBg) ? 0.10f : 0.08f);
         readerLine = blendColors(readerBg, readerFg, isDarkColor(readerBg) ? 0.28f : 0.20f);
+    }
+
+    private String documentThemeSignature() {
+        Theme theme = ThemeManager.getInstance(this).getActiveTheme();
+        if (theme == null) {
+            return "theme:null:" + readerBg + ":" + readerFg + ":" + readerLine
+                    + "|epubFontSize=" + (("EPUB".equals(docType) && prefs != null)
+                    ? prefs.getFontSize() : PrefsManager.DEFAULT_FONT_SIZE);
+        }
+        String backgroundImagePath = theme.getBackgroundImagePath();
+        return theme.getId()
+                + "|fg=" + theme.getTextColor()
+                + "|bg=" + theme.getBackgroundColor()
+                + "|link=" + theme.getLinkColor()
+                + "|img=" + (backgroundImagePath != null ? backgroundImagePath : "")
+                + "|alpha=" + theme.getBackgroundImageAlpha()
+                + "|epubFontSize=" + (("EPUB".equals(docType) && prefs != null)
+                ? prefs.getFontSize() : PrefsManager.DEFAULT_FONT_SIZE);
+    }
+
+    private void refreshDocumentPageThemeIfNeeded(String currentThemeSignature, boolean pageThemeChanged) {
+        if (!pageThemeChanged) {
+            lastAppliedDocumentThemeSignature = currentThemeSignature;
+            return;
+        }
+        lastAppliedDocumentThemeSignature = currentThemeSignature;
+        if (webView == null || pages.isEmpty() || currentPage < 0 || currentPage >= pages.size()) return;
+        pendingThemeRefreshScrollX = webView.getScrollX();
+        pendingThemeRefreshScrollY = webView.getScrollY();
+        restoreDocumentScrollAfterThemeRefresh = true;
+        clearDocumentEdgeArm();
+        showPage(currentPage, 0);
+    }
+
+    private void restoreDocumentScrollAfterThemeRefreshIfNeeded(@NonNull WebView view) {
+        if (!restoreDocumentScrollAfterThemeRefresh) return;
+        final int restoreX = pendingThemeRefreshScrollX;
+        final int restoreY = pendingThemeRefreshScrollY;
+        restoreDocumentScrollAfterThemeRefresh = false;
+        view.postDelayed(() -> {
+            if (!activityDestroyed && webView != null) {
+                webView.scrollTo(restoreX, restoreY);
+            }
+        }, 60);
     }
 
     private void applyDocumentSystemBarColors() {
@@ -402,6 +472,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         View viewport = findViewById(R.id.document_viewport);
         androidx.core.view.ViewCompat.requestApplyInsets(findViewById(R.id.document_root));
         if (viewport != null) viewport.requestLayout();
+        applyEpubBoundaryMarginsIfNeeded();
     }
 
     private void destroyDocumentWebView() {
@@ -500,6 +571,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                 installWordSelectionCleanupScript();
                 applyDocumentSearchHighlightAfterPageLoad();
                 runDocumentSlideInAnimation();
+                restoreDocumentScrollAfterThemeRefreshIfNeeded(view);
             }
         });
     }
@@ -750,6 +822,20 @@ public class DocumentPageActivity extends AppCompatActivity {
             if (dialogRef[0] != null) dialogRef[0].dismiss();
             showDocumentFontDialog();
         }));
+        if ("EPUB".equals(docType)) {
+            box.addView(makeDialogActionRow(getString(R.string.increase_font), () -> {
+                if (dialogRef[0] != null) dialogRef[0].dismiss();
+                changeEpubFontSize(2f);
+            }));
+            box.addView(makeDialogActionRow(getString(R.string.decrease_font), () -> {
+                if (dialogRef[0] != null) dialogRef[0].dismiss();
+                changeEpubFontSize(-2f);
+            }));
+            box.addView(makeDialogActionRow(getString(R.string.reset_font_size), () -> {
+                if (dialogRef[0] != null) dialogRef[0].dismiss();
+                resetEpubFontSize();
+            }));
+        }
         box.addView(makeDialogActionRow(getString(R.string.settings), () -> {
             if (dialogRef[0] != null) dialogRef[0].dismiss();
             startActivity(new Intent(this, SettingsActivity.class));
@@ -758,21 +844,156 @@ public class DocumentPageActivity extends AppCompatActivity {
             if (dialogRef[0] != null) dialogRef[0].dismiss();
             showFileInfoDialog();
         }));
-        addDialogBottomActions(box, getString(R.string.close), () -> {
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        dialogRef[0] = createStablePositionedDialog(box, 34, false, false);
+        addDialogBottomActions(box,
+                getString(R.string.action_open_file), () -> {
+                    if (dialogRef[0] != null) dialogRef[0].dismiss();
+                    openFileBrowserFromViewer();
+                },
+                getString(R.string.close), () -> {
+                    if (dialogRef[0] != null) dialogRef[0].dismiss();
+                });
+        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, false, false);
         dialogRef[0].show();
+    }
+
+    private void openFileBrowserFromViewer() {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.putExtra(MainActivity.EXTRA_RETURN_TO_VIEWER, true);
+        File current = filePath != null ? new File(filePath) : null;
+        File parent = current != null ? current.getParentFile() : null;
+        if (parent != null && parent.exists() && parent.isDirectory()) {
+            intent.putExtra(MainActivity.EXTRA_START_DIRECTORY, parent.getAbsolutePath());
+        }
+        startActivity(intent);
+    }
+
+    private int getEpubLeftPaddingDp() {
+        return prefs != null ? prefs.getEpubLeftPaddingDp() : 30;
+    }
+
+    private int getEpubRightPaddingDp() {
+        return prefs != null ? prefs.getEpubRightPaddingDp() : 30;
+    }
+
+    private int getEpubTopPaddingDp() {
+        return prefs != null ? prefs.getEpubTopPaddingDp() : 0;
+    }
+
+    private int getEpubBottomPaddingDp() {
+        return prefs != null ? prefs.getEpubBottomPaddingDp() : 0;
+    }
+
+    private void refreshEpubSpacingIfNeeded() {
+        applyEpubBoundaryMarginsIfNeeded();
+    }
+
+    private int clampEpubBoundaryPx(int px) {
+        int clamped = Math.max(0, Math.min(240, px));
+        return Math.round(clamped / 5f) * 5;
+    }
+
+    private int getVisibleDocumentBottomToolbarHeightPx() {
+        if (documentBottomChrome == null || documentBottomChrome.getVisibility() != View.VISIBLE) {
+            return 0;
+        }
+        int height = documentBottomChrome.getHeight();
+        if (height <= 0) height = documentBottomChrome.getMeasuredHeight();
+        return Math.max(0, height);
+    }
+
+    private boolean isDocumentBottomToolbarHeightPending() {
+        return documentBottomChrome != null
+                && documentBottomChrome.getVisibility() == View.VISIBLE
+                && documentBottomChrome.getHeight() <= 0
+                && documentBottomChrome.getMeasuredHeight() <= 0;
+    }
+
+    private int getEffectiveEpubBottomMarginPx(int requestedBottomBoundaryPx, int bottomToolbarHeightPx) {
+        if (!"EPUB".equals(docType) || requestedBottomBoundaryPx <= 0) return 0;
+        if (isDocumentBottomToolbarHeightPending()) {
+            return 0;
+        }
+        return Math.max(0, requestedBottomBoundaryPx - Math.max(0, bottomToolbarHeightPx));
+    }
+
+    private void applyEpubBoundaryMarginsIfNeeded() {
+        if (webView == null) return;
+        int left = "EPUB".equals(docType) ? clampEpubBoundaryPx(getEpubLeftPaddingDp()) : 0;
+        int right = "EPUB".equals(docType) ? clampEpubBoundaryPx(getEpubRightPaddingDp()) : 0;
+        int top = "EPUB".equals(docType) ? clampEpubBoundaryPx(getEpubTopPaddingDp()) : 0;
+        int bottom = "EPUB".equals(docType) ? clampEpubBoundaryPx(getEpubBottomPaddingDp()) : 0;
+        int bottomToolbarHeightPx = "EPUB".equals(docType) ? getVisibleDocumentBottomToolbarHeightPx() : 0;
+        int effectiveBottomMarginPx = getEffectiveEpubBottomMarginPx(bottom, bottomToolbarHeightPx);
+        if (left == lastAppliedEpubLeftPaddingDp
+                && right == lastAppliedEpubRightPaddingDp
+                && top == lastAppliedEpubTopPaddingDp
+                && bottom == lastAppliedEpubBottomPaddingDp
+                && bottomToolbarHeightPx == lastAppliedEpubBottomToolbarHeightPx
+                && effectiveBottomMarginPx == lastAppliedEpubEffectiveBottomMarginPx) {
+            return;
+        }
+        lastAppliedEpubLeftPaddingDp = left;
+        lastAppliedEpubRightPaddingDp = right;
+        lastAppliedEpubTopPaddingDp = top;
+        lastAppliedEpubBottomPaddingDp = bottom;
+        lastAppliedEpubBottomToolbarHeightPx = bottomToolbarHeightPx;
+        lastAppliedEpubEffectiveBottomMarginPx = effectiveBottomMarginPx;
+
+        ViewGroup.LayoutParams rawLp = webView.getLayoutParams();
+        if (rawLp instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) rawLp;
+            int leftPx = left;
+            int rightPx = right;
+            int topPx = top;
+            int bottomPx = effectiveBottomMarginPx;
+            if (lp.leftMargin != leftPx || lp.rightMargin != rightPx
+                    || lp.topMargin != topPx || lp.bottomMargin != bottomPx) {
+                lp.setMargins(leftPx, topPx, rightPx, bottomPx);
+                webView.setLayoutParams(lp);
+            }
+        }
     }
 
     private void resetDocumentZoom() {
         if (webView == null) return;
         WebSettings settings = webView.getSettings();
-        settings.setTextZoom(100);
+        settings.setTextZoom(documentTextZoomPercent());
         while (webView.canZoomOut()) {
             webView.zoomOut();
         }
         clearDocumentEdgeArm();
+    }
+
+    private int documentTextZoomPercent() {
+        if (!"EPUB".equals(docType) || prefs == null) return 100;
+        float size = Math.max(8f, Math.min(48f, prefs.getFontSize()));
+        return Math.max(50, Math.min(267, Math.round(size / PrefsManager.DEFAULT_FONT_SIZE * 100f)));
+    }
+
+    private void applyDocumentTextZoom() {
+        if (webView == null) return;
+        webView.getSettings().setTextZoom(documentTextZoomPercent());
+    }
+
+    private void changeEpubFontSize(float delta) {
+        if (prefs == null) return;
+        float newSize = Math.max(8f, Math.min(48f, prefs.getFontSize() + delta));
+        prefs.setFontSize(newSize);
+        refreshCurrentEpubTextSize();
+    }
+
+    private void resetEpubFontSize() {
+        if (prefs == null) return;
+        prefs.setFontSize(PrefsManager.DEFAULT_FONT_SIZE);
+        refreshCurrentEpubTextSize();
+    }
+
+    private void refreshCurrentEpubTextSize() {
+        applyDocumentTextZoom();
+        clearDocumentEdgeArm();
+        if (!pages.isEmpty() && currentPage >= 0 && currentPage < pages.size()) {
+            showPage(currentPage, 0);
+        }
     }
 
     private void showDocumentFontDialog() {
@@ -1099,7 +1320,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             }
         });
 
-        dialogRef[0] = createStablePositionedDialog(box, 74, false, false);
+        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, false, false);
         dialogRef[0].show();
     }
 
@@ -1265,7 +1486,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         // stronger text weight and outline; no radio/circle icon is used.
         bg.setColor(selected ? selectedFill : normalFill);
         bg.setCornerRadius(dpToPx(10));
-        bg.setStroke(Math.max(1, dpToPx(1)), selected ? selectedStroke : normalStroke);
+        bg.setStroke(1, selected ? selectedStroke : normalStroke);
         row.setBackground(bg);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1311,7 +1532,7 @@ public class DocumentPageActivity extends AppCompatActivity {
 
     private Drawable fontDialogOuterBorderOverlay(int bgColor) {
         final int borderColor = dialogActionPanelLineColor(bgColor);
-        final float strokeWidth = Math.max(1f, dpToPx(1));
+        final float strokeWidth = 1f;
         final float radius = dpToPx(16);
         return new Drawable() {
             private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -1377,7 +1598,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             int cappedWidth = Math.min(Math.round(screenWidth * 0.85f), dpToPx(maxWidthDp));
             lp.width = Math.max(dpToPx(220), cappedWidth);
             lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
-            lp.y = dpToPx(88);
+            lp.y = dpToPx(DOCUMENT_TOOLBAR_POPUP_Y_DP);
             lp.dimAmount = 0.16f;
             window.setAttributes(lp);
             window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
@@ -1393,7 +1614,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         lp.copyFrom(window.getAttributes());
         lp.width = txtReaderDialogWidthPx();
         lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dpToPx(88);
+        lp.y = dpToPx(DOCUMENT_TOOLBAR_POPUP_Y_DP);
         window.setAttributes(lp);
     }
 
@@ -1736,7 +1957,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        android.app.Dialog dialog = createStablePositionedDialog(panel, 88, true, false);
+        android.app.Dialog dialog = createStablePositionedDialog(panel, DOCUMENT_TOOLBAR_POPUP_Y_DP, true, false);
 
         prevButton.setOnClickListener(v -> performDocumentSearchMove(
                 input.getText() != null ? input.getText().toString() : "", false, matchStatus));
@@ -1941,7 +2162,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             addInfoRow(box, getString(R.string.file_info_modified), DateFormat.getDateTimeInstance().format(new Date(localFile.lastModified())));
         }
         addInfoRow(box, getString(R.string.bottom_page), String.format(Locale.getDefault(), "%d / %d", currentPage + 1, pages.size()));
-        showCustomDialog(box, getString(R.string.close), true);
+        showCustomDialog(box, getString(R.string.close), false);
     }
 
     private void showGoToPageDialog() {
@@ -2011,7 +2232,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                 Toast.makeText(this, getString(R.string.invalid_page_number), Toast.LENGTH_SHORT).show();
             }
         });
-        dialogRef[0] = createStablePositionedDialog(box, 74, true, false);
+        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, true, false);
         dialogRef[0].show();
     }
 
@@ -2033,7 +2254,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         lp.copyFrom(window.getAttributes());
         lp.width = txtReaderDialogWidthPx();
         lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dpToPx(74);
+        lp.y = dpToPx(DOCUMENT_TOOLBAR_POPUP_Y_DP);
         window.setAttributes(lp);
         window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
@@ -2147,7 +2368,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         addDialogBottomActions(box, closeText, () -> {
             if (dialogRef[0] != null) dialogRef[0].dismiss();
         });
-        dialogRef[0] = createStablePositionedDialog(box, oneHandLower ? 34 : 74, false, false);
+        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, false, false);
         dialogRef[0].show();
     }
 
@@ -2209,19 +2430,43 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
     private void addDialogBottomActions(LinearLayout box, String primaryText, Runnable primaryAction) {
+        addDialogBottomActions(box, null, null, primaryText, primaryAction);
+    }
+
+    private void addDialogBottomActions(LinearLayout box,
+                                        String secondaryText,
+                                        Runnable secondaryAction,
+                                        String primaryText,
+                                        Runnable primaryAction) {
         if (box.findViewWithTag("dialog_actions") != null) return;
         LinearLayout actions = new LinearLayout(this);
         actions.setTag("dialog_actions");
-        actions.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.END);
+        actions.setGravity(android.view.Gravity.CENTER_VERTICAL);
         actions.setPadding(0, dpToPx(8), 0, 0);
+
+        if (secondaryText != null && secondaryAction != null) {
+            TextView secondary = new TextView(this);
+            secondary.setText(secondaryText);
+            secondary.setTextColor(dialogFg());
+            secondary.setTextSize(16f);
+            secondary.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.START);
+            secondary.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            secondary.setPadding(dpToPx(18), 0, dpToPx(18), 0);
+            actions.addView(secondary, new LinearLayout.LayoutParams(0, dpToPx(46), 1f));
+            secondary.setOnClickListener(v -> secondaryAction.run());
+        } else {
+            Space spacer = new Space(this);
+            actions.addView(spacer, new LinearLayout.LayoutParams(0, dpToPx(46), 1f));
+        }
+
         TextView primary = new TextView(this);
         primary.setText(primaryText);
         primary.setTextColor(dialogFg());
         primary.setTextSize(16f);
-        primary.setGravity(android.view.Gravity.CENTER);
+        primary.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.END);
         primary.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         primary.setPadding(dpToPx(18), 0, dpToPx(18), 0);
-        actions.addView(primary, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        actions.addView(primary, new LinearLayout.LayoutParams(0, dpToPx(46), 1f));
         box.addView(actions, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         primary.setOnClickListener(v -> primaryAction.run());
     }
@@ -2338,6 +2583,13 @@ public class DocumentPageActivity extends AppCompatActivity {
         return css + html;
     }
 
+
+    private String documentSideSpacingCss() {
+        // EPUB boundaries are applied as WebView margins, not HTML padding.
+        // Keeping this no-op method avoids reintroducing Word/DOCX page padding.
+        return "";
+    }
+
     private String cssColor(int color) {
         return String.format(Locale.US, "#%06X", 0xFFFFFF & color);
     }
@@ -2363,6 +2615,9 @@ public class DocumentPageActivity extends AppCompatActivity {
         wordSelectionActive = false;
         webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
         webView.getSettings().setJavaScriptEnabled("Word".equals(docType));
+        applyDocumentTextZoom();
+        applyEpubBoundaryMarginsIfNeeded();
+        lastAppliedDocumentThemeSignature = documentThemeSignature();
         webView.loadDataWithBaseURL(baseUrl, applyReaderThemeCss(p.html), "text/html", "UTF-8", null);
         updateStatus();
         saveReadingState();
@@ -2461,15 +2716,16 @@ public class DocumentPageActivity extends AppCompatActivity {
         box.addView(currentInfo, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
-        TextView hint = new TextView(this);
-        hint.setText(getString(R.string.bookmark_folder_hint));
-        hint.setTextColor(blendColors(bg, fg, 0.76f));
-        hint.setTextSize(12f);
-        hint.setGravity(android.view.Gravity.CENTER);
-        hint.setSingleLine(false);
-        hint.setLineSpacing(0f, 1.08f);
-        hint.setPadding(0, dpToPx(8), 0, dpToPx(6));
-        box.addView(hint, new LinearLayout.LayoutParams(
+        TextView hintButton = new TextView(this);
+        hintButton.setText(getString(R.string.bookmark_hints_show));
+        hintButton.setContentDescription(getString(R.string.bookmark_hints_show));
+        hintButton.setTextColor(blendColors(bg, fg, 0.76f));
+        hintButton.setTextSize(12f);
+        hintButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        hintButton.setGravity(android.view.Gravity.CENTER);
+        hintButton.setPadding(0, dpToPx(6), 0, dpToPx(4));
+        hintButton.setOnClickListener(v -> showBookmarkHintsPopup());
+        box.addView(hintButton, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -2488,9 +2744,10 @@ public class DocumentPageActivity extends AppCompatActivity {
         saveBg.setCornerRadius(dpToPx(14));
         saveBg.setStroke(Math.max(1, dpToPx(1)), saveStroke);
         saveButton.setBackground(saveBg);
-        box.addView(saveButton, new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        saveLp.setMargins(0, dpToPx(8), 0, 0);
 
         RecyclerView rv = new RecyclerView(this);
         rv.setLayoutManager(new LinearLayoutManager(this));
@@ -2517,6 +2774,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dpToPx(430));
         box.addView(rv, bookmarkListLp);
+        box.addView(saveButton, saveLp);
 
         TextView closeButton = new TextView(this);
         closeButton.setText(getString(R.string.close));
@@ -2587,6 +2845,64 @@ public class DocumentPageActivity extends AppCompatActivity {
         dialog.show();
     }
 
+    private void showBookmarkHintsPopup() {
+        LinearLayout box = makeDialogBox();
+        box.addView(makeDialogTitle(getString(R.string.bookmark_hints_show)));
+
+        TextView message = new TextView(this);
+        message.setText(getString(R.string.bookmark_folder_hint));
+        message.setTextColor(dialogSub());
+        message.setTextSize(13f);
+        message.setLineSpacing(0f, 1.12f);
+        message.setPadding(0, 0, 0, dpToPx(12));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
+        addDialogBottomActions(box, getString(R.string.ok), () -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+        });
+        dialogRef[0] = createSmallBookmarkHintDialog(box);
+        dialogRef[0].show();
+    }
+
+    private android.app.Dialog createSmallBookmarkHintDialog(@NonNull View content) {
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        dialog.setCanceledOnTouchOutside(true);
+
+        FrameLayout outerFrame = new FrameLayout(this);
+        outerFrame.setBackgroundColor(Color.TRANSPARENT);
+        outerFrame.setClipChildren(true);
+        outerFrame.setClipToPadding(true);
+        if (content instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) content;
+            group.setClipChildren(true);
+            group.setClipToPadding(true);
+        }
+        outerFrame.addView(content, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT));
+        dialog.setContentView(outerFrame);
+
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
+            android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
+            lp.copyFrom(window.getAttributes());
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            lp.width = Math.max(dpToPx(240), Math.min(Math.round(screenWidth * 0.74f), dpToPx(360)));
+            lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
+            lp.y = dpToPx(112);
+            lp.dimAmount = 0.16f;
+            window.setAttributes(lp);
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+        return dialog;
+    }
+
     private void navigateToBookmark(@NonNull Bookmark b) {
         String path = b.getFilePath();
         if (path == null || path.trim().isEmpty()) {
@@ -2644,7 +2960,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             afterDelete.run();
             if (dialogRef[0] != null) dialogRef[0].dismiss();
         });
-        dialogRef[0] = createStablePositionedDialog(box, 74, false, false);
+        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, false, false);
         dialogRef[0].show();
     }
 
@@ -2671,7 +2987,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             afterDelete.run();
             if (dialogRef[0] != null) dialogRef[0].dismiss();
         });
-        dialogRef[0] = createStablePositionedDialog(box, 74, false, false);
+        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, false, false);
         dialogRef[0].show();
     }
 
@@ -2736,7 +3052,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             if (dialogRef[0] != null) dialogRef[0].dismiss();
         });
 
-        dialogRef[0] = createStablePositionedDialog(box, 74, true, false);
+        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, true, false);
         dialogRef[0].show();
     }
 

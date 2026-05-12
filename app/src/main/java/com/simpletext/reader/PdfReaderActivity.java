@@ -29,6 +29,7 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
+import android.widget.Space;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -73,6 +74,9 @@ public class PdfReaderActivity extends AppCompatActivity {
     public static final String EXTRA_FILE_PATH = ReaderActivity.EXTRA_FILE_PATH;
     public static final String EXTRA_FILE_URI = ReaderActivity.EXTRA_FILE_URI;
     public static final String EXTRA_JUMP_TO_PAGE = ReaderActivity.EXTRA_JUMP_TO_POSITION;
+
+    // Match toolbar-triggered PDF popups to the Go to Page bottom offset.
+    private static final int PDF_TOOLBAR_POPUP_Y_DP = 74;
 
     private View root;
     private View pdfAppBar;
@@ -996,7 +1000,27 @@ public class PdfReaderActivity extends AppCompatActivity {
             if (dialogRef[0] != null) dialogRef[0].dismiss();
             showFileInfoDialog();
         });
-        dialogRef[0] = showCustomDialog(box, getString(R.string.close), true);
+        addDialogBottomActions(box,
+                getString(R.string.action_open_file), () -> {
+                    if (dialogRef[0] != null) dialogRef[0].dismiss();
+                    openFileBrowserFromViewer();
+                },
+                getString(R.string.close), () -> {
+                    if (dialogRef[0] != null) dialogRef[0].dismiss();
+                });
+        dialogRef[0] = createStablePositionedDialog(box, PDF_TOOLBAR_POPUP_Y_DP, false, false);
+        dialogRef[0].show();
+    }
+
+    private void openFileBrowserFromViewer() {
+        android.content.Intent intent = new android.content.Intent(this, MainActivity.class);
+        intent.putExtra(MainActivity.EXTRA_RETURN_TO_VIEWER, true);
+        File current = filePath != null ? new File(filePath) : null;
+        File parent = current != null ? current.getParentFile() : null;
+        if (parent != null && parent.exists() && parent.isDirectory()) {
+            intent.putExtra(MainActivity.EXTRA_START_DIRECTORY, parent.getAbsolutePath());
+        }
+        startActivity(intent);
     }
 
     private void refreshPdfSlideModeDialogRow(TextView slideModeRow) {
@@ -1084,7 +1108,7 @@ public class PdfReaderActivity extends AppCompatActivity {
             addInfoRow(box, getString(R.string.file_info_modified), DateFormat.getDateTimeInstance().format(new Date(localFile.lastModified())));
         }
         addInfoRow(box, getString(R.string.bottom_page), String.format(Locale.getDefault(), "%d / %d", currentPage + 1, pageCount));
-        showCustomDialog(box, getString(R.string.close), true);
+        showCustomDialog(box, getString(R.string.close), false);
     }
 
     private void showGoToPageDialog() {
@@ -1154,7 +1178,7 @@ public class PdfReaderActivity extends AppCompatActivity {
                 Toast.makeText(this, getString(R.string.invalid_page_number), Toast.LENGTH_SHORT).show();
             }
         });
-        dialogRef[0] = createStablePositionedDialog(box, 74, true, false);
+        dialogRef[0] = createStablePositionedDialog(box, PDF_TOOLBAR_POPUP_Y_DP, true, false);
         dialogRef[0].show();
     }
 
@@ -1176,7 +1200,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         lp.copyFrom(window.getAttributes());
         lp.width = txtReaderDialogWidthPx();
         lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dpToPx(74);
+        lp.y = dpToPx(PDF_TOOLBAR_POPUP_Y_DP);
         window.setAttributes(lp);
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     }
@@ -1317,7 +1341,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         addDialogBottomActions(box, null, closeText, () -> {
             if (dialogRef[0] != null) dialogRef[0].dismiss();
         });
-        dialogRef[0] = createStablePositionedDialog(box, oneHandLower ? 34 : 74, false, false);
+        dialogRef[0] = createStablePositionedDialog(box, PDF_TOOLBAR_POPUP_Y_DP, false, false);
         dialogRef[0].show();
         return dialogRef[0];
     }
@@ -1380,19 +1404,43 @@ public class PdfReaderActivity extends AppCompatActivity {
     }
 
     private void addDialogBottomActions(LinearLayout box, android.app.Dialog dialog, String primaryText, Runnable primaryAction) {
+        addDialogBottomActions(box, null, null, primaryText, primaryAction);
+    }
+
+    private void addDialogBottomActions(LinearLayout box,
+                                        String secondaryText,
+                                        Runnable secondaryAction,
+                                        String primaryText,
+                                        Runnable primaryAction) {
         if (box.findViewWithTag("dialog_actions") != null) return;
         LinearLayout actions = new LinearLayout(this);
         actions.setTag("dialog_actions");
-        actions.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.RIGHT);
+        actions.setGravity(android.view.Gravity.CENTER_VERTICAL);
         actions.setPadding(0, dpToPx(8), 0, 0);
+
+        if (secondaryText != null && secondaryAction != null) {
+            TextView secondary = new TextView(this);
+            secondary.setText(secondaryText);
+            secondary.setTextColor(dialogFg());
+            secondary.setTextSize(16f);
+            secondary.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.LEFT);
+            secondary.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            secondary.setPadding(dpToPx(18), 0, dpToPx(18), 0);
+            actions.addView(secondary, new LinearLayout.LayoutParams(0, dpToPx(46), 1f));
+            secondary.setOnClickListener(v -> secondaryAction.run());
+        } else {
+            Space spacer = new Space(this);
+            actions.addView(spacer, new LinearLayout.LayoutParams(0, dpToPx(46), 1f));
+        }
+
         TextView primary = new TextView(this);
         primary.setText(primaryText);
         primary.setTextColor(dialogFg());
         primary.setTextSize(16f);
-        primary.setGravity(android.view.Gravity.CENTER);
+        primary.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.RIGHT);
         primary.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         primary.setPadding(dpToPx(18), 0, dpToPx(18), 0);
-        actions.addView(primary, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
+        actions.addView(primary, new LinearLayout.LayoutParams(0, dpToPx(46), 1f));
         box.addView(actions, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         primary.setOnClickListener(v -> primaryAction.run());
     }
@@ -1754,15 +1802,16 @@ public class PdfReaderActivity extends AppCompatActivity {
         box.addView(currentInfo, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
-        TextView hint = new TextView(this);
-        hint.setText(getString(R.string.bookmark_folder_hint));
-        hint.setTextColor(sub);
-        hint.setTextSize(12f);
-        hint.setGravity(android.view.Gravity.CENTER);
-        hint.setSingleLine(false);
-        hint.setLineSpacing(0f, 1.08f);
-        hint.setPadding(0, dpToPx(8), 0, dpToPx(6));
-        box.addView(hint, new LinearLayout.LayoutParams(
+        TextView hintButton = new TextView(this);
+        hintButton.setText(getString(R.string.bookmark_hints_show));
+        hintButton.setContentDescription(getString(R.string.bookmark_hints_show));
+        hintButton.setTextColor(sub);
+        hintButton.setTextSize(12f);
+        hintButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        hintButton.setGravity(android.view.Gravity.CENTER);
+        hintButton.setPadding(0, dpToPx(6), 0, dpToPx(4));
+        hintButton.setOnClickListener(v -> showBookmarkHintsPopup());
+        box.addView(hintButton, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -1781,9 +1830,10 @@ public class PdfReaderActivity extends AppCompatActivity {
         saveBg.setCornerRadius(dpToPx(14));
         saveBg.setStroke(Math.max(1, dpToPx(1)), saveStroke);
         saveButton.setBackground(saveBg);
-        box.addView(saveButton, new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        saveLp.setMargins(0, dpToPx(8), 0, 0);
 
         RecyclerView rv = new RecyclerView(this);
         rv.setLayoutManager(new LinearLayoutManager(this));
@@ -1810,6 +1860,7 @@ public class PdfReaderActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dpToPx(430));
         box.addView(rv, bookmarkListLp);
+        box.addView(saveButton, saveLp);
 
         TextView closeButton = new TextView(this);
         closeButton.setText(getString(R.string.close));
@@ -1881,6 +1932,64 @@ public class PdfReaderActivity extends AppCompatActivity {
         dialog.show();
     }
 
+    private void showBookmarkHintsPopup() {
+        LinearLayout box = makeDialogBox();
+        box.addView(makeDialogTitle(getString(R.string.bookmark_hints_show)));
+
+        TextView message = new TextView(this);
+        message.setText(getString(R.string.bookmark_folder_hint));
+        message.setTextColor(dialogSub());
+        message.setTextSize(13f);
+        message.setLineSpacing(0f, 1.12f);
+        message.setPadding(0, 0, 0, dpToPx(12));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
+        addDialogBottomActions(box, null, getString(R.string.ok), () -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+        });
+        dialogRef[0] = createSmallBookmarkHintDialog(box);
+        dialogRef[0].show();
+    }
+
+    private android.app.Dialog createSmallBookmarkHintDialog(@NonNull View content) {
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        dialog.setCanceledOnTouchOutside(true);
+
+        android.widget.FrameLayout outerFrame = new android.widget.FrameLayout(this);
+        outerFrame.setBackgroundColor(Color.TRANSPARENT);
+        outerFrame.setClipChildren(true);
+        outerFrame.setClipToPadding(true);
+        if (content instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) content;
+            group.setClipChildren(true);
+            group.setClipToPadding(true);
+        }
+        outerFrame.addView(content, new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT));
+        dialog.setContentView(outerFrame);
+
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+            lp.copyFrom(window.getAttributes());
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            lp.width = Math.max(dpToPx(240), Math.min(Math.round(screenWidth * 0.74f), dpToPx(360)));
+            lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+            lp.y = dpToPx(112);
+            lp.dimAmount = 0.16f;
+            window.setAttributes(lp);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+        return dialog;
+    }
+
     private void navigateToBookmark(@NonNull Bookmark b) {
         String path = b.getFilePath();
         if (path == null || path.trim().isEmpty()) {
@@ -1938,7 +2047,7 @@ public class PdfReaderActivity extends AppCompatActivity {
             afterDelete.run();
             if (dialogRef[0] != null) dialogRef[0].dismiss();
         });
-        dialogRef[0] = createStablePositionedDialog(box, 74, false, false);
+        dialogRef[0] = createStablePositionedDialog(box, PDF_TOOLBAR_POPUP_Y_DP, false, false);
         dialogRef[0].show();
     }
 
@@ -1965,7 +2074,7 @@ public class PdfReaderActivity extends AppCompatActivity {
             afterDelete.run();
             if (dialogRef[0] != null) dialogRef[0].dismiss();
         });
-        dialogRef[0] = createStablePositionedDialog(box, 74, false, false);
+        dialogRef[0] = createStablePositionedDialog(box, PDF_TOOLBAR_POPUP_Y_DP, false, false);
         dialogRef[0].show();
     }
 
@@ -2030,7 +2139,7 @@ public class PdfReaderActivity extends AppCompatActivity {
             if (dialogRef[0] != null) dialogRef[0].dismiss();
         });
 
-        dialogRef[0] = createStablePositionedDialog(box, 74, true, false);
+        dialogRef[0] = createStablePositionedDialog(box, PDF_TOOLBAR_POPUP_Y_DP, true, false);
         dialogRef[0].show();
     }
 

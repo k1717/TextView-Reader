@@ -2037,7 +2037,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         row.setText(label);
         row.setTextColor(textColor);
         row.setTextSize(17f);
-        row.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        row.setGravity(Gravity.CENTER);
+        row.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         row.setPadding(dpToPx(16), 0, dpToPx(16), 0);
         GradientDrawable rowBg = new GradientDrawable();
         rowBg.setColor(panelColor);

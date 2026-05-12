@@ -46,7 +46,7 @@ public class BookmarkManager {
     private static final String TAG = "BookmarkManager";
     private static final String BOOKMARKS_FILE = "bookmarks.json";
     private static final String STATES_FILE = "reading_states.json";
-    private static final int FORMAT_VERSION = 1;
+    private static final int FORMAT_VERSION = 2;
 
     private static BookmarkManager instance;
     private final Context context;
@@ -186,6 +186,15 @@ public class BookmarkManager {
             }
             root.put("readingStates", statesObj);
 
+            // App settings, including layout, theme selection, behavior, sorting,
+            // brightness, TXT/EPUB boundaries, font family, and recent folder prefs.
+            // Security PIN data is skipped inside PrefsManager.
+            root.put("settings", PrefsManager.getInstance(context).exportSettingsToJson());
+
+            // Custom reading themes are stored outside SharedPreferences, so keep
+            // them in the same backup JSON as the active_theme_id setting.
+            root.put("customThemes", ThemeManager.getInstance(context).exportCustomThemesToJson());
+
             return root.toString(2); // pretty-printed for readability
         } catch (JSONException e) {
             Log.e(TAG, "Export failed", e);
@@ -243,7 +252,19 @@ public class BookmarkManager {
                 }
                 saveReadingStates();
             }
-        } catch (JSONException e) {
+
+            // Import settings and custom themes when present. Older backups that
+            // only contain bookmarks/reading states remain valid.
+            JSONObject settingsObj = root.optJSONObject("settings");
+            if (settingsObj != null) {
+                PrefsManager.getInstance(context).importSettingsFromJson(settingsObj, merge);
+            }
+
+            JSONArray themesArr = root.optJSONArray("customThemes");
+            if (themesArr != null) {
+                ThemeManager.getInstance(context).importCustomThemesFromJson(themesArr, merge);
+            }
+        } catch (Exception e) {
             Log.e(TAG, "Import failed", e);
         }
     }
