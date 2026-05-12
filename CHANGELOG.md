@@ -38,11 +38,6 @@
 - Kept the Font picker horizontal header/action separators while reducing font-page outer and row-card borders to 1px so the outline looks thinner on high-density screens.
 - Added **Reset Font Size** to the TXT viewer **More** popup.
 
-### Version metadata
-
-- Updated Android version metadata to `versionCode 207` and `versionName "2.0.7"`.
-- Kept the 2.0.6 changelog entry unchanged below this release section.
-
 ## 2.0.6 - 2026-05-11
 
 ### TXT Viewer
@@ -83,11 +78,6 @@
 
 - Updated the TXT bottom overlay to better match the document viewer control style while keeping the TXT-specific Find, Page, Bookmark, Settings, and More controls.
 - Kept the slider/button area continuous without adding a horizontal separator between the middle control area and the bottom button row.
-
-### Version metadata
-
-- Updated Android version metadata to `versionCode 206` and `versionName "2.0.6"`.
-- Updated `README.md`, `CHANGELOG.md`, `PATCHNOTES.md`, and `GITHUB_UPLOAD_NOTES.md` for the 2.0.6 release.
 
 ## 2.0.5 - 2026-05-10
 
