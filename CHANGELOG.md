@@ -62,8 +62,6 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 
 ### TXT viewer UI
 
-- Updated the TXT bottom overlay to better match the document viewer control style while keeping the TXT-specific Find, Page, Bookmark, Settings, and More controls.
-- Kept the slider/button area continuous without adding a horizontal separator between the middle control area and the bottom button row.
 - Removed the remaining horizontal divider from TXT popup bottom action areas so Page/More/File Info-style windows use the same continuous card surface as the PDF/EPUB/Word viewer dialogs.
 - Matched TXT popup outer borders to the PDF/EPUB/Word viewer dialogs by using the same thin theme-derived outline instead of the heavier TXT-only border.
 - Matched TXT popup text tone to PDF/EPUB/Word dialogs by using the active reader theme text color instead of a generic black/white readable fallback.
