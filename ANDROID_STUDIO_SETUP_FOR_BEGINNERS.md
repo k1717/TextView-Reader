@@ -8,8 +8,8 @@ TextView Reader is a Java Android reader for TXT, PDF, EPUB, and Word documents.
 2. Open Android Studio.
 3. Click **Open**.
 4. Select the unzipped project root folder, not the `app/` folder.
-   - Correct: `TextView_Reader_2.0.7_github_ready/`
-   - Wrong: `TextView_Reader_2.0.7_github_ready/app/`
+   - Correct: `TextView_Reader_2.0.8_github_ready/`
+   - Wrong: `TextView_Reader_2.0.8_github_ready/app/`
 5. Wait for **Gradle Sync**.
 
 ## 2. Install missing SDK if Android Studio asks

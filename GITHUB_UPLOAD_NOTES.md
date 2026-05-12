@@ -1,4 +1,4 @@
-# TextView Reader 2.0.7 GitHub Upload Notes
+# TextView Reader 2.0.8 GitHub Upload Notes
 
 Use this checklist before replacing files on GitHub through the web interface.
 
@@ -74,7 +74,7 @@ captures/
 9. Commit with a message such as:
 
 ```text
-Update TextView Reader 2.0.7 source
+Update TextView Reader 2.0.8 source
 ```
 
 ## Important limitation

@@ -1,4 +1,4 @@
-## TextView Reader 2.0.7
+## TextView Reader 2.0.8
 
 This release adds EPUB-only layout boundary controls in Settings while keeping the 2.0.6 TXT, PDF, toolbar-folding, safe-area, loading-window, and zoom-focus changes unchanged.
 
@@ -36,6 +36,12 @@ This release adds EPUB-only layout boundary controls in Settings while keeping t
 - Matched PDF/EPUB/Word toolbar-triggered Find, More, File Info, and font popup positions to the same bottom offset used by the Go to Page popup.
 - Kept the Font picker horizontal separation lines but changed TXT/EPUB/Word font-page outer borders and row-card borders to 1px for a thinner, less heavy outline.
 - Added **Reset Font Size** to the TXT viewer **More** popup.
+- Hardened TXT bottom-toolbar touch handling for e-ink readers so buttons such as **More** consume their own tap events reliably.
+- Expanded the volume-key page-turn setting to also catch common e-reader hardware page keys before the system treats them as volume/media events.
+- Applied the volume-key / hardware page-turn setting to PDF, EPUB, and Word viewers as well as TXT.
+- Removed the long-press/hold ripple animation from viewer bottom toolbar buttons while keeping the e-ink tap fallback active.
+- Changed remaining long-duration Toast messages to short Toast messages across viewer and Settings flows.
+- Fixed TXT viewer theme return behavior so normal Activity recreation can restore the already-loaded text from memory instead of showing the loading flow and reading the file again.
 
 ### Word/DOCX Reader
 
@@ -49,5 +55,14 @@ This release adds EPUB-only layout boundary controls in Settings while keeping t
 
 ### Version Metadata
 
-- Updated Android version metadata to `versionCode 207` and `versionName "2.0.7"`.
-- Kept the 2.0.6 changelog section intact below the new 2.0.7 entry.
+- Updated Android version metadata to `versionCode 208` and `versionName "2.0.8"`.
+- Kept the 2.0.6 changelog section intact below the new 2.0.8 entry.
+
+### 2.0.8 optimization cleanup
+- Enabled release resource shrinking to reduce packaged APK resources.
+- Removed stale PdfBox ProGuard rules because the app now uses Android PdfRenderer.
+- Avoided sorting all recent-file states when the UI only needs to know whether recent files exist.
+- Replaced large-TXT preview stream skipping with direct file seeking.
+- Avoided repeated full font-folder rescans when the font list has already been scanned in the current app session.
+- Standardized all app Toast messages to short duration.
+
