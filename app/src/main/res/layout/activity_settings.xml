@@ -465,6 +465,27 @@
                     android:layout_weight="1"
                     android:text="@string/import_label" />
             </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/settings_section_updates"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/update_release_link"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:text="@string/update_check_description"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="13sp" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

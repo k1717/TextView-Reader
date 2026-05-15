@@ -7,7 +7,7 @@
     <string name="all_bookmarks_status">All bookmarks: %1$d files / %2$d bookmarks\nCurrent: Page %3$d / %4$d</string>
     <string name="app_name">TextView</string>
     <string name="auto_save_position">Auto-save Reading Position</string>
-    <string name="backup_description">Export/import bookmarks, reading positions, settings, and custom reading themes as JSON.</string>
+    <string name="backup_description">Export/import bookmarks, reading positions, settings, and custom reading themes as a TextView JSON backup. Export files are named like textview_backup_year_month_day_hour_minute_second.json. For beginner PC editing, read the SECTION_1 bookmark tutorial, then edit only the SECTION_2 actual bookmark edit area: beginnerEditableBookmarks. The backup includes detailed English/Korean examples for setLine, moveByLines, findText, setPage, and moveByPages.</string>
     <string name="bookmark">Bookmark</string>
     <string name="bottom_page">Page</string>
     <string name="bookmark_hints_show">Hints</string>
@@ -262,4 +262,7 @@ Open a text, PDF, EPUB, or Word file to get started.</string>
     <string name="recent_folder_cleared">Recent folder cleared</string>
     <string name="clear_from_recently_viewed">Clear from recently viewed</string>
     <string name="recent_file_cleared">Recent file cleared</string>
+    <string name="settings_section_updates">Updates</string>
+    <string name="update_check_description">Check updates at https://github.com/k1717/TextView-Reader/releases</string>
+
 </resources>

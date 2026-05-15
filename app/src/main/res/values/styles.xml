@@ -13,7 +13,7 @@
     -->
 
     <!-- Reader background is LIGHT: dialog uses a light surface, dark caret/handle -->
-    <style name="ThemeOverlay.SimpleText.ReaderDialogLight" parent="ThemeOverlay.MaterialComponents.Light">
+    <style name="ThemeOverlay.TextView.ReaderDialogLight" parent="ThemeOverlay.MaterialComponents.Light">
         <item name="android:isLightTheme">true</item>
         <item name="colorControlActivated">#222222</item>
         <item name="colorControlNormal">#222222</item>
@@ -28,7 +28,7 @@
     </style>
 
     <!-- Reader background is DARK: dialog uses a dark surface, light caret/handle -->
-    <style name="ThemeOverlay.SimpleText.ReaderDialogDark" parent="ThemeOverlay.MaterialComponents.Light">
+    <style name="ThemeOverlay.TextView.ReaderDialogDark" parent="ThemeOverlay.MaterialComponents.Light">
         <item name="android:isLightTheme">true</item>
         <item name="colorControlActivated">#FFFFFF</item>
         <item name="colorControlNormal">#FFFFFF</item>

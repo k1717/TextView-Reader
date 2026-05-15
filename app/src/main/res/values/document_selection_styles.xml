@@ -12,7 +12,7 @@
         inherited by WebView, so Samsung/Android can use its original native
         rounded selection handles for Word/DOCX selection.
     -->
-    <style name="Theme.SimpleTextReader.DocumentSelectionContrast" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <style name="Theme.TextViewReader.DocumentSelectionContrast" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/md_theme_light_primary</item>
         <item name="colorOnPrimary">@color/md_theme_light_onPrimary</item>
         <item name="colorPrimaryContainer">@color/md_theme_light_primaryContainer</item>

@@ -12,7 +12,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SimpleTextReader"
+        android:theme="@style/Theme.TextViewReader"
         android:requestLegacyExternalStorage="true"
         android:largeHeap="true"
         tools:targetApi="31">
@@ -54,7 +54,7 @@
             android:name=".DocumentPageActivity"
             android:exported="false"
             android:launchMode="singleTop"
-            android:theme="@style/Theme.SimpleTextReader.DocumentSelectionContrast"
+            android:theme="@style/Theme.TextViewReader.DocumentSelectionContrast"
             android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity
             android:name=".SettingsActivity"
@@ -65,7 +65,7 @@
         <activity
             android:name=".LockActivity"
             android:exported="false"
-            android:theme="@style/Theme.SimpleTextReader" />
+            android:theme="@style/Theme.TextViewReader" />
         <activity
             android:name=".ThemeEditorActivity"
             android:exported="false" />

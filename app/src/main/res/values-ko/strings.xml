@@ -7,7 +7,7 @@
     <string name="all_bookmarks_status">전체 북마크: 파일 %1$d개 / 북마크 %2$d개\n현재: %3$d / %4$d쪽</string>
     <string name="app_name">TextView</string>
     <string name="auto_save_position">읽던 위치 자동 저장</string>
-    <string name="backup_description">북마크, 읽던 위치, 설정, 사용자 읽기 테마를 JSON으로 내보내기/가져오기합니다.</string>
+    <string name="backup_description">북마크, 읽던 위치, 설정, 사용자 읽기 테마를 TextView JSON 백업으로 내보내기/가져오기합니다. 내보내기 파일 이름은 textview_backup_year_month_day_hour_minute_second.json 형식입니다. 초보자 PC 수정은 SECTION_1 북마크 튜토리얼을 먼저 읽고, SECTION_2 실제 수정 영역인 beginnerEditableBookmarks만 수정하세요. setLine, moveByLines, findText, setPage, moveByPages 예시가 영한으로 자세히 들어갑니다.</string>
     <string name="bookmark">북마크</string>
     <string name="bottom_page">페이지</string>
     <string name="bookmark_hints_show">도움말</string>
@@ -262,4 +262,7 @@
     <string name="recent_folder_cleared">최근 폴더를 지웠습니다</string>
     <string name="clear_from_recently_viewed">최근 본 파일에서 지우기</string>
     <string name="recent_file_cleared">최근 파일을 지웠습니다</string>
+    <string name="settings_section_updates">업데이트</string>
+    <string name="update_check_description">Check updates at https://github.com/k1717/TextView-Reader/releases</string>
+
 </resources>

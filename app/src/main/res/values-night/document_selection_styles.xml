@@ -3,7 +3,7 @@
     <!-- Night variant of the document/Word viewer theme.
          Intentionally does not override textSelectHandle or ActionMode background,
          so WebView keeps native Android/Samsung selection handles and toolbar. -->
-    <style name="Theme.SimpleTextReader.DocumentSelectionContrast" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <style name="Theme.TextViewReader.DocumentSelectionContrast" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/md_theme_dark_primary</item>
         <item name="colorOnPrimary">@color/md_theme_dark_onPrimary</item>
         <item name="colorPrimaryContainer">@color/md_theme_dark_primaryContainer</item>
