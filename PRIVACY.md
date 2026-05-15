@@ -1,6 +1,6 @@
 # Privacy
 
-TextView Reader is designed as an offline local reader.
+TextView Reader is designed as an offline local reader. Settings shows a static GitHub releases link for manual update checking, but the app does not contact GitHub or any update server itself.
 
 ## What the app does not include
 
@@ -35,6 +35,10 @@ Folder shortcuts store local folder paths selected by the user. They are used on
 ## Bookmark export/import
 
 Backup/export uses JSON. The exported JSON can include file paths, file names, reading positions, bookmark labels, excerpts, app settings, layout settings, and custom reading themes. Treat exported backup files as user data. Lock PIN data is intentionally excluded from the plain JSON backup.
+
+## Manual update link
+
+Settings shows the static line `Check updates at https://github.com/k1717/TextView-Reader/releases`. Tapping that line copies the release URL to the clipboard. The app does not call the GitHub API, does not perform in-app update checks, and does not run background update checks.
 
 ## File permissions
 

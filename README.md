@@ -2,16 +2,22 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.0.9**
+Current version: **2.1.0**
 
-## What changed in 2.0.9 from 2.0.8
+## What changed in 2.1.0 from 2.0.9
 
-- Fixed very small TXT files so their first row aligns to the same visual row grid as normal TXT files.
-- Kept very small TXT files as single-page content; this does not change normal TXT paging logic.
-- Fixed a second-page-only TXT pagination case where page 2 could repeat page 1's last fully visible sentence after increasing the TXT bottom boundary.
-- Fixed hard-landing behavior for main-screen long-press follow-up windows: **Delete / 삭제**, **Rename / 이름 변경**, and **File Info / 파일 정보**.
-- Moved **Delete / 삭제** to the screen center and moved **Rename / 이름 변경** slightly upward.
-- Improved drawer/folder opening responsiveness by loading folder contents in the background and ignoring stale folder-scan results.
+- Changed the Android package/application ID to `com.textview.reader` and moved the Java source package to `com.textview.reader`.
+- Added adaptive rounded-popup sizing for constrained app windows such as split-screen, pop-up view, foldable half-window, and small-window modes, while preserving normal full-screen dialog sizing.
+- Centered popup/window headers and cleaned up rounded dialog styling across TXT/PDF/EPUB/Word viewers and Settings dialogs.
+- Removed shaded/ripple option-box effects from the backup import and custom reading-theme option/delete dialogs, and made those Settings dialogs compact at about 70% screen width.
+- Replaced in-app update checking with a static, copyable Settings line: `Check updates at https://github.com/k1717/TextView-Reader/releases`; the app no longer contacts GitHub.
+- Changed the default TXT tap-zone layout for fresh installs to horizontal: left = previous page, center = menu, right = next page.
+- Improved TXT bookmark save behavior so it anchors to the actual title-covered visual row and avoids off-by-one saves caused by row-boundary ambiguity.
+- Added robust TXT bookmark restore using saved character position plus surrounding anchor text, so bookmarks stay tied to the same text passage after font, boundary, or spacing changes.
+- Added portable bookmark identity metadata so imported bookmarks can rebind to the same file after the file is moved or restored on another device.
+- Expanded JSON backup/export with beginner-friendly bookmark editing sections, bilingual tutorial markers, detailed examples, and timestamped filenames such as `textview_backup_year_month_day_hour_minute_second.json`.
+
+> Package migration note: Android treats `com.textview.reader` as a different app from legacy package builds. Use the backup/export flow in the old app and import the backup in this build to migrate bookmarks, reading positions, settings, and custom themes.
 
 ## Quick UI map
 
@@ -127,14 +133,18 @@ Current version: **2.0.9**
 ### Bookmarks
 
 - JSON-based bookmark storage.
-- Custom bookmark labels and excerpts.
-- Grouped bookmark list by file.
+- Custom bookmark labels, memos, excerpts, and grouped bookmark list by file.
 - Bookmark folders default to collapsed on the main bookmark page.
 - Viewer bookmark dialogs keep stable height to avoid first-bookmark bounce.
 - Long-press a bookmark folder to delete all bookmarks inside that folder.
 - Folder-delete confirmation uses the rounded/bordered dialog style.
 - Bookmark memo dialogs include **Cancel**, **Clear memo**, and **Save**.
+- TXT bookmarks save from the title-covered visual row and restore by character position plus nearby anchor text.
+- TXT bookmarks remain more stable after font, spacing, and boundary changes because the saved text passage is used as the logical target.
+- Portable bookmark identity metadata allows imported bookmarks to rebind to the same file after the file is moved or restored on another device.
 - Export/import support for bookmarks, reading positions, app settings, layout settings, and custom reading themes.
+- Backup filenames use the timestamped form `textview_backup_year_month_day_hour_minute_second.json`.
+- Exported backups include a bilingual beginner bookmark tutorial and a separated `beginnerEditableBookmarks` area for PC editing.
 - Reading-position persistence per file.
 - Bookmark cleanup and cache cleanup are separate.
 
@@ -152,13 +162,15 @@ Current version: **2.0.9**
 
 ### Privacy
 
-TextView Reader is intended as an offline local reader.
+TextView Reader is intended as a local reader. Settings shows a static GitHub releases link for manual update checking; the app does not contact GitHub itself.
 
 - No analytics SDK.
 - No advertising SDK.
 - No account login.
 - No cloud sync backend.
 - No remote telemetry collection.
+- No in-app network update checks.
+- No background update checks.
 
 See [`PRIVACY.md`](PRIVACY.md) for details.
 
@@ -198,7 +210,7 @@ Main dependencies:
 ## Project structure
 
 ```text
-app/src/main/java/com/simpletext/reader/
+app/src/main/java/com/textview/reader/
 ├── MainActivity.java              # File browser, drawer, sort, shortcuts, file actions
 ├── ReaderActivity.java            # TXT reader
 ├── PdfReaderActivity.java         # PDF reader

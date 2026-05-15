@@ -1,5 +1,49 @@
 # Changelog
 
+## 2.1.0 - 2026-05-15
+
+### Package identity
+
+- Changed Android `namespace` and `applicationId` to `com.textview.reader`.
+- Moved Java source packages to `com.textview.reader` and updated XML custom-view paths, ProGuard rules, README paths, and related references.
+- Android treats this as a different app from legacy package builds. Use TextView backup/export in the old build and import it in this build to migrate app data.
+
+### Dialog and popup UI
+
+- Added adaptive rounded-popup sizing for constrained app windows such as split-screen, Samsung pop-up view, foldable half-window, and small-window modes.
+- Preserved normal full-screen popup sizing; adaptive max-height/scroll behavior only activates when the app window is constrained.
+- Centered popup/window headers across main-screen dialogs and TXT/PDF/EPUB/Word viewer dialogs.
+- Removed shaded/ripple option-box effects from backup import and custom reading-theme action/delete dialogs.
+- Made backup import and custom reading-theme action/delete dialogs compact at about 70% screen width.
+- Kept rounded border-only styling for the affected Settings dialogs.
+
+### Settings and update line
+
+- Replaced the in-app GitHub update-check function with a static Settings release link: `Check updates at https://github.com/k1717/TextView-Reader/releases`.
+- Tapping the release link copies it to the clipboard.
+- Removed underline styling from the update link while keeping it pressable.
+- Removed the in-app network update-check path; the app does not contact GitHub for updates.
+
+### TXT reader and bookmark behavior
+
+- Changed the default TXT tap-zone layout for new/fresh settings to horizontal: left = previous page, center = menu, right = next page.
+- Fixed TXT bookmark saving so it samples the interior of the actual title-covered visual row instead of relying on raw scroll offsets.
+- Avoided off-by-one bookmark saves caused by title-row boundary ambiguity.
+- Added robust TXT bookmark anchors using saved character position plus nearby `anchorTextBefore` / `anchorTextAfter` context.
+- TXT bookmark restore remains tied to the same text passage even after font size, line spacing, or boundary settings change.
+
+### Portable bookmark identity and backup editing
+
+- Added portable bookmark identity fields to backup JSON: `fileSizeBytes`, `quickFingerprint`, `fileIdentity`, and `localBindingPath`.
+- Treats paths as local shortcuts; imported bookmarks can rebind to the same file after it is moved or restored on another device.
+- Keeps normal bookmark loading fast: exact path lookup is used first, and quick fingerprint matching is lazy.
+- Backup export filenames now use the timestamped format `textview_backup_year_month_day_hour_minute_second.json`.
+- Backup schema updated to `textview-full-backup-v9`.
+- Added bilingual read-first guidance and separated bookmark tutorial/edit sections.
+- Added `beginnerEditableBookmarks` as the actual PC-edit area.
+- Added beginner-edit support for TXT `setLine`, `moveByLines`, `findText`, `findOccurrence`, `findTextCaseSensitive`; PDF/Word `setPage`, `moveByPages`; and EPUB `setPageOrSection`, `moveByPages`.
+- Import regenerates excerpts and anchor fields after beginner edits are applied.
+
 ## 2.0.9 - 2026-05-11
 
 ### TXT small-file row alignment
@@ -17,7 +61,6 @@
 - Fixed hard-landing behavior for main-screen long-press follow-up windows: **Delete / 삭제**, **Rename / 이름 변경**, and **File Info / 파일 정보**.
 - Moved the **Delete / 삭제** confirmation window slightly below center, while keeping it clearly above the **Rename / 이름 변경** window.
 - Moved the **Rename / 이름 변경** window slightly upward from its previous bottom position.
-
 
 ### Main-screen folder loading
 
@@ -299,3 +342,29 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 - Rebuilt the public documentation set with readable Markdown formatting.
 - Added repository hygiene guidance and privacy notes.
 - Expanded `.gitignore` for Android local/generated/private files.
+
+### 2.1.0 - Beginner bookmark edit freedom expansion
+- Expanded beginner bookmark backup editing fields beyond absolute position.
+- TXT bookmark edits can now use exact line, relative line movement, or phrase search.
+- Document bookmark edits can now use exact page/section plus relative movement.
+- Added pending TXT edit resolution for imported backups when files are on a different device/path.
+
+### Import dialog no-shade option boxes
+
+- Removed the shade/ripple/elevation effect from the backup import confirmation option boxes.
+- Kept the rounded box border style and Merge / Replace / Cancel behavior unchanged.
+
+### Import dialog rounded UI hotfix
+- Changed the backup import confirmation window from the default system AlertDialog to the same rounded custom settings dialog style used by the other Settings popups.
+- Kept import behavior unchanged: Merge, Replace, and Cancel still perform the same actions.
+
+
+### Settings dialog no-shade cleanup
+- Removed the remaining shaded/ripple option-box style from custom reading-theme action/delete dialogs.
+- Kept the rounded border-only style consistent with the import confirmation window.
+
+### Compact custom-theme dialogs
+- Made the custom reading-theme action and delete confirmation windows more compact horizontally, about 70% screen width.
+
+### 2.1.0 import dialog compact width hotfix
+- Made the Backup Import / 가져오기 confirmation dialog use the compact ~70% dialog width.
