@@ -8,8 +8,8 @@ TextView Reader is a Java Android reader for TXT, PDF, EPUB, and Word documents.
 2. Open Android Studio.
 3. Click **Open**.
 4. Select the unzipped project root folder, not the `app/` folder.
-   - Correct: `TextView_Reader_2.1.1_github_ready/`
-   - Wrong: `TextView_Reader_2.1.1_github_ready/app/`
+   - Correct: `TextView_Reader_2.1.2_github_ready/`
+   - Wrong: `TextView_Reader_2.1.2_github_ready/app/`
 5. Wait for **Gradle Sync**.
 
 ## 2. Install missing SDK if Android Studio asks
@@ -55,18 +55,22 @@ After the app installs:
 3. Drag-scroll normally.
 4. Use the TXT bottom toolbar: Find, Page, Bookmark, Settings, and More.
 5. Add a TXT bookmark, then close and reopen the file to confirm the saved position restores.
-6. Open a PDF and verify horizontal/vertical reading mode behavior.
-7. Open an EPUB and verify Settings > EPUB layout changes apply after returning to the viewer.
-8. Change the reader theme from Settings while an EPUB is open and confirm the page refreshes to the new theme.
-9. Export and import a backup if you need to verify bookmarks/settings backup behavior.
+6. In the TXT viewer, use **More > Add display rule** on a disposable TXT file and confirm the visible text changes after the rule window closes.
+7. In Settings opened from that TXT viewer, check **TXT Display Rules** and confirm the rule appears with its enabled/scope/case/regex options.
+8. Only with a disposable TXT file, test **Edit Actual TXT File** once in copy mode and confirm it creates or overwrites the same `*_edited.txt` copy.
+9. Open a PDF and verify horizontal/vertical reading mode behavior.
+10. Open an EPUB and verify Settings > EPUB layout changes apply after returning to the viewer.
+11. Change the reader theme from Settings while an EPUB is open and confirm the page refreshes to the new theme.
+12. Export and import a backup if you need to verify bookmarks/settings backup behavior.
 
 ## 6. Current notes
 
 - All reader data is local unless the user manually exports, shares, or backs it up.
-- Backup JSON can include bookmarks, reading positions, app settings, layout settings, and custom reading themes.
+- Backup JSON can include bookmarks, reading positions, app settings, layout settings, TXT display rules, and custom reading themes.
 - Lock PIN data is intentionally excluded from backup JSON because that format is plain text.
 - The optional PIN lock is a convenience lock, not a substitute for Android device security.
 - Android storage behavior can vary by device and Android version, especially around all-files access and the Storage Access Framework.
+- **Edit Actual TXT File** can overwrite real TXT content. Test that feature only with disposable files or copy mode.
 
 ## 7. If Gradle fails
 

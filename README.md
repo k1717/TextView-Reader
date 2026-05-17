@@ -2,7 +2,27 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.1.1**
+Current version: **2.1.2**
+
+## What changed in 2.1.2 from 2.1.1
+
+- Added **TXT Display Rules** for viewing-only text replacement or masking. Normal display rules change only the text shown in the TXT viewer; the source file is not modified.
+- Rules can be enabled/disabled, case-sensitive or case-insensitive, plain-text or regular-expression based, global for all TXT files, or limited to one TXT file.
+- Added TXT-viewer quick add flow: long-press a visible word or use **More > Add display rule** to create a rule without leaving the reader.
+- Added rule-source labeling so saved rules can show which file they were originally created from.
+- Added rule ordering controls so multiple replacement rules can be moved up/down and applied in top-to-bottom order. Up/down does not reload the active viewer by itself, but order can affect final output when rules overlap.
+- Added quick enable/disable/delete controls and rounded delete-confirmation dialogs in the display-rule list.
+- Reader-side display-rule changes are applied when the rule/add window closes, so the rule manager remains responsive while editing.
+- Display rules are applied before TXT pagination and large-TXT exact indexing, so the page count, slider, Go to Page, search, and bookmarks follow the text shown on screen while rules are enabled.
+- Added **Edit Actual TXT File** below **TXT Display Rules** in Settings when Settings is opened from a TXT viewer. It can permanently apply all enabled applicable rules to either the original TXT file or a copied `*_edited.txt` file.
+- Actual-file edit uses rounded confirmation popups, yellow/red warning boxes, a second **Are you sure?** step, and an emphasized **There is no turning back.** warning.
+- In copy mode, the app writes to the same `*_edited.txt` target and overwrites that edited copy instead of creating repeated numbered copies. In original mode, the opened TXT is reloaded and fully repaginated after the write succeeds. Physical writes now use a same-folder temporary file plus replacement step to reduce the chance of partially written output.
+- Added low-power **Auto Page Turn** as a TXT toolbar button for e-ink/low-end devices: the reader turns one page after the user-specified number of seconds instead of continuously scrolling.
+- Applied rounded popup styling to the new display-rule, actual-file edit, auto-page-turn, and settings-reset dialogs; auto-page-turn action buttons now use short Start/Stop labels.
+- Settings backups include the saved display-rule JSON through the existing settings export/import path.
+- Added **Reset settings** in Settings. It restores reader/app preferences to defaults while keeping bookmarks, reading positions, recent files, folder shortcuts, TXT display rules, custom themes, and PIN lock.
+- Multi-line find/replace is intentionally left out for now to keep large-TXT partition boundaries predictable.
+- Updated Android version metadata to `versionCode 212` and `versionName "2.1.2"`.
 
 ## What changed in 2.1.1 from 2.1.0
 
@@ -61,6 +81,9 @@ Current version: **2.1.1**
 - Page indicator alignment can be set to left, center, right, or hidden.
 - When the TXT control selector is open, the current file title appears under the top page indicator and hides again in full viewer mode.
 - TXT pagination uses line-boundary anchors to reduce duplicate/skipped lines and keep first/last page rows aligned.
+- Use **More > Add display rule** to create a TXT display rule from inside the reader. Long-pressing a visible word can prefill the find field.
+- Use **More > TXT Display Rules** to manage display rules for viewing-only masking/replacement. Rule changes are applied to the viewer after the rule window closes.
+- Use **Settings > Edit Actual TXT File** only when you want to permanently write enabled display-rule results into the current TXT file or a copied `*_edited.txt` file.
 
 ### PDF reader
 
@@ -117,6 +140,22 @@ Current version: **2.1.1**
 - Volume-key page movement.
 - Auto-resume reading position.
 - Compact rounded theme-matched loading panel instead of a hard black loading box; uncached large-TXT Go to Page, toolbar slider, and bookmark jumps use this loading panel.
+
+### TXT display rules and actual-file editing
+
+- TXT display rules can replace or mask text while viewing TXT files.
+- Rules support enabled/disabled state, case-sensitive matching, regular-expression mode, all-file scope, and current-file-only scope.
+- Rules can be created from Settings or directly from the TXT viewer.
+- Rules created from a TXT file can show the source file where the rule was made.
+- Multiple rules are applied in saved top-to-bottom order. This matters when one rule output can become another rule input.
+- Moving rules up/down changes only the saved order and does not refresh the active TXT viewer by itself.
+- Closing the TXT display-rule manager or add/edit window applies relevant active rule changes to the viewer and recalculates TXT pagination if the visible text changes.
+- The normal display-rule layer is non-destructive: it changes the viewer output, not the original TXT file.
+- **Edit Actual TXT File** is a separate destructive/manual action available from Settings when opened from a TXT viewer.
+- Actual-file edit applies all enabled rules that currently apply to that TXT file, in top-to-bottom order.
+- **Fix original file** overwrites the opened TXT file, reloads the viewer, clears stale page/index state, and recalculates the full page count.
+- **Copy original and fix copy** writes to `originalname_edited.txt`; if that file already exists, the edited copy is overwritten. The original viewer is not reloaded in copy mode.
+- Actual-file edit uses an extra confirmation step and warning boxes because the app does not provide an internal undo for overwritten file content. Large TXT files show an additional memory/time warning because the app must load the whole file before applying the full rule chain.
 
 ### PDF reading
 

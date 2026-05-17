@@ -24,6 +24,7 @@ The app may store local-only data needed for reading behavior:
 - optional imported fonts;
 - optional PIN-lock state;
 - PDF reading-mode preference;
+- saved TXT display rules, including rule text, scope, enabled state, case-sensitivity setting, regex setting, ordering, and source-file labels/paths used for current-file-only rules;
 - disposable TXT page/index cache metadata for large-file handling.
 
 This data stays on the device unless the user manually exports, backs up, shares, deletes, or transfers it.
@@ -31,6 +32,12 @@ This data stays on the device unless the user manually exports, backs up, shares
 ## Folder shortcuts
 
 Folder shortcuts store local folder paths selected by the user. They are used only to show faster navigation entries in the app drawer. Removing a folder shortcut removes the shortcut entry; it does not delete the folder or files.
+
+## TXT display rules and actual-file editing
+
+TXT display rules are stored locally and may be included in settings backup/import. Normal display rules change only the viewer output and do not edit the source TXT file.
+
+The separate **Edit Actual TXT File** action is user-triggered and can write changed text into local storage. Original mode overwrites the current TXT file. Copy mode writes to `*_edited.txt` and overwrites that edited copy if it already exists. These file writes happen only after explicit confirmation in the app. The app writes through a temporary file in the same folder before replacing the target, but the user should still treat original-file editing as destructive because there is no internal undo.
 
 ## Bookmark export/import
 

@@ -1,5 +1,73 @@
 # Changelog
 
+## 2.1.2 - 2026-05-17
+
+This release adds TXT display-rule masking/replacement, optional permanent TXT rule application, low-power auto page turning, and several rounded-dialog UI refinements while keeping the same `com.textview.reader` package identity.
+
+### TXT display rules
+
+- Added **TXT Display Rules** for viewing-only text replacement or masking. Normal display rules do not modify original TXT files.
+- Added Settings management for display rules.
+- Added TXT viewer quick rule creation from **More > Add display rule**.
+- Added long-press word detection in the TXT viewer so a visible word can be used as the prefilled find text for a new display rule.
+- Added plain-text replacement as the default safe mode.
+- Added advanced regular-expression mode for users who need more flexible term/name correction.
+- Rules support enable/disable, case-sensitive or case-insensitive matching, all-TXT scope, and current-file-only scope when opened from the TXT reader.
+- Added rule-source labeling so rules can show which file they were originally made from.
+- Added rule ordering controls. Rules are applied from top to bottom, so overlapping rules can produce different results after Up/Down.
+- Added quick enable/disable/delete controls in the rule list. Individual deletion now uses a rounded confirmation dialog instead of deleting on a single touch.
+- Changed TXT display-rule list long-press behavior from delete to edit.
+- Display-rule edits from the reader-side manager are applied when the manager/add window closes, keeping the rule window responsive while editing.
+- Up/down order changes do not reload the active TXT viewer by themselves.
+- Display rules are applied before TXT pagination, search highlighting, large-TXT partition rendering, and exact page-index construction, so page count and page movement follow the text actually shown on screen.
+- Display-rule changes that affect visible TXT text invalidate stale page/index state when they are applied.
+- Display rules are included in settings backup/import through the existing settings backup path.
+- Multi-line find/replace is intentionally not supported in this version to keep partitioned large-TXT pagination consistent.
+
+### Actual TXT file editing
+
+- Added **Edit Actual TXT File** below **TXT Display Rules** in Settings when Settings is opened from a TXT viewer.
+- The action permanently applies all enabled display rules that currently apply to the opened TXT file.
+- Users can choose **Fix original file** or **Copy original and fix copy**.
+- Original mode overwrites the opened TXT file, marks it physically modified, reloads the viewer, clears stale TXT page/index state, and recalculates the full page count. Writes are routed through a same-directory temporary file and replacement step to reduce partial-write risk.
+- Copy mode writes to `originalname_edited.txt`. If that edited copy already exists, it is overwritten instead of creating numbered duplicates.
+- Copy mode does not reload the currently opened original viewer.
+- The application window warns that rule sequence matters, overwrite behavior is permanent, and large TXT physical edits can take extra time/memory because the full file is rewritten.
+- The second **Are you sure?** confirmation uses rounded UI with merged red warning content and a larger bold **There is no turning back.** warning.
+
+### TXT auto page turn
+
+- Added low-power automatic page turning for TXT.
+- Auto page turn is available from the TXT bottom toolbar and advances one full page after the user-specified number of seconds instead of continuously scrolling, making it more suitable for low-end and e-ink devices.
+- Auto page turn stops at the final page and stops when the TXT viewer leaves the foreground.
+- Auto page turn also stops when the user manually scrolls/drags the TXT body, uses tap paging, or jumps pages through the slider / Go to Page controls.
+- Auto page turn shows a stopped message when manual page movement stops it.
+
+### UI polish
+
+- Kept Auto Page Turn on the TXT bottom toolbar, but moved TXT Display Rules back into More so the bookmark button label has enough toolbar space.
+- Moved **Manage display rules** out of the TXT quick-add dialog bottom action bar and into the dialog body, leaving the bottom bar as **Cancel / Save** only.
+- **Manage display rules** now opens the TXT display-rule manager directly from the reader instead of leaving the viewer for the general Settings screen.
+- Reduced the quick-add popup input text size and input-box height for **Text to find / Text to show instead** so the form is less crowded.
+- Moved the quick-add popup option labels inward so the four switch rows no longer sit too close to the left edge.
+- Added extra top and bottom spacing around the four option toggles in the Settings > TXT Display Rules add/edit dialog.
+- Moved the quick-add display-rule popup and auto-page-turn popup down to the same bottom-positioned height as the TXT Find popup.
+- Moved the TXT viewer rule-delete confirmation box higher in the viewer.
+- Restored normal action-button text sizing for the TXT display-rule quick-add dialog bottom buttons.
+- Applied the app's rounded popup style to the new TXT display-rule, actual-file edit, auto-page-turn, and settings-reset popups.
+- Shortened Auto Page Turn action buttons to Start/Stop, restored the normal action-button text size there, and clarified that the interval input is in seconds per page.
+- Reduced the Auto Page Turn popup width to about 70% and centered the seconds input as a compact field taking about 40% of the popup width.
+- Settings-side display-rule add/edit/clear dialogs use the same rounded bordered custom dialog style as the other Settings popups.
+
+### Settings reset
+
+- Added **Reset settings** in Settings. It restores reader/app preferences to defaults while preserving bookmarks, reading positions, recent files, folder shortcuts, TXT display rules, custom themes, and PIN lock.
+
+### Version metadata
+
+- Android `versionCode`: `212`
+- Android `versionName`: `2.1.2`
+
 ## 2.1.1 - 2026-05-16
 
 This entry shows the final functional difference from the uploaded **2.1.0** GitHub source package. It does not list every intermediate patch step, while older version entries remain below for full history.
