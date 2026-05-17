@@ -243,6 +243,36 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/epub_page_direction"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="14sp" />
+
+            <Spinner
+                android:id="@+id/spinner_epub_page_direction"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginBottom="12dp"
+                android:background="@android:color/transparent"
+                android:popupBackground="?attr/colorSurface" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/epub_page_effect"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="14sp" />
+
+            <Spinner
+                android:id="@+id/spinner_epub_page_effect"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginBottom="18dp"
+                android:background="@android:color/transparent"
+                android:popupBackground="?attr/colorSurface" />
+
+            <TextView
                 android:id="@+id/epub_left_spacing_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

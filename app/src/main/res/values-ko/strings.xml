@@ -7,7 +7,7 @@
     <string name="all_bookmarks_status">전체 북마크: 파일 %1$d개 / 북마크 %2$d개\n현재: %3$d / %4$d쪽</string>
     <string name="app_name">TextView</string>
     <string name="auto_save_position">읽던 위치 자동 저장</string>
-    <string name="backup_description">북마크, 읽던 위치, 설정, 사용자 읽기 테마를 TextView JSON 백업으로 내보내기/가져오기합니다. 내보내기 파일 이름은 textview_backup_year_month_day_hour_minute_second.json 형식입니다. 초보자 PC 수정은 SECTION_1 북마크 튜토리얼을 먼저 읽고, SECTION_2 실제 수정 영역인 beginnerEditableBookmarks만 수정하세요. setLine, moveByLines, findText, setPage, moveByPages 예시가 영한으로 자세히 들어갑니다.</string>
+    <string name="backup_description">북마크, 읽던 위치, 설정, 사용자 읽기 테마를 TextView JSON 백업으로 내보내기/가져오기합니다. 내보내기 파일 이름은 textview_backup_year_month_day_hour_minute_second.json 형식입니다. PC 수정은 안전한 메모/줄/페이지 변경용 bookmarkEdits.beginner를 사용하고, 고급 복구가 필요할 때만 bookmarkEdits.developer를 사용하세요. 백업에는 친절한 영문/국문 안내가 함께 들어갑니다.</string>
     <string name="bookmark">북마크</string>
     <string name="bottom_page">페이지</string>
     <string name="bookmark_hints_show">도움말</string>
@@ -172,6 +172,12 @@
     <string name="txt_right_inset_default">TXT 우측 경계: 0px</string>
     <string name="txt_right_inset_format">TXT 우측 경계: %1$dpx</string>
 
+    <string name="epub_page_direction">EPUB 페이지 넘김 방향</string>
+    <string name="epub_page_direction_ltr">왼쪽에서 오른쪽 / 국내·서양 서적</string>
+    <string name="epub_page_direction_rtl">오른쪽에서 왼쪽 / 일본식 읽기 방식</string>
+    <string name="epub_page_effect">EPUB 페이지 넘김 효과</string>
+    <string name="epub_page_effect_slide">슬라이드</string>
+    <string name="epub_page_effect_none">없음</string>
     <string name="settings_section_epub_layout">EPUB 레이아웃</string>
     <string name="epub_left_spacing_default">EPUB 좌측 경계: 30px</string>
     <string name="epub_left_spacing_format">EPUB 좌측 경계: %1$dpx</string>
