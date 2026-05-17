@@ -82,6 +82,17 @@ public class CustomReaderView extends View {
         return Math.max(1, Math.min(layoutLineCount, lastContentLine + 1));
     }
 
+    private static int getContentHeightForPaging(StaticLayout sourceLayout,
+                                                 String value,
+                                                 int marginVerticalPx) {
+        // Keep the paging height identical to the normal full-file TXT path.
+        // Do not strip terminal blank lines here: doing so makes the final-page
+        // visual anchor differ from simple full-file loading even when the total
+        // page count happens to remain the same.
+        int margin = Math.max(0, marginVerticalPx);
+        return (sourceLayout != null ? sourceLayout.getHeight() : 0) + margin * 2;
+    }
+
     public int getTextLayoutWidthForIndex() {
         return Math.max(1, getWidth() - getPaddingLeft() - getPaddingRight()
                 - marginHorizontalPx * 2 - leftTextInsetPx - rightTextInsetPx);
@@ -89,6 +100,10 @@ public class CustomReaderView extends View {
 
     public int getMarginVerticalPxForIndex() {
         return Math.max(0, marginVerticalPx);
+    }
+
+    private int getEffectiveOverlapLines() {
+        return Math.max(0, overlapLines);
     }
 
     public int getOverlapLinesForIndex() {
@@ -133,7 +148,7 @@ public class CustomReaderView extends View {
                 .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
                 .build();
 
-        int lineCount = getEffectivePagingLineCount(localLayout, fullText);
+        int lineCount = localLayout.getLineCount();
         if (lineCount <= 0) {
             result.add(new PageTextAnchor(0, "", ""));
             return result;
@@ -146,7 +161,11 @@ public class CustomReaderView extends View {
             firstPadCompensation = Math.max(0, firstBaselineOffset - normalBaselineOffset);
         }
 
-        int contentHeight = localLayout.getHeight() + Math.max(0, marginVerticalPx) * 2;
+        // Match the normal full-file CustomReaderView path exactly, including
+        // terminal blank lines.  The large-TXT exact index must mirror what the
+        // simple full-file reader would paginate, otherwise the last page can
+        // show a different top line while still reporting the same page number.
+        int contentHeight = getContentHeightForPaging(localLayout, fullText, marginVerticalPx);
         int viewport = Math.max(1, viewportHeight);
         int maxScroll = Math.max(0, contentHeight - viewport);
         int firstPageAnchor = Math.max(0, marginVerticalPx) + firstPadCompensation;
@@ -266,6 +285,8 @@ public class CustomReaderView extends View {
         listener = null;
         text = "";
         layout = null;
+        pageAnchors.clear();
+        searchHighlightPath.reset();
         searchQuery = "";
         activeSearchIndex = -1;
         readerScrollY = 0;
@@ -326,6 +347,18 @@ public class CustomReaderView extends View {
         if (layoutAffectingChange || colorChange) {
             invalidate();
         }
+    }
+
+    /**
+     * Kept as a mode hook for ReaderActivity. Large TXT must not silently
+     * override the user's page-overlap setting: if the user selected one or
+     * more overlap lines, that repetition is intentional. Partition handoff
+     * therefore prevents additional seam duplication beyond the configured
+     * overlap instead of forcing overlap to zero.
+     */
+    public void setLargeTextPartitionMode(boolean enabled) {
+        // No-op by design. Page anchoring and exact indexing always use the
+        // same overlapLines value that normal TXT paging uses.
     }
 
     public void setOverlapLines(int overlapLines) {
@@ -417,11 +450,7 @@ public class CustomReaderView extends View {
     }
 
     private int getContentHeight() {
-        if (layout == null) return marginVerticalPx * 2;
-        int effectiveLines = getEffectivePagingLineCount(layout, text);
-        if (effectiveLines <= 0) return marginVerticalPx * 2;
-        int lastLine = Math.max(0, Math.min(layout.getLineCount() - 1, effectiveLines - 1));
-        return layout.getLineBottom(lastLine) + marginVerticalPx * 2;
+        return getContentHeightForPaging(layout, text, marginVerticalPx);
     }
 
     public int getViewportHeight() {
@@ -682,10 +711,11 @@ public class CustomReaderView extends View {
     }
 
     /**
-     * Builds page anchors from actual StaticLayout line boundaries.  A page starts
-     * on the first line that was not fully visible on the previous page.  This
-     * avoids both duplicated boundary lines and skipped lines, which can happen
-     * when a fixed pixel step is snapped back to the nearest line top.
+     * Builds page anchors from actual StaticLayout line boundaries.  The next
+     * page starts from the first line not fully visible on the previous page,
+     * minus the user-configured overlap lines.  This keeps large-TXT partition
+     * seams consistent with normal TXT paging: overlap is honored when enabled,
+     * and no extra seam duplication is introduced when overlap is 0.
      */
     private void rebuildPageAnchors() {
         pageAnchors.clear();
@@ -694,9 +724,9 @@ public class CustomReaderView extends View {
             return;
         }
 
-        int lineCount = getEffectivePagingLineCount(layout, text);
+        int lineCount = layout.getLineCount();
         int viewportHeight = Math.max(1, getViewportHeight());
-        int overlap = Math.max(0, overlapLines);
+        int overlap = Math.max(0, getEffectiveOverlapLines());
 
         int startLine = 0;
         while (startLine < lineCount) {
@@ -814,8 +844,9 @@ public class CustomReaderView extends View {
     }
 
     private int getOverlapPx() {
-        if (overlapLines <= 0) return 0;
-        return Math.max(0, Math.round(getLineHeightPx() * overlapLines));
+        int effectiveOverlap = getEffectiveOverlapLines();
+        if (effectiveOverlap <= 0) return 0;
+        return Math.max(0, Math.round(getLineHeightPx() * effectiveOverlap));
     }
 
     private float getLineHeightPx() {
@@ -832,10 +863,12 @@ public class CustomReaderView extends View {
         ensurePageAnchors();
         if (layout == null || pageAnchors.isEmpty()) return 1;
 
-        int pagingEnd = getPagingTextEnd(text);
-        int targetChar = Math.max(0, Math.min(Math.max(0, pagingEnd - 1), charPosition));
-        int effectiveLines = getEffectivePagingLineCount(layout, text);
-        int line = Math.max(0, Math.min(Math.max(0, effectiveLines - 1), layout.getLineForOffset(targetChar)));
+        // Use the same full StaticLayout line space as normal TXT paging.
+        // Clamping to a "meaningful" non-newline character made EOF/last-page
+        // status disagree with the simple full-file reader.
+        int targetChar = Math.max(0, Math.min(text.length(), charPosition));
+        int line = Math.max(0, Math.min(Math.max(0, layout.getLineCount() - 1),
+                layout.getLineForOffset(targetChar)));
         int targetScrollY = scrollYForLine(line) + 1;
 
         int lo = 0;
@@ -925,12 +958,56 @@ public class CustomReaderView extends View {
         return getCharPositionFromCurrentLineOffset(0);
     }
 
+    /**
+     * Returns the first character position that has not been fully shown on the
+     * current visual page, ignoring page-overlap. This is useful for coverage
+     * checks, but it is not the visual start of the next page when overlap is
+     * enabled.
+     */
+    public int getCharPositionAfterCurrentVisibleContent() {
+        return getNextPageStartCharPosition(false);
+    }
+
+    /**
+     * Returns the visual start character of the next page using the exact same
+     * overlap rule as normal TXT paging. Large-TXT partition handoff uses this
+     * to avoid extra seam duplicates while still honoring the user's configured
+     * page-overlap setting.
+     */
+    public int getCharPositionForNextPageStartRespectingOverlap() {
+        return getNextPageStartCharPosition(true);
+    }
+
+    private int getNextPageStartCharPosition(boolean includeConfiguredOverlap) {
+        if (layout == null || text.isEmpty()) return 0;
+
+        int viewportHeight = Math.max(1, getViewportHeight());
+        int layoutTopY = Math.max(0, readerScrollY - marginVerticalPx);
+        int pageBottomLimit = layoutTopY + viewportHeight;
+        int startLine = Math.max(0, Math.min(layout.getLineCount() - 1,
+                layout.getLineForVertical(layoutTopY)));
+
+        int lastFullLine = startLine - 1;
+        for (int line = startLine; line < layout.getLineCount(); line++) {
+            if (layout.getLineBottom(line) <= pageBottomLimit) {
+                lastFullLine = line;
+            } else {
+                break;
+            }
+        }
+
+        int overlap = includeConfiguredOverlap ? Math.max(0, getEffectiveOverlapLines()) : 0;
+        int nextLine = Math.max(startLine + 1, lastFullLine + 1 - overlap);
+        nextLine = Math.max(0, Math.min(layout.getLineCount(), nextLine));
+        if (nextLine >= layout.getLineCount()) return text.length();
+        return Math.max(0, Math.min(text.length(), layout.getLineStart(nextLine)));
+    }
+
     public int getCharPositionFromCurrentLineOffset(int lineOffset) {
         if (layout == null || text.isEmpty()) return 0;
         int layoutY = Math.max(0, readerScrollY - marginVerticalPx);
         int currentLine = layout.getLineForVertical(layoutY);
-        int effectiveLines = getEffectivePagingLineCount(layout, text);
-        int targetLine = Math.max(0, Math.min(Math.max(0, effectiveLines - 1), currentLine + lineOffset));
+        int targetLine = Math.max(0, Math.min(Math.max(0, layout.getLineCount() - 1), currentLine + lineOffset));
         return Math.max(0, Math.min(text.length(), layout.getLineStart(targetLine)));
     }
 
