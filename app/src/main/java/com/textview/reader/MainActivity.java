@@ -95,7 +95,9 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private ActionBarDrawerToggle drawerToggle;
     private RecyclerView fileRecyclerView;
     private FileAdapter fileAdapter;
+    private View pathBar;
     private TextView pathText;
+    private TextView parentFolderButton;
     private TextView emptyText;
     private View recentSection;
     private View browserSection;
@@ -229,7 +231,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         installToolbarMenuButton(toolbar);
 
         fileRecyclerView = findViewById(R.id.file_list);
+        pathBar = findViewById(R.id.path_bar);
         pathText = findViewById(R.id.current_path);
+        parentFolderButton = findViewById(R.id.parent_folder_button);
+        setupParentFolderButton();
         emptyText = findViewById(R.id.empty_text);
         recentSection = findViewById(R.id.recent_section);
         browserSection = findViewById(R.id.main_content_container);
@@ -414,6 +419,58 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         super.onDestroy();
     }
 
+    private void setupParentFolderButton() {
+        if (parentFolderButton != null) {
+            parentFolderButton.setOnClickListener(v -> navigateToParentFolderFromButton());
+        }
+        updateParentFolderButtonState();
+    }
+
+    private void setPathBarVisible(boolean visible) {
+        if (pathBar != null) {
+            pathBar.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
+        if (pathText != null) {
+            pathText.setVisibility(View.VISIBLE);
+        }
+        updateParentFolderButtonState();
+    }
+
+    private void updateParentFolderButtonState() {
+        if (parentFolderButton == null) return;
+
+        boolean show = !homeMode
+                && !searchMode
+                && currentDirectory != null
+                && currentDirectory.exists()
+                && currentDirectory.isDirectory();
+        parentFolderButton.setVisibility(show ? View.VISIBLE : View.GONE);
+
+        if (show) {
+            boolean canGoUpOrHome = isRootStorage(currentDirectory)
+                    || (currentDirectory.getParentFile() != null
+                    && currentDirectory.getParentFile().canRead());
+            parentFolderButton.setEnabled(canGoUpOrHome);
+            parentFolderButton.setAlpha(canGoUpOrHome ? 1.0f : 0.42f);
+        } else {
+            parentFolderButton.setEnabled(false);
+            parentFolderButton.setAlpha(1.0f);
+        }
+    }
+
+    private void navigateToParentFolderFromButton() {
+        if (homeMode || searchMode || currentDirectory == null) return;
+        if (isRootStorage(currentDirectory)) {
+            showHomeMode();
+            return;
+        }
+
+        File parent = currentDirectory.getParentFile();
+        if (parent != null && parent.exists() && parent.isDirectory() && parent.canRead()) {
+            loadDirectory(parent);
+        }
+    }
+
     private void setupRecentHeaderActions() {
         if (recentClearAllButton != null) {
             recentClearAllButton.setOnClickListener(v -> showClearAllRecentFilesDialog());
@@ -523,7 +580,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                 updateFileSearchClearButtonVisibility();
                 if (recentSection != null) recentSection.setVisibility(View.VISIBLE);
                 if (browserSection != null) browserSection.setVisibility(View.GONE);
-                if (pathText != null) pathText.setVisibility(View.GONE);
+                setPathBarVisible(false);
                 if (getSupportActionBar() != null) {
                     getSupportActionBar().setTitle(R.string.app_name);
                 }
@@ -573,7 +630,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             homeMode = false;
             recentSection.setVisibility(View.GONE);
             browserSection.setVisibility(View.VISIBLE);
-            pathText.setVisibility(View.VISIBLE);
+            setPathBarVisible(true);
             loadDirectory(visibleFolder);
             rebuildDrawerStorageEntries();
             invalidateOptionsMenu();
@@ -833,7 +890,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         homeMode = false;
         recentSection.setVisibility(View.GONE);
         browserSection.setVisibility(View.VISIBLE);
-        pathText.setVisibility(View.VISIBLE);
+        setPathBarVisible(true);
         pathText.setText(getString(R.string.file_search_results_for, query.isEmpty() ? filterLabelFor(activeFileFilter) : query, results.size()));
         if (getSupportActionBar() != null) getSupportActionBar().setTitle(R.string.file_search);
         updateFileSearchClearButtonVisibility();
@@ -1667,7 +1724,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         homeMode = true;
         recentSection.setVisibility(View.VISIBLE);
         browserSection.setVisibility(View.GONE);
-        pathText.setVisibility(View.GONE);
+        setPathBarVisible(false);
         updateFileSearchClearButtonVisibility();
         if (getSupportActionBar() != null) {
             getSupportActionBar().setTitle(R.string.app_name);
@@ -1683,7 +1740,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         homeMode = false;
         recentSection.setVisibility(View.GONE);
         browserSection.setVisibility(View.VISIBLE);
-        pathText.setVisibility(View.VISIBLE);
+        setPathBarVisible(true);
         updateFileSearchClearButtonVisibility();
         if (prefs != null) prefs.addRecentFolder(dir.getAbsolutePath());
         loadDirectory(dir);
@@ -1735,6 +1792,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         View navDrawer = findViewById(R.id.nav_drawer);
         TextView recentTitle = findViewById(R.id.recent_section_title);
         View searchBar = findViewById(R.id.file_search_bar);
+        View localPathBar = findViewById(R.id.path_bar);
 
         if (root != null) root.setBackgroundColor(bg);
         if (browserSection != null) browserSection.setBackgroundColor(bg);
@@ -1779,9 +1837,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (recentRecyclerView != null) recentRecyclerView.setBackgroundColor(bg);
         if (recentSection != null) applyExplicitTextColors(recentSection, fg, sub);
         if (browserSection != null) applyExplicitTextColors(browserSection, fg, sub);
+        if (localPathBar != null) localPathBar.setBackgroundColor(panel);
         if (pathText != null) {
-            pathText.setBackgroundColor(panel);
             pathText.setTextColor(sub);
+        }
+        if (parentFolderButton != null) {
+            parentFolderButton.setTextColor(fg);
         }
         if (emptyText != null) emptyText.setTextColor(sub);
         if (recentEmptyText != null) recentEmptyText.setTextColor(sub);
@@ -1914,6 +1975,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             prefs.addRecentFolder(targetDir.getAbsolutePath());
         }
         if (pathText != null) pathText.setText(targetDir.getAbsolutePath());
+        updateParentFolderButtonState();
         if (getSupportActionBar() != null) {
             getSupportActionBar().setTitle(targetDir.getName().isEmpty() ? "/" : targetDir.getName());
         }

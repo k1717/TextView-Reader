@@ -309,6 +309,16 @@ public class CustomReaderView extends View {
         notifyScrollChanged();
     }
 
+    public void setTextContentAtVisualEnd(String value) {
+        text = value != null ? value : "";
+        readerScrollY = 0;
+        rebuildLayout();
+        ensurePageAnchors();
+        readerScrollY = Math.max(0, maxScrollY);
+        invalidate();
+        notifyScrollChanged();
+    }
+
     public String getTextContent() {
         return text;
     }
@@ -1009,6 +1019,17 @@ public class CustomReaderView extends View {
 
     public void scrollToPage(int page) {
         setReaderScrollY(getPageAnchorScrollY(page));
+    }
+
+    /**
+     * Moves to the physical bottom clamp of the rendered text, not merely the
+     * last page anchor.  On some files the final global page is represented by
+     * the small tail between the last line-aligned page anchor and maxScrollY;
+     * tap paging must be able to reach that tail just like manual scroll can.
+     */
+    public void scrollToVisualEndOfText() {
+        ensurePageAnchors();
+        setReaderScrollY(maxScrollY);
     }
 
     public void pageBy(int direction) {
