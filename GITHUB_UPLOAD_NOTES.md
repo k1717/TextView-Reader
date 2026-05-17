@@ -105,3 +105,28 @@ Before uploading, confirm the package does not contain:
 - local SDK path files;
 - signing keys;
 - secret/environment files.
+
+## Release notes summary for v2.1.1
+
+Use this if GitHub asks for a release description. This summary lists the functional difference from the uploaded **2.1.0** source package. The full previous-version history remains in `CHANGELOG.md`:
+
+```markdown
+## TextView Reader 2.1.1
+
+2.1.1 is a functional polish and stability release over 2.1.0. It keeps the same package identity and migration model.
+
+### Functional changes from 2.1.0
+
+- Large TXT now uses fixed 4,000-logical-line active partitions, lookahead rendering, neighbor partition caching, direction-aware prefetch, in-place partition switching, and a background exact whole-file page-anchor index.
+- Large TXT partition seams now use next-page anchors and the configured overlap setting, preventing skipped content and preventing extra duplicated display beyond the selected overlap.
+- TXT page status stays stable during fast partition-boundary paging, and status-bar visibility uses canonical status-bar-off spacing so total page count does not change when the Android status bar is toggled.
+- TXT toolbar slider, Go to Page, and bookmark jumps hold the selected target while async loading is pending and use the compact rounded loading panel only for slower uncached jumps.
+- Bookmark backup export now uses `bookmarkEdits.beginner` and `bookmarkEdits.developer`, with friendlier English/Korean guidance and backward-compatible import from the old `beginnerEditableBookmarks` format.
+- TXT bookmark jumps pass anchor context to improve restoration after layout, partition, or file-binding changes.
+- PDF original-size swipes are more sensitive, fast page/zoom redraws avoid spinner flashes, and zoomed next/previous page turns land centered instead of upper-left.
+- EPUB adds left-to-right / Japanese-style right-to-left page-direction settings and slide/none transition behavior.
+- Large-TXT runtime memory is cleared more aggressively on reader release, stale background generations are invalidated on destroy, and background file reads use application context where possible.
+- The GitHub source package includes `.gitignore` and excludes local configuration, build outputs, signing keys, secrets, logs, and exported backup JSON files.
+
+Version metadata: `versionCode 211`, `versionName 2.1.1`.
+```

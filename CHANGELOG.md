@@ -2,14 +2,21 @@
 
 ## 2.1.1 - 2026-05-16
 
-This entry shows the functional difference from the uploaded **2.1.0** GitHub source package. It does not list every intermediate patch step.
+This entry shows the final functional difference from the uploaded **2.1.0** GitHub source package. It does not list every intermediate patch step, while older version entries remain below for full history.
 
 ### Large TXT paging and partitioning
 
 - Changed large TXT active rendering to fixed **4,000-logical-line partitions** instead of the earlier estimated preview-window behavior.
 - Added a lookahead region after each active partition so partition-end pages can render smoothly.
 - Added in-place partition switching so crossing a partition boundary behaves like a page turn instead of a visible file reload where possible.
+- Added coverage-exact partition handoff: before the exact global index is ready, large-TXT forward page turns continue from the first line not displayed on the previous screen instead of jumping blindly to the next 4,000-line boundary. This prevents skipped content and prevents extra repeated displayed lines beyond the configured overlap at partition seams.
+- Respected the configured page-overlap setting in large-TXT partition mode while preventing extra duplication at partition seams beyond the user-selected overlap.
+- Preserved the displayed global page number during partition-boundary page turns when the exact large-TXT page index is still unavailable, preventing jumps such as `8082/8093` suddenly falling back to an earlier partition estimate.
+- Hardened rapid backward page turns at partition boundaries by blocking stacked boundary reloads until the active partition swap finishes.
+- Preserved the current displayed total page count during partition swaps instead of recomputing the denominator from the temporary active partition.
 - Added neighbor partition prefetching and a small partition cache for smoother boundary crossing.
+- Expanded the active partition cache and made prefetch direction-aware, so repeated forward paging prioritizes next/next-next partitions while repeated backward paging prioritizes previous/previous-previous partitions.
+- Added exact-index-aware queued page taps while a partition swap is pending, so rapid page-key input can be resolved through exact anchors after the swap instead of stacking unsafe reloads.
 
 ### Large TXT exact page index
 
@@ -17,19 +24,22 @@ This entry shows the functional difference from the uploaded **2.1.0** GitHub so
 - Optimized current-page lookup using page anchors instead of linear scanning.
 - Improved toolbar slider, Go to Page, Page Up/Down, and bookmark jump accuracy after the exact index is ready.
 - Prevented exact Go to Page from silently relying on estimated positions while the exact index is still unavailable.
+- Added layout-signature and generation checks to discard stale exact page-index jobs when TXT layout geometry, font, overlap, or file metadata changes before indexing finishes.
 
-### TXT toolbar slider and loading window
+### TXT toolbar, loading window, and status-bar spacing
 
 - Fixed toolbar page slider snap-back during async large-TXT jumps.
 - Added pending target-page state so slider and label stay on the user-selected destination while loading.
 - Restyled the TXT loading window as a compact rounded, theme-aware panel.
 - Used the loading window for uncached large-TXT slider, Go to Page, and bookmark jumps.
 - Kept cached same-partition jumps immediate without unnecessary loading flashes.
+- Stabilized TXT pagination against status-bar visibility changes by using status-bar-off top spacing as the canonical TXT content layout.
+- Moved the TXT page-indicator row visually lower by one reader text row so the stable spacing does not make the indicator feel pinned to the top.
 
 ### Large TXT final-page behavior
 
-- Ignored terminal blank-line filler for page-index and paging calculations.
-- Normalized EOF page status so the final meaningful text reports the true final page instead of creating an extra blank page or stopping one page early.
+- Kept the exact page index aligned with the full StaticLayout paging model used by the TXT renderer, so large-TXT page boundaries use the same visual layout model as the active viewer.
+- Normalized EOF page status so the final visible document content reports the final page instead of stopping one page early.
 
 ### Bookmark backup editing
 
@@ -66,6 +76,13 @@ This entry shows the functional difference from the uploaded **2.1.0** GitHub so
 - Renamed right-to-left EPUB wording to **Japanese-style** reading.
 - Added EPUB transition-effect setting for slide or none.
 - Made EPUB swipe direction and slide animation follow the selected reading direction.
+
+### Memory and lifecycle hardening
+
+- Cleared large-TXT partition caches, pending prefetch markers, exact page anchors, queued page deltas, and partition-switch state when the TXT reader releases memory.
+- Invalidated large-TXT exact-index and partition-switch generations during TXT reader destruction so stale background work cannot reapply after the viewer closes.
+- Switched background TXT file reads and exact-index reads to use the application context where possible, reducing temporary Activity retention risk without changing reader behavior.
+- Cleared `CustomReaderView` page-anchor and search-highlight path state when text resources are released.
 
 ## 2.1.0 - 2026-05-15
 
@@ -132,6 +149,7 @@ This entry lists the functional difference from **2.0.8** only. The 2.0.8 hardwa
 - Fixed hard-landing behavior for main-screen long-press follow-up windows: **Delete / 삭제**, **Rename / 이름 변경**, and **File Info / 파일 정보**.
 - Moved the **Delete / 삭제** confirmation window slightly below center, while keeping it clearly above the **Rename / 이름 변경** window.
 - Moved the **Rename / 이름 변경** window slightly upward from its previous bottom position.
+
 
 ### Main-screen folder loading
 

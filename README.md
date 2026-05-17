@@ -6,18 +6,23 @@ Current version: **2.1.1**
 
 ## What changed in 2.1.1 from 2.1.0
 
-- Reworked large TXT active rendering to use fixed **4,000-logical-line partitions** with lookahead, neighbor prefetch, and in-place partition switching where possible.
-- Added a background exact large-TXT page-anchor index so page labels, toolbar slider jumps, Go to Page, and bookmark jumps can resolve against real page anchors after indexing completes.
-- Fixed large TXT final-page/EOF handling so terminal blank line filler does not create an extra blank final page or make the final content report one page early.
+- Reworked large TXT active rendering around fixed **4,000-logical-line partitions** with lookahead, in-place partition switching, a bounded partition cache, and direction-aware neighbor prefetch.
+- Added a background exact large-TXT page-anchor index so page labels, toolbar slider jumps, Go to Page, page turns, and bookmark jumps can resolve against real page anchors after indexing completes.
+- Hardened large-TXT partition seams so page movement continues from the correct next-page anchor, respects the configured page-overlap setting, and avoids extra duplicated or skipped displayed content at 4,000-line boundaries.
+- Stabilized large-TXT page status during fast forward/backward partition changes so temporary partition estimates do not make the displayed page or total page count jump backward.
+- Made TXT pagination use a canonical status-bar-off content spacing model, so toggling Android status-bar visibility does not change TXT page counts. The page indicator is visually lowered by one reader text row.
 - Fixed TXT toolbar slider and Go to Page behavior so the selected target page does not snap back to the old page while an uncached large-TXT partition is loading.
 - Updated the TXT loading window to a compact rounded, theme-aware panel and reused it for uncached large-TXT slider, Go to Page, and bookmark jumps.
-- Changed backup bookmark PC editing from the long repeated `beginnerEditableBookmarks` tutorial format to a cleaner `bookmarkEdits.beginner` / `bookmarkEdits.developer` structure, while keeping backward-compatible import for old backups.
+- Changed backup bookmark PC editing from the old repeated `beginnerEditableBookmarks` tutorial format to a cleaner `bookmarkEdits.beginner` / `bookmarkEdits.developer` structure, while keeping backward-compatible import for old backups.
 - Added friendlier bilingual English/Korean backup-edit guidance for both beginner-safe edits and developer/internal recovery edits.
 - Improved TXT bookmark loading by carrying anchor context into bookmark jumps, making large-TXT and layout-change restoration more stable.
 - Made original-size PDF page swipes more sensitive while keeping zoomed PDF gestures conservative enough to pan first.
 - Removed the PDF loading spinner from fast page-turn and zoom redraws, while keeping it for initial PDF loading.
 - Changed zoomed PDF next/previous page turns to land centered instead of at the upper-left corner.
 - Added EPUB page-direction and transition settings, including right-to-left **Japanese-style** reading and an option to disable slide animation.
+- Added memory/lifecycle hardening for large TXT caches, pending prefetch state, exact page anchors, partition-switch generations, and background file-read context use.
+- Added root `.gitignore` rules for GitHub submission and excluded local configuration, build outputs, signing files, secrets, logs, and exported backup JSON files from the source package.
+- Updated Android version metadata to `versionCode 211` and `versionName "2.1.1"`.
 
 ## What changed in 2.1.0 from 2.0.9
 
