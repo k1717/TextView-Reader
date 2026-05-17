@@ -105,6 +105,8 @@
     <string name="merge_or_replace">Merge with existing data/settings or replace backed-up items?</string>
     <string name="more">More</string>
     <string name="new_folder">New Folder</string>
+    <string name="parent_folder">Parent folder</string>
+    <string name="parent_folder_short">← Parent folder</string>
     <string name="no_bookmarks_hint">No bookmarks yet.\nUse the button above to save this position.</string>
     <string name="no_overlap">No overlap</string>
     <string name="no_text_files_found">No supported files found</string>
@@ -198,7 +200,11 @@
     <string name="find_previous">Find Previous</string>
     <string name="enter_search_text">Enter search text</string>
     <string name="found_match_status">%1$d / %2$d found at position %3$d</string>
-    <string name="search_hint_multiple">Use Find Next / Previous to move through repeated matches.</string>
+    <string name="search_hint_multiple">Use Find Next / Previous, or enter a match number and tap Nth.</string>
+    <string name="find_nth">Nth</string>
+    <string name="search_occurrence_hint">Nth match number (optional)</string>
+    <string name="search_occurrence_invalid">Enter a valid match number.</string>
+    <string name="search_occurrence_out_of_range">Only %1$d matches found.</string>
     <string name="external_storage">External Storage</string>
     <string name="downloads">Downloads</string>
     <string name="recent">Recent</string>

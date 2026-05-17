@@ -105,6 +105,8 @@
     <string name="merge_or_replace">기존 데이터/설정과 합칠까요, 아니면 백업 항목으로 바꿀까요?</string>
     <string name="more">더보기</string>
     <string name="new_folder">새 폴더</string>
+    <string name="parent_folder">상위 폴더로</string>
+    <string name="parent_folder_short">← 상위 폴더로</string>
     <string name="no_bookmarks_hint">북마크가 없습니다.\n위 버튼으로 현재 위치를 저장하세요.</string>
     <string name="no_overlap">겹침 없음</string>
     <string name="no_text_files_found">지원되는 파일이 없습니다</string>
@@ -198,7 +200,11 @@
     <string name="find_previous">이전 찾기</string>
     <string name="enter_search_text">검색할 텍스트를 입력하세요</string>
     <string name="found_match_status">%2$d개 중 %1$d번째, 위치 %3$d</string>
-    <string name="search_hint_multiple">다음/이전 찾기로 같은 단어를 계속 이동합니다.</string>
+    <string name="search_hint_multiple">다음/이전 찾기 또는 번호 입력 후 n번째 버튼으로 이동합니다.</string>
+    <string name="find_nth">n번째</string>
+    <string name="search_occurrence_hint">n번째 일치 항목 (선택)</string>
+    <string name="search_occurrence_invalid">올바른 일치 항목 번호를 입력하세요.</string>
+    <string name="search_occurrence_out_of_range">일치 항목은 %1$d개뿐입니다.</string>
     <string name="external_storage">외장 저장소</string>
     <string name="downloads">다운로드</string>
     <string name="recent">최근 항목</string>
