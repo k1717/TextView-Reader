@@ -108,7 +108,6 @@ Current version: **2.1.1**
 
 - Encoding detection for UTF-8, EUC-KR/CP949/MS949, and UTF-16.
 - Large TXT handling with fixed 4,000-logical-line active partitions, lookahead rendering, neighbor prefetch, and generated page/index cache bookkeeping.
-- Huge TXT preview-only threshold increased to **32 MB**.
 - Generated TXT cache cleanup uses retention logic for disposable pagination/index data.
 - Cache cleanup does not delete bookmarks, history, reading position, folder shortcuts, or documents.
 - Text search with custom reader-dialog input styling.
