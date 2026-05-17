@@ -39,7 +39,9 @@ public class CustomReaderView extends View {
 
     public interface ReaderListener {
         void onSingleTap(float x, float y);
+        void onTextLongPress(String selectedText, int charPosition, float x, float y);
         void onReaderScrollChanged();
+        void onReaderManualScroll();
     }
 
     public static final class PageTextAnchor {
@@ -223,6 +225,7 @@ public class CustomReaderView extends View {
     private final int touchSlop;
     private final int minFlingVelocity;
     private final int maxFlingVelocity;
+    private final int longPressTimeoutMs;
 
     private VelocityTracker velocityTracker;
     private ReaderListener listener;
@@ -251,6 +254,8 @@ public class CustomReaderView extends View {
     private float downY;
     private float lastY;
     private boolean dragging;
+    private boolean longPressTriggered;
+    private Runnable pendingLongPressRunnable;
 
     public CustomReaderView(Context context) {
         this(context, null);
@@ -263,6 +268,7 @@ public class CustomReaderView extends View {
         touchSlop = vc.getScaledTouchSlop();
         minFlingVelocity = vc.getScaledMinimumFlingVelocity();
         maxFlingVelocity = vc.getScaledMaximumFlingVelocity();
+        longPressTimeoutMs = ViewConfiguration.getLongPressTimeout();
         setFocusable(true);
         paint.setColor(textColor);
         paint.setTextSize(spToPx(fontSizeSp));
@@ -281,6 +287,7 @@ public class CustomReaderView extends View {
             scroller.abortAnimation();
         }
         recycleVelocityTracker();
+        cancelPendingLongPress();
 
         listener = null;
         text = "";
@@ -542,12 +549,18 @@ public class CustomReaderView extends View {
                 downY = event.getY();
                 lastY = downY;
                 dragging = false;
+                longPressTriggered = false;
+                scheduleLongPress(downX, downY);
                 return true;
 
             case MotionEvent.ACTION_MOVE:
                 float y = event.getY();
                 float dy = lastY - y;
-                if (!dragging && Math.abs(y - downY) > touchSlop) dragging = true;
+                if (!dragging && Math.abs(y - downY) > touchSlop) {
+                    dragging = true;
+                    cancelPendingLongPress();
+                    if (listener != null) listener.onReaderManualScroll();
+                }
                 if (dragging) {
                     scrollByPixels((int) dy);
                     lastY = y;
@@ -555,6 +568,11 @@ public class CustomReaderView extends View {
                 return true;
 
             case MotionEvent.ACTION_UP:
+                cancelPendingLongPress();
+                if (longPressTriggered) {
+                    recycleVelocityTracker();
+                    return true;
+                }
                 if (!dragging && Math.abs(event.getX() - downX) < touchSlop && Math.abs(event.getY() - downY) < touchSlop) {
                     if (listener != null) listener.onSingleTap(event.getX(), event.getY());
                 } else {
@@ -569,10 +587,73 @@ public class CustomReaderView extends View {
                 return true;
 
             case MotionEvent.ACTION_CANCEL:
+                cancelPendingLongPress();
                 recycleVelocityTracker();
                 return true;
         }
         return true;
+    }
+
+    private void scheduleLongPress(float x, float y) {
+        cancelPendingLongPress();
+        pendingLongPressRunnable = () -> {
+            if (dragging || listener == null) return;
+            TextHit hit = getWordHitAt(x, y);
+            if (hit == null || hit.text == null || hit.text.trim().isEmpty()) return;
+            longPressTriggered = true;
+            listener.onTextLongPress(hit.text, hit.charPosition, x, y);
+        };
+        postDelayed(pendingLongPressRunnable, longPressTimeoutMs);
+    }
+
+    private void cancelPendingLongPress() {
+        if (pendingLongPressRunnable != null) {
+            removeCallbacks(pendingLongPressRunnable);
+            pendingLongPressRunnable = null;
+        }
+    }
+
+    private static final class TextHit {
+        final String text;
+        final int charPosition;
+        TextHit(String text, int charPosition) {
+            this.text = text;
+            this.charPosition = charPosition;
+        }
+    }
+
+    private TextHit getWordHitAt(float viewX, float viewY) {
+        if (layout == null || text == null || text.isEmpty()) return null;
+        int viewportTop = getTextViewportTopY();
+        float layoutX = viewX - getPaddingLeft() - marginHorizontalPx - leftTextInsetPx;
+        float layoutY = viewY - viewportTop - marginVerticalPx + getVisualScrollYForDraw();
+        if (layoutX < 0 || layoutY < 0 || layoutY > layout.getHeight()) return null;
+        int line = Math.max(0, Math.min(layout.getLineCount() - 1,
+                layout.getLineForVertical(Math.max(0, Math.round(layoutY)))));
+        int offset = Math.max(0, Math.min(text.length(), layout.getOffsetForHorizontal(line, layoutX)));
+        if (offset >= text.length() && text.length() > 0) offset = text.length() - 1;
+        if (offset < 0 || offset >= text.length()) return null;
+
+        // If the exact offset is punctuation/space, try the previous char first.
+        int seed = offset;
+        if (!isWordChar(text.charAt(seed)) && seed > 0 && isWordChar(text.charAt(seed - 1))) {
+            seed--;
+        }
+        if (!isWordChar(text.charAt(seed))) return null;
+
+        int start = seed;
+        int end = seed + 1;
+        while (start > 0 && isWordChar(text.charAt(start - 1))) start--;
+        while (end < text.length() && isWordChar(text.charAt(end))) end++;
+        String word = text.substring(start, end).trim();
+        if (word.isEmpty()) return null;
+        return new TextHit(word, start);
+    }
+
+    private static boolean isWordChar(char ch) {
+        if (Character.isLetterOrDigit(ch)) return true;
+        int type = Character.getType(ch);
+        return ch == '_' || ch == '-' || type == Character.OTHER_LETTER;
     }
 
     private void recycleVelocityTracker() {

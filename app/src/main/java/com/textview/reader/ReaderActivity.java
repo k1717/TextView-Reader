@@ -21,6 +21,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
 import android.text.TextPaint;
+import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -36,6 +37,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
+import android.widget.Space;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.Button;
@@ -43,6 +45,7 @@ import android.widget.CompoundButton;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
@@ -66,6 +69,8 @@ import com.textview.reader.util.PrefsManager;
 import com.textview.reader.util.PageIndexCacheManager;
 import com.textview.reader.util.ReadingNotificationHelper;
 import com.textview.reader.util.ThemeManager;
+import com.textview.reader.util.TextDisplayRule;
+import com.textview.reader.util.TextDisplayRuleManager;
 import com.textview.reader.view.CustomReaderView;
 
 import java.io.File;
@@ -104,6 +109,11 @@ public class ReaderActivity extends AppCompatActivity {
     private static final int LARGE_TEXT_PARTITION_BYTES = 3 * 1024 * 1024;
     private static final int LARGE_TEXT_PREVIEW_BYTES = LARGE_TEXT_PARTITION_BYTES;
     private static final int TXT_TOOLBAR_POPUP_Y_DP = 74;
+    private static final String TXT_ACTUAL_FILE_EDIT_PREFS = "txt_actual_file_edit";
+    private static final String KEY_TXT_ACTUAL_FILE_EDIT_PATH = "modified_path";
+    private static final String KEY_TXT_ACTUAL_FILE_EDIT_TOKEN = "modified_token";
+    private static final String KEY_TXT_ACTUAL_FILE_EDIT_LENGTH = "modified_length";
+    private static final String KEY_TXT_ACTUAL_FILE_EDIT_LAST_MODIFIED = "modified_last_modified";
     private static final int TXT_BOOKMARK_POPUP_Y_DP = 34;
     private static final int TXT_BOOKMARK_HINT_POPUP_Y_DP = 112;
     private static final String FONT_OPTION_SYSTEM_CURRENT = "system_current";
@@ -319,9 +329,26 @@ public class ReaderActivity extends AppCompatActivity {
     private boolean largeTextExactPageIndexBuilding = false;
     private final AtomicInteger largeTextExactPageIndexGeneration = new AtomicInteger(0);
     private String largeTextExactPageIndexSignature = "";
+    private String appliedTextDisplayRuleSignature = "none";
+    private boolean pendingTxtDisplayRuleContentRefresh = false;
     private int largeTextLastPageDirection = 0;
     private int largeTextSameDirectionPageCount = 0;
     private int queuedLargeTextPageDelta = 0;
+    private boolean autoPageTurnRunning = false;
+    private final Runnable autoPageTurnRunnable = new Runnable() {
+        @Override public void run() {
+            if (!autoPageTurnRunning || activityDestroyed) return;
+            int total = Math.max(1, getDisplayedTotalPageCount());
+            int current = Math.max(1, getDisplayedCurrentPageNumber());
+            if (current >= total) {
+                stopAutoPageTurn(true);
+                Toast.makeText(ReaderActivity.this, R.string.auto_page_turn_end_reached, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            pageBy(+1, true);
+            scheduleNextAutoPageTurn();
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -371,7 +398,11 @@ public class ReaderActivity extends AppCompatActivity {
 
         readerView.setReaderListener(new CustomReaderView.ReaderListener() {
             @Override public void onSingleTap(float x, float y) { handleSingleTap(x, y); }
+            @Override public void onTextLongPress(String selectedText, int charPosition, float x, float y) {
+                showQuickTextDisplayRuleDialog(selectedText, true);
+            }
             @Override public void onReaderScrollChanged() { onScrollChanged(); }
+            @Override public void onReaderManualScroll() { stopAutoPageTurnForManualNavigation(); }
         });
 
         applyPreferences();
@@ -405,8 +436,82 @@ public class ReaderActivity extends AppCompatActivity {
         }
         if (readerView != null && prefs != null && themeManager != null) {
             applyTheme();
+            if (maybeReloadForPhysicallyEditedOriginalTxtFile()) return;
+            maybeReloadForTextDisplayRuleChange();
             updatePositionLabel();
         }
+    }
+
+    private boolean maybeReloadForPhysicallyEditedOriginalTxtFile() {
+        if (filePath == null || filePath.isEmpty() || readerView == null) return false;
+        android.content.SharedPreferences markerPrefs = getSharedPreferences(TXT_ACTUAL_FILE_EDIT_PREFS, MODE_PRIVATE);
+        String modifiedPath = markerPrefs.getString(KEY_TXT_ACTUAL_FILE_EDIT_PATH, "");
+        long token = markerPrefs.getLong(KEY_TXT_ACTUAL_FILE_EDIT_TOKEN, 0L);
+        if (token <= 0L || modifiedPath == null || modifiedPath.isEmpty()) return false;
+
+        File currentFile = new File(filePath).getAbsoluteFile();
+        File modifiedFile = new File(modifiedPath).getAbsoluteFile();
+        if (!currentFile.getAbsolutePath().equals(modifiedFile.getAbsolutePath())) return false;
+
+        markerPrefs.edit()
+                .remove(KEY_TXT_ACTUAL_FILE_EDIT_PATH)
+                .remove(KEY_TXT_ACTUAL_FILE_EDIT_TOKEN)
+                .remove(KEY_TXT_ACTUAL_FILE_EDIT_LENGTH)
+                .remove(KEY_TXT_ACTUAL_FILE_EDIT_LAST_MODIFIED)
+                .apply();
+
+        int currentPosition = Math.max(0, getCurrentCharPosition());
+        Intent reloadIntent = new Intent(getIntent());
+        reloadIntent.putExtra(EXTRA_FILE_PATH, currentFile.getAbsolutePath());
+        reloadIntent.removeExtra(EXTRA_FILE_URI);
+        reloadIntent.putExtra(EXTRA_JUMP_TO_POSITION, currentPosition);
+        reloadIntent.putExtra(EXTRA_JUMP_DISPLAY_PAGE, getDisplayedCurrentPageNumber());
+        reloadIntent.putExtra(EXTRA_JUMP_TOTAL_PAGES, getDisplayedTotalPageCount());
+        clearLoadedTextSnapshot();
+        resetLargeTextExactPageIndex();
+        clearLargeTextPartitionCache();
+        loadFileFromIntent(reloadIntent);
+        return true;
+    }
+
+    private void maybeReloadForTextDisplayRuleChange() {
+        if (filePath == null || filePath.isEmpty() || readerView == null) return;
+        String current = TextDisplayRuleManager.getSignature(getApplicationContext(), filePath);
+        if (current.equals(appliedTextDisplayRuleSignature)) return;
+        int currentPosition = Math.max(0, getCurrentCharPosition());
+        Intent reloadIntent = new Intent(getIntent());
+        reloadIntent.putExtra(EXTRA_FILE_PATH, filePath);
+        reloadIntent.removeExtra(EXTRA_FILE_URI);
+        reloadIntent.putExtra(EXTRA_JUMP_TO_POSITION, currentPosition);
+        reloadIntent.putExtra(EXTRA_JUMP_DISPLAY_PAGE, getDisplayedCurrentPageNumber());
+        reloadIntent.putExtra(EXTRA_JUMP_TOTAL_PAGES, getDisplayedTotalPageCount());
+        clearLoadedTextSnapshot();
+        loadFileFromIntent(reloadIntent);
+    }
+
+    private String currentTextDisplayRuleSignature() {
+        if (filePath == null || filePath.isEmpty()) return "none";
+        return TextDisplayRuleManager.getSignature(getApplicationContext(), filePath);
+    }
+
+    private void requestTextDisplayRuleContentRefreshOnWindowClose() {
+        pendingTxtDisplayRuleContentRefresh = true;
+    }
+
+    private void acknowledgeTextDisplayRuleWindowNoContentChange() {
+        if (!pendingTxtDisplayRuleContentRefresh) {
+            appliedTextDisplayRuleSignature = currentTextDisplayRuleSignature();
+        }
+    }
+
+    private void applyPendingTextDisplayRuleWindowRefresh() {
+        if (!pendingTxtDisplayRuleContentRefresh) return;
+        pendingTxtDisplayRuleContentRefresh = false;
+        maybeReloadForTextDisplayRuleChange();
+    }
+
+    private boolean sameTextDisplayRuleValue(String a, String b) {
+        return TextUtils.equals(a != null ? a : "", b != null ? b : "");
     }
 
     @Override
@@ -482,6 +587,7 @@ public class ReaderActivity extends AppCompatActivity {
         hideLoadingWindow();
 
         filePath = snapshot.filePath;
+        appliedTextDisplayRuleSignature = TextDisplayRuleManager.getSignature(getApplicationContext(), filePath);
         fileName = snapshot.fileName != null ? snapshot.fileName : getString(R.string.app_name);
         fileContent = snapshot.fileContent;
         totalChars = snapshot.totalChars;
@@ -555,7 +661,7 @@ public class ReaderActivity extends AppCompatActivity {
                 pendingPage = Math.max(1, Math.min(pages, pendingPage));
                 previewToolbarSeekPage(pendingPage, pages);
 
-                boolean accepted = scrollToPageNumber(pendingPage, true);
+                boolean accepted = scrollToPageNumber(pendingPage, true, true);
                 if (accepted) {
                     beginPendingToolbarSeekJump(pendingPage, pages);
                 } else {
@@ -1389,6 +1495,17 @@ public class ReaderActivity extends AppCompatActivity {
         return button;
     }
 
+    private TextView makeCompactReaderDialogActionText(String label, int textColor) {
+        TextView button = makeReaderDialogActionText(label, textColor, Gravity.CENTER);
+        button.setTextSize(12f);
+        button.setSingleLine(true);
+        button.setMaxLines(1);
+        button.setEllipsize(TextUtils.TruncateAt.END);
+        button.setIncludeFontPadding(false);
+        button.setPadding(dpToPx(4), 0, dpToPx(4), 0);
+        return button;
+    }
+
 
 
     private int dialogActionPanelFillColor(int bgColor) {
@@ -1971,8 +2088,12 @@ public class ReaderActivity extends AppCompatActivity {
         setupBottomToolbarButton(R.id.btn_open_file, this::showTextSearch);
         setupBottomToolbarButton(R.id.btn_page_move, this::showPageMoveBubble);
         setupBottomToolbarButton(R.id.btn_bookmark, this::showBookmarksForFile);
-        setupBottomToolbarButton(R.id.btn_settings,
-                () -> startActivity(new Intent(this, SettingsActivity.class)));
+        setupBottomToolbarButton(R.id.btn_auto_page, this::showAutoPageTurnDialog);
+        setupBottomToolbarButton(R.id.btn_settings, () -> {
+            Intent settingsIntent = new Intent(this, SettingsActivity.class);
+            if (filePath != null) settingsIntent.putExtra("txt_file_path", filePath);
+            startActivity(settingsIntent);
+        });
         setupBottomToolbarButton(R.id.btn_more, this::showMoreDialog);
     }
 
@@ -2152,7 +2273,7 @@ public class ReaderActivity extends AppCompatActivity {
                 int pages = getDisplayedTotalPageCount();
                 int page = Math.max(1, Math.min(pages, pendingPage[0]));
                 previewToolbarSeekPage(page, pages);
-                boolean accepted = scrollToPageNumber(page, true);
+                boolean accepted = scrollToPageNumber(page, true, true);
                 if (accepted) {
                     beginPendingToolbarSeekJump(page, pages);
                 } else {
@@ -2179,7 +2300,7 @@ public class ReaderActivity extends AppCompatActivity {
                 int pages = getDisplayedTotalPageCount();
                 page = Math.max(1, Math.min(pages, page));
                 previewToolbarSeekPage(page, pages);
-                boolean accepted = scrollToPageNumber(page, true);
+                boolean accepted = scrollToPageNumber(page, true, true);
                 if (accepted) {
                     beginPendingToolbarSeekJump(page, pages);
                 } else {
@@ -2233,6 +2354,8 @@ public class ReaderActivity extends AppCompatActivity {
         addMoreActionRow(list, getString(R.string.increase_font), fg, panel, () -> changeFontSize(2f), ref);
         addMoreActionRow(list, getString(R.string.decrease_font), fg, panel, () -> changeFontSize(-2f), ref);
         addMoreActionRow(list, getString(R.string.reset_font_size), fg, panel, this::resetFontSize, ref);
+        addMoreActionRow(list, getString(R.string.txt_display_rule_quick_add), fg, panel, () -> showQuickTextDisplayRuleDialog("", true), ref);
+        addMoreActionRow(list, getString(R.string.txt_display_rule_manage), fg, panel, this::showReaderTextDisplayRulesManagerDialog, ref);
         addMoreActionRow(list, getString(R.string.file_info), fg, panel, this::showFileInfoDialog, ref);
 
         outer.addView(scroll, new LinearLayout.LayoutParams(
@@ -2287,6 +2410,710 @@ public class ReaderActivity extends AppCompatActivity {
         dialog.show();
     }
 
+    private void openTextDisplayRuleSettings() {
+        Intent settingsIntent = new Intent(this, SettingsActivity.class);
+        if (filePath != null) settingsIntent.putExtra("txt_file_path", filePath);
+        startActivity(settingsIntent);
+    }
+
+    private void showQuickTextDisplayRuleDialog(String prefillFind, boolean defaultCurrentFileOnly) {
+        showReaderTextDisplayRuleEditDialog(prefillFind, defaultCurrentFileOnly, -1);
+    }
+
+    private void showReaderTextDisplayRuleEditDialog(String prefillFind, boolean defaultCurrentFileOnly, int editIndex) {
+        showReaderTextDisplayRuleEditDialog(prefillFind, defaultCurrentFileOnly, editIndex, null);
+    }
+
+    private void showReaderTextDisplayRuleEditDialog(String prefillFind, boolean defaultCurrentFileOnly, int editIndex, @Nullable Runnable onSaved) {
+        syncReaderDialogThemeSnapshot();
+        final int bg = readerDialogBgColor();
+        final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
+        ArrayList<TextDisplayRule> rules = new ArrayList<>(TextDisplayRuleManager.getRules(getApplicationContext()));
+        TextDisplayRule editingRule = editIndex >= 0 && editIndex < rules.size() ? rules.get(editIndex) : null;
+        boolean editingExistingRule = editingRule != null;
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+        panel.setClipChildren(true);
+        panel.setClipToPadding(true);
+
+        TextView title = makeReaderDialogTitle(
+                editingExistingRule ? getString(R.string.edit) : getString(R.string.txt_display_rule_quick_add),
+                bg,
+                fg);
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = dpToPx(16);
+        box.setPadding(pad, dpToPx(2), pad, dpToPx(10));
+        box.setBackgroundColor(Color.TRANSPARENT);
+
+        TextView tip = new TextView(this);
+        tip.setText(R.string.txt_display_rule_quick_tip);
+        tip.setTextSize(12f);
+        tip.setTextColor(sub);
+        tip.setLineSpacing(0, 1.08f);
+        tip.setPadding(0, 0, 0, dpToPx(8));
+        box.addView(tip, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        EditText findInput = makeReaderDialogEditText(getString(R.string.txt_display_rule_find_hint), bg, fg, sub);
+        findInput.setSingleLine(true);
+        findInput.setTextSize(14f);
+        findInput.setPadding(dpToPx(12), 0, dpToPx(12), 0);
+        findInput.setText(editingExistingRule ? editingRule.findText : (prefillFind != null ? prefillFind : ""));
+        findInput.setSelectAllOnFocus(true);
+        box.addView(findInput, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(46)));
+
+        EditText replaceInput = makeReaderDialogEditText(getString(R.string.txt_display_rule_replace_hint), bg, fg, sub);
+        replaceInput.setSingleLine(true);
+        replaceInput.setTextSize(14f);
+        replaceInput.setPadding(dpToPx(12), 0, dpToPx(12), 0);
+        if (editingExistingRule) replaceInput.setText(editingRule.replacementText);
+        LinearLayout.LayoutParams replaceLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(46));
+        replaceLp.setMargins(0, dpToPx(6), 0, 0);
+        box.addView(replaceInput, replaceLp);
+
+        CompoundButton enabledBox = new SwitchCompat(this);
+        enabledBox.setText(R.string.enabled);
+        enabledBox.setChecked(editingExistingRule ? editingRule.enabled : true);
+        styleQuickTextDisplayRuleOption(enabledBox, fg);
+        box.addView((View) enabledBox);
+
+        CompoundButton caseBox = new SwitchCompat(this);
+        caseBox.setText(R.string.txt_display_rule_case_sensitive);
+        caseBox.setChecked(editingExistingRule && editingRule.caseSensitive);
+        styleQuickTextDisplayRuleOption(caseBox, fg);
+        box.addView((View) caseBox);
+
+        CompoundButton regexBox = new SwitchCompat(this);
+        regexBox.setText(R.string.txt_display_rule_use_regex);
+        regexBox.setChecked(editingExistingRule && editingRule.useRegex);
+        styleQuickTextDisplayRuleOption(regexBox, fg);
+        box.addView((View) regexBox);
+
+        CompoundButton fileOnlyBox = new SwitchCompat(this);
+        fileOnlyBox.setText(R.string.txt_display_rule_current_file_only);
+        fileOnlyBox.setChecked(editingExistingRule
+                ? TextDisplayRule.SCOPE_FILE.equals(editingRule.scope)
+                : (defaultCurrentFileOnly && filePath != null && !filePath.isEmpty()));
+        fileOnlyBox.setEnabled(filePath != null && !filePath.isEmpty());
+        styleQuickTextDisplayRuleOption(fileOnlyBox, fg);
+        box.addView((View) fileOnlyBox);
+
+        TextView manageButton = makeReaderCenteredActionButton(getString(R.string.txt_display_rule_manage), fg);
+        LinearLayout.LayoutParams manageLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(48));
+        manageLp.setMargins(0, dpToPx(10), 0, 0);
+        box.addView(manageButton, manageLp);
+
+        panel.addView(box, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setBackground(positionedActionPanelBackground(
+                dialogActionPanelFillColor(bg),
+                dialogActionPanelLineColor(bg)));
+        actionRow.setPadding(dpToPx(8), 0, dpToPx(8), 0);
+
+        TextView cancelButton = makeReaderDialogActionText(getString(R.string.cancel), sub, Gravity.CENTER);
+        TextView saveButton = makeReaderDialogActionText(getString(R.string.save), fg, Gravity.CENTER);
+        actionRow.addView(cancelButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        actionRow.addView(saveButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        panel.addView(actionRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(54)));
+
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                panel,
+                bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                TXT_TOOLBAR_POPUP_Y_DP,
+                0.80f,
+                420,
+                true);
+
+        manageButton.setOnClickListener(v -> {
+            dialog.dismiss();
+            showReaderTextDisplayRulesManagerDialog();
+        });
+        cancelButton.setOnClickListener(v -> dialog.dismiss());
+        saveButton.setOnClickListener(v -> {
+            String find = findInput.getText() != null ? findInput.getText().toString() : "";
+            if (find.trim().isEmpty()) {
+                Toast.makeText(this, R.string.txt_display_rule_find_required, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            String beforeSignature = currentTextDisplayRuleSignature();
+            boolean oldEnabled = editingExistingRule && editingRule.enabled;
+            String oldFindText = editingExistingRule ? editingRule.findText : "";
+            String oldReplacementText = editingExistingRule ? editingRule.replacementText : "";
+            boolean oldCaseSensitive = editingExistingRule && editingRule.caseSensitive;
+            boolean oldUseRegex = editingExistingRule && editingRule.useRegex;
+            String oldScope = editingExistingRule ? editingRule.scope : TextDisplayRule.SCOPE_ALL_TXT;
+            String oldFilePath = editingExistingRule ? (editingRule.filePath != null ? editingRule.filePath : "") : "";
+            boolean oldAppliesToCurrentFile = editingExistingRule && editingRule.appliesTo(filePath);
+
+            TextDisplayRule rule = editingExistingRule ? editingRule : new TextDisplayRule();
+            rule.enabled = enabledBox.isChecked();
+            rule.findText = find;
+            rule.replacementText = replaceInput.getText() != null ? replaceInput.getText().toString() : "";
+            rule.caseSensitive = caseBox.isChecked();
+            rule.useRegex = regexBox.isChecked();
+            if ((rule.sourceFilePath == null || rule.sourceFilePath.isEmpty()) && filePath != null && !filePath.isEmpty()) {
+                rule.sourceFilePath = filePath;
+            }
+            if (fileOnlyBox.isChecked() && filePath != null && !filePath.isEmpty()) {
+                rule.scope = TextDisplayRule.SCOPE_FILE;
+                if (editingExistingRule && TextDisplayRule.SCOPE_FILE.equals(oldScope) && !oldFilePath.isEmpty()) {
+                    // Editing a rule that was made for another TXT file must keep that original
+                    // file binding. Otherwise merely opening the rule editor from this viewer
+                    // would silently retarget the rule to the currently opened file and cause
+                    // an unnecessary TXT reload.
+                    rule.filePath = oldFilePath;
+                } else {
+                    rule.filePath = filePath;
+                }
+            } else {
+                rule.scope = TextDisplayRule.SCOPE_ALL_TXT;
+                rule.filePath = "";
+            }
+
+            boolean newAppliesToCurrentFile = rule.appliesTo(filePath);
+            boolean enabledChanged = editingExistingRule && oldEnabled != rule.enabled;
+            boolean textOrModeChanged = editingExistingRule
+                    && (!sameTextDisplayRuleValue(oldFindText, rule.findText)
+                    || !sameTextDisplayRuleValue(oldReplacementText, rule.replacementText)
+                    || oldCaseSensitive != rule.caseSensitive
+                    || oldUseRegex != rule.useRegex);
+            boolean shouldRefreshTxtContent = editingExistingRule
+                    ? ((enabledChanged || textOrModeChanged) && (oldAppliesToCurrentFile || newAppliesToCurrentFile))
+                    : newAppliesToCurrentFile;
+
+            if (editingExistingRule && editIndex >= 0 && editIndex < rules.size()) {
+                rules.set(editIndex, rule);
+            } else {
+                rules.add(rule);
+            }
+            TextDisplayRuleManager.saveRules(getApplicationContext(), rules);
+            String afterSignature = currentTextDisplayRuleSignature();
+            dialog.dismiss();
+            if (onSaved != null) handler.post(onSaved);
+            Toast.makeText(this, editingExistingRule ? R.string.txt_display_rule_saved : R.string.txt_display_rule_added, Toast.LENGTH_SHORT).show();
+            if (!beforeSignature.equals(afterSignature)) {
+                if (shouldRefreshTxtContent) {
+                    requestTextDisplayRuleContentRefreshOnWindowClose();
+                    if (onSaved == null) {
+                        // Direct quick-add/edit dialog: apply after this dialog has closed.
+                        // When opened from the rule manager, defer until the manager closes.
+                        handler.post(this::applyPendingTextDisplayRuleWindowRefresh);
+                    }
+                } else {
+                    // Scope-only changes such as All files <-> Current file only should update
+                    // the rule list immediately, but they should not reload the opened TXT.
+                    acknowledgeTextDisplayRuleWindowNoContentChange();
+                }
+            }
+        });
+        dialog.show();
+    }
+
+    private void styleQuickTextDisplayRuleOption(CompoundButton option, int textColor) {
+        option.setTextColor(textColor);
+        option.setTextSize(14f);
+        option.setGravity(Gravity.CENTER_VERTICAL);
+        option.setMinHeight(dpToPx(38));
+        option.setPadding(dpToPx(12), 0, dpToPx(8), 0);
+        option.setCompoundDrawablePadding(dpToPx(8));
+    }
+
+    private void showReaderTextDisplayRulesManagerDialog() {
+        syncReaderDialogThemeSnapshot();
+        final int bg = readerDialogBgColor();
+        final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
+        final int outline = blendColors(bg, fg, isLightColor(bg) ? 0.12f : 0.18f);
+        final ArrayList<TextDisplayRule> rules = new ArrayList<>(TextDisplayRuleManager.getRules(getApplicationContext()));
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+        panel.setClipChildren(true);
+        panel.setClipToPadding(true);
+
+        TextView title = makeReaderDialogTitle(getString(R.string.txt_display_rules), bg, fg);
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dpToPx(14), dpToPx(4), dpToPx(14), dpToPx(8));
+        body.setBackgroundColor(Color.TRANSPARENT);
+
+        TextView guide = new TextView(this);
+        guide.setText(R.string.txt_display_rules_dialog_description);
+        guide.setTextColor(sub);
+        guide.setTextSize(12f);
+        guide.setGravity(Gravity.CENTER);
+        guide.setLineSpacing(0, 1.08f);
+        guide.setPadding(0, 0, 0, dpToPx(8));
+        body.addView(guide, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        body.addView(scroll, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.max(dpToPx(150), Math.min(dpToPx(300), currentVisibleWindowHeightPx() - dpToPx(320)))));
+
+        final Runnable[] refresh = new Runnable[1];
+        refresh[0] = () -> {
+            list.removeAllViews();
+            if (rules.isEmpty()) {
+                TextView empty = new TextView(this);
+                empty.setText(R.string.txt_display_rules_empty);
+                empty.setTextColor(sub);
+                empty.setTextSize(14f);
+                empty.setGravity(Gravity.CENTER);
+                empty.setPadding(0, dpToPx(20), 0, dpToPx(20));
+                list.addView(empty, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT));
+                return;
+            }
+            for (int i = 0; i < rules.size(); i++) {
+                TextDisplayRule rule = rules.get(i);
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.VERTICAL);
+                row.setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8));
+                GradientDrawable rowBg = new GradientDrawable();
+                rowBg.setColor(blendColors(bg, fg, isLightColor(bg) ? 0.025f : 0.04f));
+                rowBg.setStroke(dpToPx(1), outline);
+                rowBg.setCornerRadius(dpToPx(12));
+                row.setBackground(rowBg);
+
+                TextView name = new TextView(this);
+                name.setText((rule.enabled ? "✓ " : "○ ")
+                        + safeRulePreview(rule.findText) + " → " + safeRulePreview(rule.replacementText));
+                name.setTextColor(fg);
+                name.setTextSize(14f);
+                name.setTypeface(Typeface.DEFAULT_BOLD);
+                name.setSingleLine(true);
+                name.setEllipsize(TextUtils.TruncateAt.END);
+                row.addView(name, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT));
+
+                String scope = TextDisplayRule.SCOPE_FILE.equals(rule.scope)
+                        ? getString(R.string.txt_display_rule_scope_current_file)
+                        : getString(R.string.txt_display_rule_scope_all_txt);
+                String caseMode = rule.caseSensitive
+                        ? getString(R.string.txt_display_rule_case_sensitive)
+                        : getString(R.string.txt_display_rule_case_insensitive);
+                String mode = rule.useRegex
+                        ? getString(R.string.txt_display_rule_regex_mode)
+                        : getString(R.string.txt_display_rule_plain_mode);
+                TextView meta = new TextView(this);
+                meta.setText(scope + " · " + caseMode + " · " + mode);
+                meta.setTextColor(sub);
+                meta.setTextSize(11f);
+                meta.setSingleLine(true);
+                meta.setEllipsize(TextUtils.TruncateAt.END);
+                meta.setPadding(0, dpToPx(3), 0, 0);
+                row.addView(meta, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT));
+
+                String sourceFileLabel = makeTextDisplayRuleSourceFileLabel(rule);
+                if (!sourceFileLabel.isEmpty()) {
+                    TextView source = new TextView(this);
+                    source.setText(sourceFileLabel);
+                    source.setTextColor(sub);
+                    source.setTextSize(11f);
+                    source.setSingleLine(true);
+                    source.setEllipsize(TextUtils.TruncateAt.END);
+                    source.setPadding(0, dpToPx(2), 0, 0);
+                    row.addView(source, new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT));
+                }
+
+                LinearLayout controls = new LinearLayout(this);
+                controls.setOrientation(LinearLayout.HORIZONTAL);
+                controls.setGravity(Gravity.CENTER_VERTICAL);
+                controls.setPadding(0, dpToPx(6), 0, 0);
+                TextView up = makeReaderMiniTextButton(getString(R.string.move_up), fg, outline, bg);
+                TextView down = makeReaderMiniTextButton(getString(R.string.move_down), fg, outline, bg);
+                TextView toggle = makeReaderMiniTextButton(rule.enabled ? getString(R.string.disable) : getString(R.string.enable), fg, outline, bg);
+                TextView delete = makeReaderMiniTextButton(getString(R.string.delete), fg, outline, bg);
+                controls.addView(up, new LinearLayout.LayoutParams(0, dpToPx(32), 1f));
+                controls.addView(down, new LinearLayout.LayoutParams(0, dpToPx(32), 1f));
+                controls.addView(toggle, new LinearLayout.LayoutParams(0, dpToPx(32), 1f));
+                controls.addView(delete, new LinearLayout.LayoutParams(0, dpToPx(32), 1f));
+                row.addView(controls, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT));
+
+                final int index = i;
+                up.setOnClickListener(v -> {
+                    if (index <= 0) return;
+                    TextDisplayRule moved = rules.remove(index);
+                    rules.add(index - 1, moved);
+                    TextDisplayRuleManager.saveRules(getApplicationContext(), rules);
+                    refresh[0].run();
+                    // Reordering only changes display priority in the manager. Do not reload TXT.
+                    acknowledgeTextDisplayRuleWindowNoContentChange();
+                });
+                down.setOnClickListener(v -> {
+                    if (index >= rules.size() - 1) return;
+                    TextDisplayRule moved = rules.remove(index);
+                    rules.add(index + 1, moved);
+                    TextDisplayRuleManager.saveRules(getApplicationContext(), rules);
+                    refresh[0].run();
+                    // Reordering only changes display priority in the manager. Do not reload TXT.
+                    acknowledgeTextDisplayRuleWindowNoContentChange();
+                });
+                toggle.setOnClickListener(v -> {
+                    String beforeSignature = currentTextDisplayRuleSignature();
+                    rule.enabled = !rule.enabled;
+                    TextDisplayRuleManager.saveRules(getApplicationContext(), rules);
+                    refresh[0].run();
+                    if (!beforeSignature.equals(currentTextDisplayRuleSignature())) {
+                        requestTextDisplayRuleContentRefreshOnWindowClose();
+                    } else {
+                        acknowledgeTextDisplayRuleWindowNoContentChange();
+                    }
+                });
+                delete.setOnClickListener(v -> showReaderDeleteTextDisplayRuleConfirmDialog(rule, () -> {
+                    if (index < 0 || index >= rules.size()) return;
+                    String beforeSignature = currentTextDisplayRuleSignature();
+                    rules.remove(index);
+                    TextDisplayRuleManager.saveRules(getApplicationContext(), rules);
+                    refresh[0].run();
+                    if (!beforeSignature.equals(currentTextDisplayRuleSignature())) {
+                        requestTextDisplayRuleContentRefreshOnWindowClose();
+                    } else {
+                        acknowledgeTextDisplayRuleWindowNoContentChange();
+                    }
+                }));
+                row.setOnLongClickListener(v -> {
+                    showReaderTextDisplayRuleEditDialog("", true, index, () -> {
+                        rules.clear();
+                        rules.addAll(TextDisplayRuleManager.getRules(getApplicationContext()));
+                        refresh[0].run();
+                    });
+                    return true;
+                });
+
+                LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT);
+                rowLp.setMargins(0, 0, 0, dpToPx(8));
+                list.addView(row, rowLp);
+            }
+        };
+        refresh[0].run();
+
+        panel.addView(body, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setBackground(positionedActionPanelBackground(
+                dialogActionPanelFillColor(bg),
+                dialogActionPanelLineColor(bg)));
+        actionRow.setPadding(dpToPx(8), 0, dpToPx(8), 0);
+        TextView addButton = makeReaderDialogActionText(getString(R.string.add), fg, Gravity.CENTER);
+        TextView closeButton = makeReaderDialogActionText(getString(R.string.close), sub, Gravity.CENTER);
+        actionRow.addView(addButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        actionRow.addView(closeButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        panel.addView(actionRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(54)));
+
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                panel,
+                bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                TXT_TOOLBAR_POPUP_Y_DP,
+                0.80f,
+                420,
+                true);
+        addButton.setOnClickListener(v -> showReaderTextDisplayRuleEditDialog("", true, -1, () -> {
+            rules.clear();
+            rules.addAll(TextDisplayRuleManager.getRules(getApplicationContext()));
+            refresh[0].run();
+        }));
+        closeButton.setOnClickListener(v -> dialog.dismiss());
+        dialog.setOnDismissListener(d -> applyPendingTextDisplayRuleWindowRefresh());
+        dialog.show();
+    }
+
+    private void showReaderDeleteTextDisplayRuleConfirmDialog(@NonNull TextDisplayRule rule, @NonNull Runnable onDelete) {
+        syncReaderDialogThemeSnapshot();
+        final int bg = readerDialogBgColor();
+        final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+        panel.setClipChildren(true);
+        panel.setClipToPadding(true);
+
+        TextView title = makeReaderDialogTitle(getString(R.string.delete), bg, fg);
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dpToPx(14), dpToPx(6), dpToPx(14), dpToPx(10));
+        body.setBackgroundColor(Color.TRANSPARENT);
+
+        TextView message = new TextView(this);
+        String preview = safeRulePreview(rule.findText) + " → " + safeRulePreview(rule.replacementText);
+        message.setText(getString(R.string.txt_display_rule_delete_confirm, preview));
+        message.setTextColor(sub);
+        message.setTextSize(13f);
+        message.setGravity(Gravity.CENTER);
+        message.setLineSpacing(0, 1.08f);
+        body.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        panel.addView(body, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setBackground(positionedActionPanelBackground(
+                dialogActionPanelFillColor(bg),
+                dialogActionPanelLineColor(bg)));
+        actionRow.setPadding(dpToPx(8), 0, dpToPx(8), 0);
+
+        TextView cancelButton = makeReaderDialogActionText(getString(R.string.cancel), sub, Gravity.CENTER);
+        TextView deleteButton = makeReaderDialogActionText(getString(R.string.delete), fg, Gravity.CENTER);
+        actionRow.addView(cancelButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        actionRow.addView(deleteButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        panel.addView(actionRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(54)));
+
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                panel,
+                bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                TXT_TOOLBAR_POPUP_Y_DP + 104,
+                0.72f,
+                340,
+                true);
+        cancelButton.setOnClickListener(v -> dialog.dismiss());
+        deleteButton.setOnClickListener(v -> {
+            dialog.dismiss();
+            onDelete.run();
+        });
+        dialog.show();
+    }
+
+    private TextView makeReaderMiniTextButton(String label, int fg, int outline, int bg) {
+        TextView button = new TextView(this);
+        button.setText(label);
+        button.setTextColor(fg);
+        button.setTextSize(11f);
+        button.setGravity(Gravity.CENTER);
+        button.setSingleLine(true);
+        button.setEllipsize(TextUtils.TruncateAt.END);
+        button.setPadding(dpToPx(3), 0, dpToPx(3), 0);
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(blendColors(bg, fg, isLightColor(bg) ? 0.02f : 0.035f));
+        drawable.setStroke(dpToPx(1), outline);
+        drawable.setCornerRadius(dpToPx(9));
+        button.setBackground(drawable);
+        return button;
+    }
+
+    private String makeTextDisplayRuleSourceFileLabel(@NonNull TextDisplayRule rule) {
+        String sourcePath = rule.sourceFilePath;
+        if ((sourcePath == null || sourcePath.isEmpty()) && rule.filePath != null && !rule.filePath.isEmpty()) {
+            sourcePath = rule.filePath;
+        }
+        if (sourcePath == null || sourcePath.isEmpty()) return "";
+        String fileName = new File(sourcePath).getName();
+        if (fileName == null || fileName.isEmpty()) fileName = sourcePath;
+        return getString(R.string.txt_display_rule_source_file, fileName);
+    }
+
+    private String safeRulePreview(String value) {
+        if (value == null) return "";
+        String oneLine = value.replace('\n', ' ').replace('\r', ' ');
+        return oneLine.length() > 24 ? oneLine.substring(0, 24) + "…" : oneLine;
+    }
+
+    private void showAutoPageTurnDialog() {
+        syncReaderDialogThemeSnapshot();
+        final int bg = readerDialogBgColor();
+        final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(Color.TRANSPARENT);
+        panel.setClipChildren(true);
+        panel.setClipToPadding(true);
+
+        TextView title = makeReaderDialogTitle(getString(R.string.auto_page_turn), bg, fg);
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = dpToPx(18);
+        box.setPadding(pad, dpToPx(4), pad, dpToPx(12));
+        box.setBackgroundColor(Color.TRANSPARENT);
+
+        TextView desc = new TextView(this);
+        desc.setText(R.string.auto_page_turn_description);
+        desc.setTextColor(sub);
+        desc.setTextSize(13f);
+        desc.setLineSpacing(0, 1.08f);
+        desc.setPadding(0, 0, 0, dpToPx(10));
+        box.addView(desc, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        EditText secondsInput = makeReaderDialogEditText(getString(R.string.auto_page_turn_interval_hint), bg, fg, sub);
+        secondsInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        secondsInput.setSingleLine(true);
+        secondsInput.setGravity(Gravity.CENTER);
+        secondsInput.setText(String.valueOf(prefs != null ? prefs.getAutoPageTurnIntervalSeconds() : 8));
+        secondsInput.setSelectAllOnFocus(true);
+
+        LinearLayout intervalRow = new LinearLayout(this);
+        intervalRow.setOrientation(LinearLayout.HORIZONTAL);
+        intervalRow.setGravity(Gravity.CENTER);
+        intervalRow.setPadding(0, 0, 0, 0);
+        intervalRow.addView(new Space(this), new LinearLayout.LayoutParams(0, 1, 0.30f));
+        intervalRow.addView(secondsInput, new LinearLayout.LayoutParams(0, dpToPx(52), 0.40f));
+        intervalRow.addView(new Space(this), new LinearLayout.LayoutParams(0, 1, 0.30f));
+        box.addView(intervalRow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(52)));
+
+        panel.addView(box, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setBackground(positionedActionPanelBackground(
+                dialogActionPanelFillColor(bg),
+                dialogActionPanelLineColor(bg)));
+        actionRow.setPadding(dpToPx(8), 0, dpToPx(8), 0);
+
+        TextView stopButton = makeReaderDialogActionText(getString(R.string.auto_page_turn_stop), sub, Gravity.CENTER);
+        TextView cancelButton = makeReaderDialogActionText(getString(R.string.cancel), sub, Gravity.CENTER);
+        TextView startButton = makeReaderDialogActionText(getString(R.string.auto_page_turn_start), fg, Gravity.CENTER);
+        actionRow.addView(stopButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        actionRow.addView(cancelButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        actionRow.addView(startButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        panel.addView(actionRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(54)));
+
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                panel,
+                bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                TXT_TOOLBAR_POPUP_Y_DP,
+                0.70f,
+                420,
+                true);
+
+        startButton.setOnClickListener(v -> {
+            int seconds = parseAutoPageTurnSeconds(secondsInput.getText() != null ? secondsInput.getText().toString() : "");
+            if (prefs != null) prefs.setAutoPageTurnIntervalSeconds(seconds);
+            startAutoPageTurn();
+            dialog.dismiss();
+        });
+        stopButton.setOnClickListener(v -> {
+            stopAutoPageTurn(true);
+            dialog.dismiss();
+        });
+        cancelButton.setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+    }
+
+    private int parseAutoPageTurnSeconds(String raw) {
+        try {
+            return Math.max(2, Math.min(120, Integer.parseInt(raw.trim())));
+        } catch (Exception ignored) {
+            return prefs != null ? prefs.getAutoPageTurnIntervalSeconds() : 8;
+        }
+    }
+
+    private void startAutoPageTurn() {
+        autoPageTurnRunning = true;
+        handler.removeCallbacks(autoPageTurnRunnable);
+        Toast.makeText(this, R.string.auto_page_turn_started, Toast.LENGTH_SHORT).show();
+        scheduleNextAutoPageTurn();
+    }
+
+    private void stopAutoPageTurn(boolean showToast) {
+        if (!autoPageTurnRunning && !showToast) return;
+        autoPageTurnRunning = false;
+        handler.removeCallbacks(autoPageTurnRunnable);
+        if (showToast) Toast.makeText(this, R.string.auto_page_turn_stopped, Toast.LENGTH_SHORT).show();
+    }
+
+    private void stopAutoPageTurnForManualNavigation() {
+        if (autoPageTurnRunning) {
+            stopAutoPageTurn(true);
+        }
+    }
+
+    private void scheduleNextAutoPageTurn() {
+        if (!autoPageTurnRunning) return;
+        int seconds = prefs != null ? prefs.getAutoPageTurnIntervalSeconds() : 8;
+        handler.removeCallbacks(autoPageTurnRunnable);
+        handler.postDelayed(autoPageTurnRunnable, Math.max(2, seconds) * 1000L);
+    }
+
     private void addMoreActionRow(
             LinearLayout list,
             String label,
@@ -2324,6 +3151,7 @@ public class ReaderActivity extends AppCompatActivity {
         // briefly keep old search/bookmark/page state around.  Keep the exact
         // large-TXT page index when this is only a same-file chunk/window reload.
         fileContent = "";
+        appliedTextDisplayRuleSignature = TextDisplayRuleManager.getSignature(getApplicationContext(), path != null ? new File(path).getAbsolutePath() : filePath);
         activeSearchQuery = "";
         activeSearchIndex = -1;
         largeTextEstimateActive = false;
@@ -2432,8 +3260,9 @@ public class ReaderActivity extends AppCompatActivity {
                     if (activityDestroyed || generation != loadGeneration.get() || previewOnly) return;
                 }
 
-                String content = FileUtils.readReadableFile(appContext, fileToRead);
-                int lineCount = countLines(content);
+                String rawContent = FileUtils.readReadableFile(appContext, fileToRead);
+                final String content = TextDisplayRuleManager.apply(appContext, rawContent, finalFilePath);
+                final int lineCount = countLines(content);
 
                 handler.post(() -> {
                     if (!activityDestroyed && generation == loadGeneration.get()) {
@@ -2478,6 +3307,7 @@ public class ReaderActivity extends AppCompatActivity {
                 + "|right=" + prefs.getReaderTextRightInsetPx()
                 + "|overlap=" + prefs.getPagingOverlapLines()
                 + "|font=" + fontName
+                + "|displayRules=" + TextDisplayRuleManager.getSignature(getApplicationContext(), filePath)
                 + "|screen=" + dm.widthPixels + "x" + dm.heightPixels;
     }
 
@@ -2517,7 +3347,8 @@ public class ReaderActivity extends AppCompatActivity {
                 + "|ls=" + lineSpacing
                 + "|ts=" + paintSnapshot.getTextSize()
                 + "|sx=" + paintSnapshot.getTextScaleX()
-                + "|tf=" + typefaceKey;
+                + "|tf=" + typefaceKey
+                + "|displayRules=" + TextDisplayRuleManager.getSignature(getApplicationContext(), loadedFilePath);
     }
 
     private String buildCurrentLargeTextExactPageIndexSignature(@NonNull String loadedFilePath) {
@@ -2659,6 +3490,7 @@ public class ReaderActivity extends AppCompatActivity {
             ArrayList<CustomReaderView.PageTextAnchor> builtAnchors = new ArrayList<>();
             try {
                 String fullText = FileUtils.readReadableFile(appContext, source);
+                fullText = TextDisplayRuleManager.apply(appContext, fullText, loadedFilePath);
                 builtAnchors = CustomReaderView.buildPageTextAnchors(
                         fullText,
                         paintSnapshot,
@@ -2808,11 +3640,13 @@ public class ReaderActivity extends AppCompatActivity {
         int targetLine = -1;
         boolean sawAnyLine = false;
 
+        List<TextDisplayRule> activeRules = TextDisplayRuleManager.getActiveRules(getApplicationContext(), file.getAbsolutePath());
         try (BufferedReader reader = openLargeTextReader(file)) {
             String lineText;
             while ((lineText = reader.readLine()) != null) {
                 sawAnyLine = true;
                 String normalized = FileUtils.enforceTextPresentationSelectors(lineText);
+                normalized = TextDisplayRuleManager.apply(normalized, activeRules);
                 int lineChars = normalized.length() + 1; // TextView normalizes line breaks to '\n'.
                 if (targetLine < 0 && targetChar >= charCount && targetChar < charCount + lineChars) {
                     targetLine = line;
@@ -2859,11 +3693,13 @@ public class ReaderActivity extends AppCompatActivity {
         int bodyCharCount = 0;
         boolean capturedAny = false;
 
+        List<TextDisplayRule> activeRules = TextDisplayRuleManager.getActiveRules(getApplicationContext(), file.getAbsolutePath());
         try (BufferedReader reader = openLargeTextReader(file)) {
             String lineText;
             boolean firstCapturedLine = true;
             while ((lineText = reader.readLine()) != null) {
                 String normalized = FileUtils.enforceTextPresentationSelectors(lineText);
+                normalized = TextDisplayRuleManager.apply(normalized, activeRules);
                 int lineChars = normalized.length() + 1;
 
                 if (line < startLine) {
@@ -3060,6 +3896,7 @@ public class ReaderActivity extends AppCompatActivity {
         hideLoadingWindow();
 
         filePath = loadedFilePath;
+        appliedTextDisplayRuleSignature = TextDisplayRuleManager.getSignature(getApplicationContext(), filePath);
         fileName = loadedFileName != null ? loadedFileName : getString(R.string.app_name);
         updateReaderFileTitle();
 
@@ -3184,6 +4021,7 @@ public class ReaderActivity extends AppCompatActivity {
         hideLoadingWindow();
 
         filePath = loadedFilePath;
+        appliedTextDisplayRuleSignature = TextDisplayRuleManager.getSignature(getApplicationContext(), filePath);
         fileName = loadedFileName != null ? loadedFileName : getString(R.string.app_name);
         updateReaderFileTitle();
 
@@ -3658,10 +4496,15 @@ public class ReaderActivity extends AppCompatActivity {
                 && readerView.isAtVisualEndOfText();
     }
     private boolean scrollToPageNumber(int page) {
-        return scrollToPageNumber(page, false);
+        return scrollToPageNumber(page, false, true);
     }
 
     private boolean scrollToPageNumber(int page, boolean showLoadingForAsyncPartitionJump) {
+        return scrollToPageNumber(page, showLoadingForAsyncPartitionJump, true);
+    }
+
+    private boolean scrollToPageNumber(int page, boolean showLoadingForAsyncPartitionJump, boolean manualNavigation) {
+        if (manualNavigation) stopAutoPageTurnForManualNavigation();
         if (readerView == null) return false;
 
         if (largeTextEstimateActive) {
@@ -3968,8 +4811,8 @@ public class ReaderActivity extends AppCompatActivity {
         }
     }
 
-    private void pageDown() { pageBy(+1); }
-    private void pageUp() { pageBy(-1); }
+    private void pageDown() { pageBy(+1, false); }
+    private void pageUp() { pageBy(-1, false); }
 
     private void recordLargeTextPageDirection(int direction) {
         if (!largeTextEstimateActive || direction == 0) return;
@@ -4015,10 +4858,15 @@ public class ReaderActivity extends AppCompatActivity {
         int current = Math.max(1, Math.min(total, getDisplayedCurrentPageNumber()));
         int target = Math.max(1, Math.min(total, current + delta));
         if (target != current) {
-            scrollToPageNumber(target, false);
+            scrollToPageNumber(target, false, false);
         }
     }
     private void pageBy(int direction) {
+        pageBy(direction, false);
+    }
+
+    private void pageBy(int direction, boolean fromAutoPageTurn) {
+        if (!fromAutoPageTurn) stopAutoPageTurnForManualNavigation();
         if (readerView == null || direction == 0) return;
 
         if (largeTextEstimateActive && largeTextPartitionSwitchInProgress) {
@@ -4036,7 +4884,7 @@ public class ReaderActivity extends AppCompatActivity {
             int current = getDisplayedCurrentPageNumber();
             int target = Math.max(1, Math.min(total, current + direction));
             if (target != current) {
-                scrollToPageNumber(target);
+                scrollToPageNumber(target, false, false);
             } else {
                 updatePositionLabel();
             }
@@ -6298,6 +7146,7 @@ public class ReaderActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        stopAutoPageTurn(false);
         saveReadingState();
         cacheLoadedTextSnapshot();
     }

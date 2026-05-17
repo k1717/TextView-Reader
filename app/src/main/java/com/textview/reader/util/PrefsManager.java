@@ -157,6 +157,55 @@ public class PrefsManager {
         editor.commit();
     }
 
+
+    public void resetReaderAndAppSettings() {
+        SharedPreferences.Editor editor = prefs.edit();
+        String[] keys = new String[]{
+                "font_size",
+                "line_spacing",
+                "font_family",
+                "epub_left_padding_dp",
+                "epub_right_padding_dp",
+                "epub_side_padding_dp",
+                "document_side_padding_dp",
+                "epub_top_padding_dp",
+                "epub_bottom_padding_dp",
+                "epub_page_direction",
+                "epub_page_effect",
+                "dark_mode",
+                "language_mode",
+                "keep_screen_on",
+                "show_status_bar",
+                "page_status_alignment",
+                "auto_save_position",
+                "auto_page_turn_interval_seconds",
+                "last_reader_search_query",
+                "page_margin_h",
+                "page_margin_v",
+                "reader_text_top_offset_px",
+                "reader_text_bottom_offset_px",
+                "reader_text_left_inset_px",
+                "reader_text_right_inset_px",
+                "sort_mode",
+                "recent_sort_mode",
+                "show_hidden",
+                "brightness_override",
+                "brightness_value",
+                "show_notification",
+                "volume_key_scroll",
+                "tap_paging_enabled",
+                "tap_zone_mode",
+                "tap_leading_zone_percent",
+                "tap_trailing_zone_percent",
+                "paging_overlap_lines",
+                "active_theme_id"
+        };
+        for (String key : keys) editor.remove(key);
+        editor.commit();
+        applyDarkMode(getDarkMode());
+        applyLanguage(getLanguageMode());
+    }
+
     public float getFontSize() { return prefs.getFloat("font_size", DEFAULT_FONT_SIZE); }
     public void setFontSize(float s) { prefs.edit().putFloat("font_size", Math.max(8f, Math.min(48f, s))).apply(); }
     public float getLineSpacing() { return prefs.getFloat("line_spacing", DEFAULT_LINE_SPACING); }
@@ -319,6 +368,12 @@ public class PrefsManager {
     }
     public boolean getAutoSavePosition() { return prefs.getBoolean("auto_save_position", true); }
     public void setAutoSavePosition(boolean v) { prefs.edit().putBoolean("auto_save_position", v).apply(); }
+    public int getAutoPageTurnIntervalSeconds() {
+        return Math.max(2, Math.min(120, prefs.getInt("auto_page_turn_interval_seconds", 8)));
+    }
+    public void setAutoPageTurnIntervalSeconds(int seconds) {
+        prefs.edit().putInt("auto_page_turn_interval_seconds", Math.max(2, Math.min(120, seconds))).apply();
+    }
     public String getLastDirectory() { return prefs.getString("last_directory", null); }
 
     public String getLastReaderSearchQuery() { return prefs.getString("last_reader_search_query", ""); }

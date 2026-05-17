@@ -2,6 +2,7 @@ package com.textview.reader;
 
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
@@ -10,6 +11,16 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.system.ErrnoException;
+import android.system.Os;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.TextUtils;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.StyleSpan;
+import android.view.Gravity;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
@@ -29,24 +40,39 @@ import com.textview.reader.util.EdgeToEdgeUtil;
 import com.textview.reader.util.FileUtils;
 import com.textview.reader.util.PrefsManager;
 import com.textview.reader.util.ThemeManager;
+import com.textview.reader.util.TextDisplayRule;
+import com.textview.reader.util.TextDisplayRuleManager;
 
 import com.google.android.material.button.MaterialButton;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 public class SettingsActivity extends AppCompatActivity {
 
     private static final String RELEASES_URL = "https://github.com/k1717/TextView-Reader/releases";
+    private static final String TXT_ACTUAL_FILE_EDIT_PREFS = "txt_actual_file_edit";
+    private static final String KEY_TXT_ACTUAL_FILE_EDIT_PATH = "modified_path";
+    private static final String KEY_TXT_ACTUAL_FILE_EDIT_TOKEN = "modified_token";
+    private static final String KEY_TXT_ACTUAL_FILE_EDIT_LENGTH = "modified_length";
+    private static final String KEY_TXT_ACTUAL_FILE_EDIT_LAST_MODIFIED = "modified_last_modified";
+    private static final long TXT_ACTUAL_FILE_EDIT_LARGE_WARNING_BYTES = 32L * 1024L * 1024L;
 
     private PrefsManager prefs;
     private BookmarkManager bookmarkManager;
     private ThemeManager themeManager;
+    private String currentTxtFilePath;
 
     private final ActivityResultLauncher<String> exportLauncher =
             registerForActivityResult(new ActivityResultContracts.CreateDocument("application/json"),
@@ -83,17 +109,21 @@ public class SettingsActivity extends AppCompatActivity {
 
         bookmarkManager = BookmarkManager.getInstance(this);
         themeManager = ThemeManager.getInstance(this);
+        currentTxtFilePath = getIntent() != null ? getIntent().getStringExtra("txt_file_path") : null;
 
         setupLanguage();
         setupDarkMode();
         setupFontSize();
         setupLineSpacing();
         setupTextZoneTuning();
+        setupTextDisplayRules();
+        setupTextDisplayRulesActualFile();
         setupEpubBoundary();
         setupEpubPageBehavior();
         setupSwitches();
         setupLock();
         setupExportImport();
+        setupResetSettings();
         setupTheme();
         setupUpdateLink();
 
@@ -380,6 +410,717 @@ public class SettingsActivity extends AppCompatActivity {
                 prefs.setReaderTextRightInsetPx(seekBar.getProgress() * textZoneStepPx);
             }
         });
+    }
+
+
+    private void setupTextDisplayRules() {
+        View button = findViewById(R.id.btn_txt_display_rules);
+        if (button == null) return;
+        button.setOnClickListener(v -> showTextDisplayRulesDialog());
+    }
+
+    private void setupTextDisplayRulesActualFile() {
+        View button = findViewById(R.id.btn_txt_display_rules_actual_file);
+        if (button == null) return;
+        button.setOnClickListener(v -> {
+            if (currentTxtFilePath == null || currentTxtFilePath.isEmpty()) {
+                Toast.makeText(this, R.string.txt_display_rules_actual_file_unavailable, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            showTextDisplayRulesActualFileDialog();
+        });
+    }
+
+    private void showTextDisplayRulesActualFileDialog() {
+        File sourceFile = getCurrentTxtFileOrShowError();
+        if (sourceFile == null) return;
+
+        List<TextDisplayRule> activeRules = TextDisplayRuleManager.getActiveRules(this, sourceFile.getAbsolutePath());
+        if (activeRules.isEmpty()) {
+            Toast.makeText(this, R.string.txt_display_rules_actual_file_no_rules, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final android.app.Dialog dialog = createRoundedSettingsDialog();
+        LinearLayout panel = createRoundedSettingsDialogPanel();
+
+        int text = dialogTextColor();
+        int sub = dialogSubTextColor();
+        int outline = dialogOutlineColor();
+
+        panel.addView(makeSettingsDialogTitle(getString(R.string.txt_display_rules_actual_file_title), text));
+
+        TextView message = makeSettingsDialogMessage(
+                getString(R.string.txt_display_rules_actual_file_message, sourceFile.getName()), sub);
+        message.setGravity(Gravity.CENTER);
+        panel.addView(message);
+
+        File copyTarget = makeActualRuleCopyFile(this, sourceFile);
+        TextView sequenceWarning = makeSettingsDialogWarningBox(
+                getString(R.string.txt_display_rules_actual_file_sequence_warning, activeRules.size()), false);
+        panel.addView(sequenceWarning);
+
+        TextView overwriteWarning = makeSettingsDialogWarningBox(
+                getString(R.string.txt_display_rules_actual_file_overwrite_warning, copyTarget.getName()), true);
+        LinearLayout.LayoutParams overwriteWarningLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        overwriteWarningLp.setMargins(0, dpToPx(6), 0, dpToPx(8));
+        overwriteWarning.setLayoutParams(overwriteWarningLp);
+        panel.addView(overwriteWarning);
+
+        if (sourceFile.length() >= TXT_ACTUAL_FILE_EDIT_LARGE_WARNING_BYTES) {
+            TextView largeWarning = makeSettingsDialogWarningBox(
+                    getString(R.string.txt_display_rules_actual_file_large_warning,
+                            FileUtils.formatFileSize(sourceFile.length())), false);
+            LinearLayout.LayoutParams largeWarningLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            largeWarningLp.setMargins(0, 0, 0, dpToPx(8));
+            largeWarning.setLayoutParams(largeWarningLp);
+            panel.addView(largeWarning);
+        }
+
+        MaterialButton original = makeSettingsDialogButtonNoShade(
+                getString(R.string.txt_display_rules_actual_file_original), text, outline);
+        original.setOnClickListener(v -> {
+            dialog.dismiss();
+            showTextDisplayRulesActualFileConfirmDialog(true, sourceFile, copyTarget, activeRules.size());
+        });
+        panel.addView(original);
+
+        MaterialButton copy = makeSettingsDialogButtonNoShade(
+                getString(R.string.txt_display_rules_actual_file_copy), text, outline);
+        copy.setOnClickListener(v -> {
+            dialog.dismiss();
+            showTextDisplayRulesActualFileConfirmDialog(false, sourceFile, copyTarget, activeRules.size());
+        });
+        panel.addView(copy);
+
+        MaterialButton cancel = makeSettingsDialogButtonNoShade(getString(R.string.cancel), text, outline);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        panel.addView(cancel);
+
+        showRoundedSettingsDialog(dialog, panel, true, 0.72f, 280);
+    }
+
+    private CharSequence makeActualFileConfirmMergedWarning(boolean editOriginal, @NonNull String targetName) {
+        String overwriteText = getString(editOriginal
+                ? R.string.txt_display_rules_actual_file_confirm_original_warning
+                : R.string.txt_display_rules_actual_file_confirm_copy_warning, targetName);
+        String noTurningBackText = getString(R.string.txt_display_rules_actual_file_no_turning_back);
+        SpannableStringBuilder builder = new SpannableStringBuilder();
+        builder.append(overwriteText);
+        builder.append("\n\n");
+        int start = builder.length();
+        builder.append(noTurningBackText);
+        int end = builder.length();
+        builder.setSpan(new StyleSpan(android.graphics.Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        builder.setSpan(new RelativeSizeSpan(1.28f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return builder;
+    }
+
+    private void showTextDisplayRulesActualFileConfirmDialog(boolean editOriginal,
+                                                            @NonNull File sourceFile,
+                                                            @NonNull File copyTarget,
+                                                            int ruleCount) {
+        final android.app.Dialog dialog = createRoundedSettingsDialog();
+        LinearLayout panel = createRoundedSettingsDialogPanel();
+
+        int text = dialogTextColor();
+        int sub = dialogSubTextColor();
+        int outline = dialogOutlineColor();
+
+        panel.addView(makeSettingsDialogTitle(getString(R.string.txt_display_rules_actual_file_confirm_title), text));
+
+        String targetName = editOriginal ? sourceFile.getName() : copyTarget.getName();
+        TextView message = makeSettingsDialogMessage(
+                getString(editOriginal
+                                ? R.string.txt_display_rules_actual_file_confirm_original_message
+                                : R.string.txt_display_rules_actual_file_confirm_copy_message,
+                        targetName, ruleCount), sub);
+        message.setGravity(Gravity.CENTER);
+        panel.addView(message);
+
+        TextView overwriteWarning = makeSettingsDialogWarningBox(
+                makeActualFileConfirmMergedWarning(editOriginal, targetName), true);
+        LinearLayout.LayoutParams overwriteWarningLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        overwriteWarningLp.setMargins(0, dpToPx(6), 0, dpToPx(8));
+        overwriteWarning.setLayoutParams(overwriteWarningLp);
+        panel.addView(overwriteWarning);
+
+        if (sourceFile.length() >= TXT_ACTUAL_FILE_EDIT_LARGE_WARNING_BYTES) {
+            TextView largeWarning = makeSettingsDialogWarningBox(
+                    getString(R.string.txt_display_rules_actual_file_large_warning,
+                            FileUtils.formatFileSize(sourceFile.length())), false);
+            LinearLayout.LayoutParams largeWarningLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            largeWarningLp.setMargins(0, 0, 0, dpToPx(8));
+            largeWarning.setLayoutParams(largeWarningLp);
+            panel.addView(largeWarning);
+        }
+
+        MaterialButton apply = makeSettingsDialogButtonNoShade(
+                getString(editOriginal
+                        ? R.string.txt_display_rules_actual_file_confirm_original_button
+                        : R.string.txt_display_rules_actual_file_confirm_copy_button), text, outline);
+        apply.setOnClickListener(v -> {
+            dialog.dismiss();
+            applyTextDisplayRulesToActualFile(editOriginal);
+        });
+        panel.addView(apply);
+
+        MaterialButton cancel = makeSettingsDialogButtonNoShade(getString(R.string.cancel), text, outline);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        panel.addView(cancel);
+
+        showRoundedSettingsDialog(dialog, panel, true, 0.72f, 280);
+    }
+
+    private File getCurrentTxtFileOrShowError() {
+        if (currentTxtFilePath == null || currentTxtFilePath.isEmpty()) {
+            Toast.makeText(this, R.string.txt_display_rules_actual_file_unavailable, Toast.LENGTH_SHORT).show();
+            return null;
+        }
+        File sourceFile = new File(currentTxtFilePath);
+        if (!sourceFile.exists() || !sourceFile.isFile()) {
+            Toast.makeText(this, R.string.txt_display_rules_actual_file_unavailable, Toast.LENGTH_SHORT).show();
+            return null;
+        }
+        return sourceFile.getAbsoluteFile();
+    }
+
+    private void applyTextDisplayRulesToActualFile(boolean editOriginal) {
+        final File sourceFile = getCurrentTxtFileOrShowError();
+        if (sourceFile == null) return;
+
+        final Context appContext = getApplicationContext();
+        final Handler mainHandler = new Handler(Looper.getMainLooper());
+        final ArrayList<TextDisplayRule> activeRules = new ArrayList<>(
+                TextDisplayRuleManager.getActiveRules(appContext, sourceFile.getAbsolutePath()));
+        if (activeRules.isEmpty()) {
+            Toast.makeText(appContext, R.string.txt_display_rules_actual_file_no_rules, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Toast.makeText(appContext, R.string.txt_display_rules_actual_file_applying, Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                String encoding = FileUtils.detectEncoding(sourceFile);
+                String originalText = FileUtils.readTextFile(sourceFile, encoding);
+                String fixedText = TextDisplayRuleManager.apply(originalText, activeRules);
+                if (originalText.equals(fixedText)) {
+                    mainHandler.post(() -> Toast.makeText(
+                            appContext,
+                            R.string.txt_display_rules_actual_file_no_changes,
+                            Toast.LENGTH_SHORT).show());
+                    return;
+                }
+
+                File outputFile = editOriginal ? sourceFile : makeActualRuleCopyFile(appContext, sourceFile);
+                writeTextWithEncodingSafely(outputFile, fixedText, encoding);
+                if (editOriginal) {
+                    markOriginalTxtFilePhysicallyModified(appContext, outputFile);
+                }
+
+                final String successMessage = editOriginal
+                        ? appContext.getString(R.string.txt_display_rules_actual_file_original_done)
+                        : appContext.getString(R.string.txt_display_rules_actual_file_copy_done, outputFile.getName());
+                mainHandler.post(() -> Toast.makeText(
+                        appContext,
+                        successMessage,
+                        Toast.LENGTH_LONG).show());
+            } catch (OutOfMemoryError oom) {
+                mainHandler.post(() -> Toast.makeText(
+                        appContext,
+                        appContext.getString(R.string.txt_display_rules_actual_file_failed,
+                                appContext.getString(R.string.txt_display_rules_actual_file_too_large_runtime)),
+                        Toast.LENGTH_LONG).show());
+            } catch (Exception e) {
+                String message = e.getMessage();
+                if (message == null || message.trim().isEmpty()) {
+                    message = e.getClass().getSimpleName();
+                }
+                final String finalMessage = message;
+                mainHandler.post(() -> Toast.makeText(
+                        appContext,
+                        appContext.getString(R.string.txt_display_rules_actual_file_failed, finalMessage),
+                        Toast.LENGTH_LONG).show());
+            }
+        }, "txt-display-rules-actual-file").start();
+    }
+
+    private static void markOriginalTxtFilePhysicallyModified(@NonNull Context context, @NonNull File file) {
+        context.getSharedPreferences(TXT_ACTUAL_FILE_EDIT_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_TXT_ACTUAL_FILE_EDIT_PATH, file.getAbsolutePath())
+                .putLong(KEY_TXT_ACTUAL_FILE_EDIT_TOKEN, System.currentTimeMillis())
+                .putLong(KEY_TXT_ACTUAL_FILE_EDIT_LENGTH, file.length())
+                .putLong(KEY_TXT_ACTUAL_FILE_EDIT_LAST_MODIFIED, file.lastModified())
+                .apply();
+    }
+
+    private static File makeActualRuleCopyFile(@NonNull Context context, @NonNull File sourceFile) {
+        File parent = sourceFile.getParentFile();
+        if (parent == null) parent = context.getFilesDir();
+        String name = sourceFile.getName();
+        String base = name;
+        String ext = "";
+        int dot = name.lastIndexOf('.');
+        if (dot > 0) {
+            base = name.substring(0, dot);
+            ext = name.substring(dot);
+        }
+        return new File(parent, base + "_edited" + ext);
+    }
+
+    private static void writeTextWithEncodingSafely(@NonNull File outputFile,
+                                                    @NonNull String text,
+                                                    String encoding) throws IOException {
+        Charset charset;
+        try {
+            charset = (encoding != null && !encoding.trim().isEmpty())
+                    ? Charset.forName(encoding)
+                    : StandardCharsets.UTF_8;
+        } catch (Exception ignored) {
+            charset = StandardCharsets.UTF_8;
+        }
+
+        File target = outputFile.getAbsoluteFile();
+        File parent = target.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            throw new IOException("Cannot create folder: " + parent.getAbsolutePath());
+        }
+        if (parent == null) {
+            throw new IOException("Cannot resolve output folder");
+        }
+
+        File temp = File.createTempFile(target.getName() + ".", ".tmp", parent);
+        boolean moved = false;
+        try (FileOutputStream fos = new FileOutputStream(temp, false);
+             OutputStreamWriter writer = new OutputStreamWriter(fos, charset)) {
+            writer.write(text);
+            writer.flush();
+            fos.getFD().sync();
+        }
+
+        try {
+            try {
+                // Same-directory POSIX rename replaces the target atomically on Android's
+                // Linux-backed file systems, so a crash is much less likely to leave the
+                // original file half-written.
+                Os.rename(temp.getAbsolutePath(), target.getAbsolutePath());
+                moved = true;
+            } catch (ErrnoException errno) {
+                // Conservative fallback for unusual storage providers/filesystems.
+                if (temp.renameTo(target)) {
+                    moved = true;
+                } else {
+                    throw new IOException("Cannot replace output file safely", errno);
+                }
+            }
+        } finally {
+            if (!moved && temp.exists()) {
+                // Best-effort cleanup.  If deletion fails, the temp file is harmless and
+                // keeps the original target untouched.
+                //noinspection ResultOfMethodCallIgnored
+                temp.delete();
+            }
+        }
+    }
+
+    private void showTextDisplayRulesDialog() {
+        final ArrayList<TextDisplayRule> rules = new ArrayList<>(TextDisplayRuleManager.getRules(this));
+        final android.app.Dialog dialog = createRoundedSettingsDialog();
+        LinearLayout panel = createRoundedSettingsDialogPanel();
+
+        int text = dialogTextColor();
+        int sub = dialogSubTextColor();
+        int outline = dialogOutlineColor();
+
+        TextView title = makeSettingsDialogTitle(getString(R.string.txt_display_rules), text);
+        panel.addView(title);
+
+        TextView guide = makeSettingsDialogMessage(getString(R.string.txt_display_rules_dialog_description), sub);
+        guide.setGravity(Gravity.CENTER);
+        panel.addView(guide);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        scroll.setClipChildren(true);
+        scroll.setClipToPadding(true);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        int listHeight = Math.max(dpToPx(160),
+                Math.min(dpToPx(360), currentVisibleWindowHeightPx() - dpToPx(260)));
+        LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, listHeight);
+        scrollLp.setMargins(0, 0, 0, dpToPx(8));
+        panel.addView(scroll, scrollLp);
+
+        final Runnable[] refresh = new Runnable[1];
+        refresh[0] = () -> {
+            list.removeAllViews();
+            if (rules.isEmpty()) {
+                TextView empty = new TextView(this);
+                empty.setText(getString(R.string.txt_display_rules_empty));
+                empty.setTextColor(sub);
+                empty.setTextSize(14f);
+                empty.setGravity(Gravity.CENTER);
+                empty.setPadding(0, dpToPx(16), 0, dpToPx(16));
+                list.addView(empty, new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                return;
+            }
+            for (int i = 0; i < rules.size(); i++) {
+                TextDisplayRule rule = rules.get(i);
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.VERTICAL);
+                row.setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10));
+                GradientDrawable bg = new GradientDrawable();
+                bg.setColor(dialogRowBackgroundColor());
+                bg.setStroke(1, outline);
+                bg.setCornerRadius(dpToPx(14));
+                row.setBackground(bg);
+
+                TextView rowTitle = new TextView(this);
+                rowTitle.setText((rule.enabled ? "✓ " : "○ ")
+                        + safePreview(rule.findText) + " → " + safePreview(rule.replacementText));
+                rowTitle.setTextColor(text);
+                rowTitle.setTextSize(15f);
+                rowTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+                row.addView(rowTitle);
+
+                TextView meta = new TextView(this);
+                String scope = TextDisplayRule.SCOPE_FILE.equals(rule.scope)
+                        ? getString(R.string.txt_display_rule_scope_current_file)
+                        : getString(R.string.txt_display_rule_scope_all_txt);
+                String caseMode = rule.caseSensitive
+                        ? getString(R.string.txt_display_rule_case_sensitive)
+                        : getString(R.string.txt_display_rule_case_insensitive);
+                String mode = rule.useRegex
+                        ? getString(R.string.txt_display_rule_regex_mode)
+                        : getString(R.string.txt_display_rule_plain_mode);
+                meta.setText(scope + " · " + caseMode + " · " + mode);
+                meta.setTextColor(sub);
+                meta.setTextSize(12f);
+                meta.setSingleLine(true);
+                meta.setEllipsize(TextUtils.TruncateAt.END);
+                meta.setPadding(0, dpToPx(4), 0, 0);
+                row.addView(meta);
+
+                String sourceFileLabel = makeTextDisplayRuleSourceFileLabel(rule);
+                if (!sourceFileLabel.isEmpty()) {
+                    TextView source = new TextView(this);
+                    source.setText(sourceFileLabel);
+                    source.setTextColor(sub);
+                    source.setTextSize(12f);
+                    source.setSingleLine(true);
+                    source.setEllipsize(TextUtils.TruncateAt.END);
+                    source.setPadding(0, dpToPx(2), 0, 0);
+                    row.addView(source);
+                }
+
+                LinearLayout orderRow = new LinearLayout(this);
+                orderRow.setOrientation(LinearLayout.HORIZONTAL);
+                orderRow.setGravity(Gravity.CENTER_VERTICAL);
+                orderRow.setPadding(0, dpToPx(8), 0, 0);
+
+                TextView up = makeSmallTextButton(getString(R.string.move_up));
+                TextView down = makeSmallTextButton(getString(R.string.move_down));
+                TextView toggle = makeSmallTextButton(rule.enabled
+                        ? getString(R.string.disable)
+                        : getString(R.string.enable));
+                TextView delete = makeSmallTextButton(getString(R.string.delete));
+                orderRow.addView(up, new LinearLayout.LayoutParams(0, dpToPx(34), 1f));
+                orderRow.addView(down, new LinearLayout.LayoutParams(0, dpToPx(34), 1f));
+                orderRow.addView(toggle, new LinearLayout.LayoutParams(0, dpToPx(34), 1f));
+                orderRow.addView(delete, new LinearLayout.LayoutParams(0, dpToPx(34), 1f));
+                row.addView(orderRow);
+
+                final int index = i;
+                row.setOnClickListener(v -> showEditTextDisplayRuleDialog(rules, index, () -> {
+                    TextDisplayRuleManager.saveRules(this, rules);
+                    refresh[0].run();
+                }));
+                row.setOnLongClickListener(v -> {
+                    showEditTextDisplayRuleDialog(rules, index, () -> {
+                        TextDisplayRuleManager.saveRules(this, rules);
+                        refresh[0].run();
+                    });
+                    return true;
+                });
+                up.setOnClickListener(v -> {
+                    if (index <= 0) return;
+                    TextDisplayRule moved = rules.remove(index);
+                    rules.add(index - 1, moved);
+                    TextDisplayRuleManager.saveRules(this, rules);
+                    refresh[0].run();
+                });
+                down.setOnClickListener(v -> {
+                    if (index >= rules.size() - 1) return;
+                    TextDisplayRule moved = rules.remove(index);
+                    rules.add(index + 1, moved);
+                    TextDisplayRuleManager.saveRules(this, rules);
+                    refresh[0].run();
+                });
+                toggle.setOnClickListener(v -> {
+                    rule.enabled = !rule.enabled;
+                    TextDisplayRuleManager.saveRules(this, rules);
+                    refresh[0].run();
+                });
+                delete.setOnClickListener(v -> showDeleteTextDisplayRuleConfirmDialog(rule, () -> {
+                    if (index < 0 || index >= rules.size()) return;
+                    rules.remove(index);
+                    TextDisplayRuleManager.saveRules(this, rules);
+                    refresh[0].run();
+                }));
+
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                lp.setMargins(0, 0, 0, dpToPx(8));
+                list.addView(row, lp);
+            }
+        };
+        refresh[0].run();
+
+        MaterialButton add = makeSettingsDialogButtonNoShade(getString(R.string.add), text, outline);
+        add.setOnClickListener(v -> showEditTextDisplayRuleDialog(rules, -1, () -> {
+            TextDisplayRuleManager.saveRules(this, rules);
+            refresh[0].run();
+        }));
+        panel.addView(add);
+
+        MaterialButton clear = makeSettingsDialogButtonNoShade(getString(R.string.clear_all), text, outline);
+        clear.setOnClickListener(v -> {
+            if (!rules.isEmpty()) {
+                showClearTextDisplayRulesConfirmDialog(() -> {
+                    rules.clear();
+                    TextDisplayRuleManager.saveRules(this, rules);
+                    refresh[0].run();
+                });
+            }
+        });
+        panel.addView(clear);
+
+        MaterialButton close = makeSettingsDialogButtonNoShade(getString(R.string.close), text, outline);
+        close.setOnClickListener(v -> dialog.dismiss());
+        panel.addView(close);
+
+        showRoundedSettingsDialog(dialog, panel);
+    }
+
+    private void showDeleteTextDisplayRuleConfirmDialog(@NonNull TextDisplayRule rule, @NonNull Runnable onDelete) {
+        final android.app.Dialog dialog = createRoundedSettingsDialog();
+        LinearLayout panel = createRoundedSettingsDialogPanel();
+
+        int text = dialogTextColor();
+        int sub = dialogSubTextColor();
+        int outline = dialogOutlineColor();
+
+        panel.addView(makeSettingsDialogTitle(getString(R.string.delete), text));
+
+        String preview = safePreview(rule.findText) + " → " + safePreview(rule.replacementText);
+        TextView message = makeSettingsDialogMessage(
+                getString(R.string.txt_display_rule_delete_confirm, preview), sub);
+        message.setGravity(Gravity.CENTER);
+        panel.addView(message);
+
+        MaterialButton delete = makeSettingsDialogButtonNoShade(getString(R.string.delete), text, outline);
+        delete.setOnClickListener(v -> {
+            dialog.dismiss();
+            onDelete.run();
+        });
+        panel.addView(delete);
+
+        MaterialButton cancel = makeSettingsDialogButtonNoShade(getString(R.string.cancel), text, outline);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        panel.addView(cancel);
+
+        showRoundedSettingsDialog(dialog, panel, true, 0.58f, 220);
+    }
+
+    private void showClearTextDisplayRulesConfirmDialog(@NonNull Runnable onClear) {
+        final android.app.Dialog dialog = createRoundedSettingsDialog();
+        LinearLayout panel = createRoundedSettingsDialogPanel();
+
+        int text = dialogTextColor();
+        int sub = dialogSubTextColor();
+        int outline = dialogOutlineColor();
+
+        panel.addView(makeSettingsDialogTitle(getString(R.string.clear_all), text));
+        panel.addView(makeSettingsDialogMessage(getString(R.string.txt_display_rules_clear_confirm), sub));
+
+        MaterialButton clear = makeSettingsDialogButtonNoShade(getString(R.string.clear_all), text, outline);
+        clear.setOnClickListener(v -> {
+            dialog.dismiss();
+            onClear.run();
+        });
+        panel.addView(clear);
+
+        MaterialButton cancel = makeSettingsDialogButtonNoShade(getString(R.string.cancel), text, outline);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        panel.addView(cancel);
+
+        showRoundedSettingsDialog(dialog, panel, true);
+    }
+
+    private void showEditTextDisplayRuleDialog(ArrayList<TextDisplayRule> rules, int editIndex, Runnable onSaved) {
+        TextDisplayRule editing = editIndex >= 0 && editIndex < rules.size() ? rules.get(editIndex) : new TextDisplayRule();
+        final android.app.Dialog dialog = createRoundedSettingsDialog();
+        LinearLayout panel = createRoundedSettingsDialogPanel();
+
+        int text = dialogTextColor();
+        int sub = dialogSubTextColor();
+        int outline = dialogOutlineColor();
+
+        TextView title = makeSettingsDialogTitle(getString(editIndex >= 0 ? R.string.edit : R.string.add), text);
+        panel.addView(title);
+
+        EditText findInput = new EditText(this);
+        findInput.setHint(R.string.txt_display_rule_find_hint);
+        findInput.setSingleLine(true);
+        findInput.setText(editing.findText);
+        styleSettingsEditText(findInput, text, sub, outline);
+        panel.addView(findInput, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(52)));
+
+        EditText replaceInput = new EditText(this);
+        replaceInput.setHint(R.string.txt_display_rule_replace_hint);
+        replaceInput.setSingleLine(true);
+        replaceInput.setText(editing.replacementText);
+        styleSettingsEditText(replaceInput, text, sub, outline);
+        LinearLayout.LayoutParams replaceLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(52));
+        replaceLp.setMargins(0, dpToPx(8), 0, 0);
+        panel.addView(replaceInput, replaceLp);
+
+        LinearLayout optionGroup = new LinearLayout(this);
+        optionGroup.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams optionGroupLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        optionGroupLp.setMargins(0, dpToPx(12), 0, dpToPx(12));
+
+        CheckBox enabledBox = makeSettingsCheckBox(getString(R.string.enabled), text);
+        enabledBox.setChecked(editing.enabled);
+        optionGroup.addView(enabledBox);
+
+        CheckBox caseBox = makeSettingsCheckBox(getString(R.string.txt_display_rule_case_sensitive), text);
+        caseBox.setChecked(editing.caseSensitive);
+        optionGroup.addView(caseBox);
+
+        CheckBox regexBox = makeSettingsCheckBox(getString(R.string.txt_display_rule_use_regex), text);
+        regexBox.setChecked(editing.useRegex);
+        optionGroup.addView(regexBox);
+
+        CheckBox fileOnlyBox = makeSettingsCheckBox(getString(R.string.txt_display_rule_current_file_only), text);
+        fileOnlyBox.setChecked(TextDisplayRule.SCOPE_FILE.equals(editing.scope));
+        fileOnlyBox.setEnabled(currentTxtFilePath != null && !currentTxtFilePath.isEmpty());
+        optionGroup.addView(fileOnlyBox);
+
+        panel.addView(optionGroup, optionGroupLp);
+
+        TextView warning = makeSettingsDialogMessage(getString(R.string.txt_display_rule_length_warning), sub);
+        warning.setGravity(Gravity.START);
+        panel.addView(warning);
+
+        MaterialButton save = makeSettingsDialogButtonNoShade(getString(R.string.save), text, outline);
+        save.setOnClickListener(v -> {
+            String find = findInput.getText() != null ? findInput.getText().toString() : "";
+            if (find.isEmpty()) {
+                Toast.makeText(this, R.string.txt_display_rule_find_required, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            String oldScope = editIndex >= 0 ? editing.scope : TextDisplayRule.SCOPE_ALL_TXT;
+            String oldFilePath = editIndex >= 0 && editing.filePath != null ? editing.filePath : "";
+
+            editing.findText = find;
+            editing.replacementText = replaceInput.getText() != null ? replaceInput.getText().toString() : "";
+            editing.enabled = enabledBox.isChecked();
+            editing.caseSensitive = caseBox.isChecked();
+            editing.useRegex = regexBox.isChecked();
+            if ((editing.sourceFilePath == null || editing.sourceFilePath.isEmpty()) && currentTxtFilePath != null && !currentTxtFilePath.isEmpty()) {
+                editing.sourceFilePath = currentTxtFilePath;
+            }
+            if (fileOnlyBox.isChecked() && currentTxtFilePath != null && !currentTxtFilePath.isEmpty()) {
+                editing.scope = TextDisplayRule.SCOPE_FILE;
+                if (editIndex >= 0 && TextDisplayRule.SCOPE_FILE.equals(oldScope) && oldFilePath != null && !oldFilePath.isEmpty()) {
+                    editing.filePath = oldFilePath;
+                } else {
+                    editing.filePath = currentTxtFilePath;
+                }
+            } else {
+                editing.scope = TextDisplayRule.SCOPE_ALL_TXT;
+                editing.filePath = "";
+            }
+            if (editIndex < 0) rules.add(editing);
+            if (onSaved != null) onSaved.run();
+            dialog.dismiss();
+        });
+        panel.addView(save);
+
+        MaterialButton cancel = makeSettingsDialogButtonNoShade(getString(R.string.cancel), text, outline);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        panel.addView(cancel);
+
+        showRoundedSettingsDialog(dialog, panel);
+    }
+
+    private void styleSettingsEditText(@NonNull EditText input, int text, int hint, int outline) {
+        input.setTextColor(text);
+        input.setHintTextColor(hint);
+        input.setTextSize(15f);
+        input.setSingleLine(true);
+        input.setPadding(dpToPx(12), 0, dpToPx(12), 0);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(dialogRowBackgroundColor());
+        bg.setCornerRadius(dpToPx(12));
+        bg.setStroke(dpToPx(1), outline);
+        input.setBackground(bg);
+    }
+
+    private CheckBox makeSettingsCheckBox(String label, int text) {
+        CheckBox box = new CheckBox(this);
+        box.setText(label);
+        box.setTextColor(text);
+        box.setTextSize(14f);
+        box.setButtonTintList(ColorStateList.valueOf(text));
+        return box;
+    }
+
+    private TextView makeSmallTextButton(String text) {
+        TextView button = new TextView(this);
+        button.setText(text);
+        button.setTextColor(dialogTextColor());
+        button.setTextSize(12f);
+        button.setGravity(Gravity.CENTER);
+        button.setPadding(dpToPx(4), 0, dpToPx(4), 0);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(dialogRowBackgroundColor());
+        bg.setStroke(1, dialogOutlineColor());
+        bg.setCornerRadius(dpToPx(10));
+        button.setBackground(bg);
+        return button;
+    }
+
+    private String makeTextDisplayRuleSourceFileLabel(@NonNull TextDisplayRule rule) {
+        String sourcePath = rule.sourceFilePath;
+        if ((sourcePath == null || sourcePath.isEmpty()) && rule.filePath != null && !rule.filePath.isEmpty()) {
+            sourcePath = rule.filePath;
+        }
+        if (sourcePath == null || sourcePath.isEmpty()) return "";
+        String fileName = new File(sourcePath).getName();
+        if (fileName == null || fileName.isEmpty()) fileName = sourcePath;
+        return getString(R.string.txt_display_rule_source_file, fileName);
+    }
+
+    private String safePreview(String value) {
+        if (value == null) return "";
+        String oneLine = value.replace('\n', ' ').replace('\r', ' ');
+        return oneLine.length() > 32 ? oneLine.substring(0, 32) + "…" : oneLine;
     }
 
     private int roundToTextZoneStep(int px, int stepPx) {
@@ -909,6 +1650,40 @@ public class SettingsActivity extends AppCompatActivity {
         findViewById(R.id.btn_import).setOnClickListener(v -> importLauncher.launch(new String[]{"application/json", "text/*"}));
     }
 
+
+    private void setupResetSettings() {
+        View reset = findViewById(R.id.btn_reset_settings);
+        if (reset == null) return;
+        reset.setOnClickListener(v -> showResetSettingsConfirmDialog());
+    }
+
+    private void showResetSettingsConfirmDialog() {
+        final android.app.Dialog dialog = createRoundedSettingsDialog();
+        LinearLayout panel = createRoundedSettingsDialogPanel();
+
+        int text = dialogTextColor();
+        int sub = dialogSubTextColor();
+        int outline = dialogOutlineColor();
+
+        panel.addView(makeSettingsDialogTitle(getString(R.string.settings_reset_confirm_title), text));
+        panel.addView(makeSettingsDialogMessage(getString(R.string.settings_reset_confirm_message), sub));
+
+        MaterialButton reset = makeSettingsDialogButtonNoShade(getString(R.string.settings_reset), text, outline);
+        reset.setOnClickListener(v -> {
+            prefs.resetReaderAndAppSettings();
+            Toast.makeText(this, R.string.settings_reset_done, Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
+            recreate();
+        });
+        panel.addView(reset);
+
+        MaterialButton cancel = makeSettingsDialogButtonNoShade(getString(R.string.cancel), text, outline);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        panel.addView(cancel);
+
+        showRoundedSettingsDialog(dialog, panel, true);
+    }
+
     private String makeBackupFileName() {
         String timestamp = new SimpleDateFormat("yyyy_MM_dd_HH_mm_ss", Locale.US).format(new Date());
         return "textview_backup_" + timestamp + ".json";
@@ -1126,6 +1901,10 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void showRoundedSettingsDialog(android.app.Dialog dialog, LinearLayout panel, boolean compactWidth) {
+        showRoundedSettingsDialog(dialog, panel, compactWidth, 0.70f, 240);
+    }
+
+    private void showRoundedSettingsDialog(android.app.Dialog dialog, LinearLayout panel, boolean compactWidth, float compactWidthFraction, int compactMinWidthDp) {
         ScrollView adaptiveScroll = new ScrollView(this);
         adaptiveScroll.setFillViewport(false);
         adaptiveScroll.setClipChildren(true);
@@ -1136,9 +1915,9 @@ public class SettingsActivity extends AppCompatActivity {
                 ScrollView.LayoutParams.MATCH_PARENT,
                 ScrollView.LayoutParams.WRAP_CONTENT));
         dialog.setContentView(adaptiveScroll);
-        prepareRoundedSettingsDialogWindow(dialog, true, compactWidth);
+        prepareRoundedSettingsDialogWindow(dialog, true, compactWidth, compactWidthFraction, compactMinWidthDp);
         dialog.setOnShowListener(d -> {
-            prepareRoundedSettingsDialogWindow(dialog, false, compactWidth);
+            prepareRoundedSettingsDialogWindow(dialog, false, compactWidth, compactWidthFraction, compactMinWidthDp);
             applyAdaptiveSettingsDialogMaxHeight(adaptiveScroll);
             android.view.Window shownWindow = dialog.getWindow();
             if (shownWindow != null) {
@@ -1146,7 +1925,7 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
         dialog.show();
-        prepareRoundedSettingsDialogWindow(dialog, false, compactWidth);
+        prepareRoundedSettingsDialogWindow(dialog, false, compactWidth, compactWidthFraction, compactMinWidthDp);
     }
 
     private void applyAdaptiveSettingsDialogMaxHeight(@NonNull View adaptiveView) {
@@ -1195,6 +1974,10 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void prepareRoundedSettingsDialogWindow(android.app.Dialog dialog, boolean hideUntilLaidOut, boolean compactWidth) {
+        prepareRoundedSettingsDialogWindow(dialog, hideUntilLaidOut, compactWidth, 0.70f, 240);
+    }
+
+    private void prepareRoundedSettingsDialogWindow(android.app.Dialog dialog, boolean hideUntilLaidOut, boolean compactWidth, float compactWidthFraction, int compactMinWidthDp) {
         android.view.Window window = dialog.getWindow();
         if (window == null) return;
 
@@ -1209,7 +1992,7 @@ public class SettingsActivity extends AppCompatActivity {
         if (compactWidth) {
             // Short custom-theme action/delete popups should be visibly compact.
             // Use the actual screen percentage, not the normal 420dp settings-dialog cap.
-            lp.width = Math.max(dpToPx(240), Math.round(screenWidth * 0.70f));
+            lp.width = Math.max(dpToPx(compactMinWidthDp), Math.round(screenWidth * compactWidthFraction));
         } else {
             lp.width = Math.min(
                     screenWidth - dpToPx(40),
@@ -1254,6 +2037,64 @@ public class SettingsActivity extends AppCompatActivity {
         lp.setMargins(0, 0, 0, dpToPx(12));
         message.setLayoutParams(lp);
         return message;
+    }
+
+    private TextView makeSettingsDialogWarning(String value, int textColor, int outlineColor) {
+        return makeSettingsDialogWarning(value, textColor, dialogRowBackgroundColor(), outlineColor);
+    }
+
+    private TextView makeSettingsDialogWarningBox(CharSequence value, boolean severe) {
+        return makeSettingsDialogWarning(
+                value,
+                warningTextColor(severe),
+                warningBackgroundColor(severe),
+                warningOutlineColor(severe));
+    }
+
+    private TextView makeSettingsDialogWarning(CharSequence value, int textColor, int bgColor, int outlineColor) {
+        TextView warning = new TextView(this);
+        warning.setText(value);
+        warning.setTextColor(textColor);
+        warning.setTextSize(12.5f);
+        warning.setGravity(android.view.Gravity.CENTER);
+        warning.setLineSpacing(0, 1.08f);
+        warning.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        int padH = dpToPx(12);
+        int padV = dpToPx(9);
+        warning.setPadding(padH, padV, padH, padV);
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(bgColor);
+        bg.setCornerRadius(dpToPx(14));
+        bg.setStroke(dpToPx(1), outlineColor);
+        warning.setBackground(bg);
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, 0, 0, 0);
+        warning.setLayoutParams(lp);
+        return warning;
+    }
+
+    private int warningBackgroundColor(boolean severe) {
+        if (severe) {
+            return isDarkUi() ? Color.rgb(92, 27, 32) : Color.rgb(248, 215, 218);
+        }
+        return isDarkUi() ? Color.rgb(92, 70, 20) : Color.rgb(255, 243, 205);
+    }
+
+    private int warningOutlineColor(boolean severe) {
+        if (severe) {
+            return isDarkUi() ? Color.rgb(170, 68, 78) : Color.rgb(220, 53, 69);
+        }
+        return isDarkUi() ? Color.rgb(188, 140, 36) : Color.rgb(230, 175, 46);
+    }
+
+    private int warningTextColor(boolean severe) {
+        if (severe) {
+            return isDarkUi() ? Color.rgb(255, 226, 230) : Color.rgb(132, 32, 41);
+        }
+        return isDarkUi() ? Color.rgb(255, 243, 205) : Color.rgb(95, 67, 0);
     }
 
     private MaterialButton makeSettingsDialogButton(String label, int text, int bg, int outline) {
