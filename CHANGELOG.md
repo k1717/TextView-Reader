@@ -1,6 +1,75 @@
 # Changelog
 
+## 2.1.1 - 2026-05-16
+
+This entry shows the functional difference from the uploaded **2.1.0** GitHub source package. It does not list every intermediate patch step.
+
+### Large TXT paging and partitioning
+
+- Changed large TXT active rendering to fixed **4,000-logical-line partitions** instead of the earlier estimated preview-window behavior.
+- Added a lookahead region after each active partition so partition-end pages can render smoothly.
+- Added in-place partition switching so crossing a partition boundary behaves like a page turn instead of a visible file reload where possible.
+- Added neighbor partition prefetching and a small partition cache for smoother boundary crossing.
+
+### Large TXT exact page index
+
+- Added a background exact page-anchor index for large TXT files.
+- Optimized current-page lookup using page anchors instead of linear scanning.
+- Improved toolbar slider, Go to Page, Page Up/Down, and bookmark jump accuracy after the exact index is ready.
+- Prevented exact Go to Page from silently relying on estimated positions while the exact index is still unavailable.
+
+### TXT toolbar slider and loading window
+
+- Fixed toolbar page slider snap-back during async large-TXT jumps.
+- Added pending target-page state so slider and label stay on the user-selected destination while loading.
+- Restyled the TXT loading window as a compact rounded, theme-aware panel.
+- Used the loading window for uncached large-TXT slider, Go to Page, and bookmark jumps.
+- Kept cached same-partition jumps immediate without unnecessary loading flashes.
+
+### Large TXT final-page behavior
+
+- Ignored terminal blank-line filler for page-index and paging calculations.
+- Normalized EOF page status so the final meaningful text reports the true final page instead of creating an extra blank page or stopping one page early.
+
+### Bookmark backup editing
+
+- Replaced the long `beginnerEditableBookmarks` export layout with a cleaner nested structure:
+
+```json
+"bookmarkEdits": {
+  "beginner": [],
+  "developer": []
+}
+```
+
+- `bookmarkEdits.beginner` is intended for safe user edits such as memo, target line/page, relative movement, and TXT phrase search.
+- `bookmarkEdits.developer` keeps repair-oriented fields such as raw character position, anchors, file identity, and internal metadata.
+- Added shorter and kinder bilingual English/Korean guidance for both beginner and developer sections.
+- Kept import compatibility with the older 2.1.0 backup-edit fields.
+
+### Bookmark jump anchoring
+
+- Passed TXT bookmark anchor context during bookmark opening.
+- Improved restoration to the intended passage after layout changes, large-TXT partition changes, or portable file rebinding.
+
+### PDF viewer
+
+- Made original-size PDF page swipes more sensitive.
+- Relaxed original-size swipe direction strictness so slight diagonal motion is less likely to block a page turn.
+- Removed unnecessary loading-spinner flashes during normal PDF page turns and zoom redraws.
+- Kept initial PDF file loading feedback.
+- Centered newly rendered pages after next/previous movement while zoomed in, instead of landing at the upper-left corner.
+
+### EPUB reader
+
+- Added EPUB page-direction settings for left-to-right and right-to-left reading.
+- Renamed right-to-left EPUB wording to **Japanese-style** reading.
+- Added EPUB transition-effect setting for slide or none.
+- Made EPUB swipe direction and slide animation follow the selected reading direction.
+
 ## 2.1.0 - 2026-05-15
+
+This release consolidates the post-2.0.9 UI, package-name, bookmark, and backup-editing work into a GitHub-ready source package.
 
 ### Package identity
 
@@ -45,6 +114,8 @@
 - Import regenerates excerpts and anchor fields after beginner edits are applied.
 
 ## 2.0.9 - 2026-05-11
+
+This entry lists the functional difference from **2.0.8** only. The 2.0.8 hardware-key, e-ink, toolbar animation, TXT reload, optimization, and Toast cleanup changes remain in the 2.0.8 entry below.
 
 ### TXT small-file row alignment
 

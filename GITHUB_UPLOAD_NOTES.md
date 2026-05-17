@@ -1,4 +1,4 @@
-# TextView Reader 2.1.0 GitHub Upload Notes
+# TextView Reader 2.1.1 GitHub Upload Notes
 
 Use this checklist before replacing files on GitHub through the web interface.
 
@@ -74,7 +74,7 @@ captures/
 9. Commit with a message such as:
 
 ```text
-Update TextView Reader 2.1.0 source
+Update TextView Reader 2.1.1 source
 ```
 
 ## Important limitation
@@ -105,28 +105,3 @@ Before uploading, confirm the package does not contain:
 - local SDK path files;
 - signing keys;
 - secret/environment files.
-
-## Release notes summary for v2.1.0
-
-Use this if GitHub asks for a short release description. This summary lists the consolidated difference from **2.0.9**:
-
-```markdown
-## TextView Reader 2.1.0
-
-2.1.0 consolidates the post-2.0.9 UI, package-name, bookmark, and backup-editing work into a GitHub-ready source release.
-
-- Changed the Android package/application ID and namespace to `com.textview.reader`.
-- Added adaptive rounded-popup sizing for constrained app windows while preserving normal full-screen dialog sizing.
-- Centered dialog/header text across main-screen and TXT/PDF/EPUB/Word viewer windows.
-- Removed shaded/ripple option-box effects from backup import and custom reading-theme dialogs, and made those dialogs compact at about 70% screen width.
-- Replaced in-app update checking with a static, copyable Settings release link: `Check updates at https://github.com/k1717/TextView-Reader/releases`.
-- Changed the default TXT tap-zone layout for fresh installs to horizontal: left previous page, center menu, right next page.
-- Fixed TXT bookmark saving to use the actual title-covered visual row and an interior row sample, avoiding off-by-one saves.
-- Added robust TXT bookmark restoration with nearby anchor text so bookmarks remain tied to the same passage after font, line spacing, or boundary changes.
-- Added portable bookmark identity metadata so imported bookmarks can rebind to the same file after moving folders/devices.
-- Added timestamped backup filenames: `textview_backup_year_month_day_hour_minute_second.json`.
-- Added bilingual beginner bookmark-edit tutorial sections and a separated `beginnerEditableBookmarks` edit area in exported backups.
-- Updated Android metadata to `versionCode 210` and `versionName 2.1.0`.
-
-Package migration note: Android treats `com.textview.reader` as a different app from older package builds. Export a TextView backup from the old app and import it in this build to migrate bookmarks, reading positions, settings, and custom themes.
-```

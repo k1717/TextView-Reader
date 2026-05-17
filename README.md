@@ -2,7 +2,22 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.1.0**
+Current version: **2.1.1**
+
+## What changed in 2.1.1 from 2.1.0
+
+- Reworked large TXT active rendering to use fixed **4,000-logical-line partitions** with lookahead, neighbor prefetch, and in-place partition switching where possible.
+- Added a background exact large-TXT page-anchor index so page labels, toolbar slider jumps, Go to Page, and bookmark jumps can resolve against real page anchors after indexing completes.
+- Fixed large TXT final-page/EOF handling so terminal blank line filler does not create an extra blank final page or make the final content report one page early.
+- Fixed TXT toolbar slider and Go to Page behavior so the selected target page does not snap back to the old page while an uncached large-TXT partition is loading.
+- Updated the TXT loading window to a compact rounded, theme-aware panel and reused it for uncached large-TXT slider, Go to Page, and bookmark jumps.
+- Changed backup bookmark PC editing from the long repeated `beginnerEditableBookmarks` tutorial format to a cleaner `bookmarkEdits.beginner` / `bookmarkEdits.developer` structure, while keeping backward-compatible import for old backups.
+- Added friendlier bilingual English/Korean backup-edit guidance for both beginner-safe edits and developer/internal recovery edits.
+- Improved TXT bookmark loading by carrying anchor context into bookmark jumps, making large-TXT and layout-change restoration more stable.
+- Made original-size PDF page swipes more sensitive while keeping zoomed PDF gestures conservative enough to pan first.
+- Removed the PDF loading spinner from fast page-turn and zoom redraws, while keeping it for initial PDF loading.
+- Changed zoomed PDF next/previous page turns to land centered instead of at the upper-left corner.
+- Added EPUB page-direction and transition settings, including right-to-left **Japanese-style** reading and an option to disable slide animation.
 
 ## What changed in 2.1.0 from 2.0.9
 
@@ -87,7 +102,7 @@ Current version: **2.1.0**
 ### TXT reading
 
 - Encoding detection for UTF-8, EUC-KR/CP949/MS949, and UTF-16.
-- Large TXT handling with generated page/index cache bookkeeping.
+- Large TXT handling with fixed 4,000-logical-line active partitions, lookahead rendering, neighbor prefetch, and generated page/index cache bookkeeping.
 - Huge TXT preview-only threshold increased to **32 MB**.
 - Generated TXT cache cleanup uses retention logic for disposable pagination/index data.
 - Cache cleanup does not delete bookmarks, history, reading position, folder shortcuts, or documents.
@@ -97,19 +112,22 @@ Current version: **2.1.0**
 - User-added font removal from the normal compact font picker by long-press.
 - Volume-key page movement.
 - Auto-resume reading position.
-- Theme-matched loading indicator instead of a hard black loading box.
+- Compact rounded theme-matched loading panel instead of a hard black loading box; uncached large-TXT Go to Page, toolbar slider, and bookmark jumps use this loading panel.
 
 ### PDF reading
 
 - Android `PdfRenderer` based reading path.
 - Horizontal page-slide mode.
+- Original-size page swipes are more sensitive for easier page turning.
 - Vertical continuous mode.
 - Pinch zoom that keeps the selected focal spot stable.
+- Zoomed next/previous page turns land centered instead of at the upper-left corner.
 - Horizontal panning for zoomed pages in vertical continuous mode.
 - Single-tap toolbar fold/return with folded-mode safe-area padding plus a 6dp extra buffer.
 - Faster horizontal pan response for zoomed vertical pages.
 - Improved continuous-mode blank-page recovery and render rebinding.
 - More stable popup/dialog sizing and positioning.
+- Page-turn and zoom redraws avoid showing the centered PDF spinner unless the file is initially loading.
 - PDF slide-mode label refreshes while the More dialog is open.
 - Bookmarks and file info.
 
@@ -121,6 +139,8 @@ Current version: **2.1.0**
 - Font selector follows the TXT reader font-dialog structure.
 - EPUB file-declared fonts can be used as **Default font**.
 - EPUB boundary can be adjusted from **Settings > EPUB layout** for left, right, top, and bottom boundaries without changing Word/DOCX padding.
+- EPUB page direction can be set for left-to-right Korean/Western books or right-to-left Japanese-style books.
+- EPUB page transition can use slide animation or no transition effect.
 - Word file-declared fonts can be used as **Default font** when detected from DOCX style/font metadata.
 - Imported/system fonts are served to WebView through the internal local font route instead of direct file access.
 - Multiple added fonts are preserved in the compact font picker.
@@ -140,11 +160,13 @@ Current version: **2.1.0**
 - Folder-delete confirmation uses the rounded/bordered dialog style.
 - Bookmark memo dialogs include **Cancel**, **Clear memo**, and **Save**.
 - TXT bookmarks save from the title-covered visual row and restore by character position plus nearby anchor text.
+- TXT bookmark jumps pass anchor context into the loading path, improving restoration across large-TXT partitions and layout changes.
 - TXT bookmarks remain more stable after font, spacing, and boundary changes because the saved text passage is used as the logical target.
 - Portable bookmark identity metadata allows imported bookmarks to rebind to the same file after the file is moved or restored on another device.
 - Export/import support for bookmarks, reading positions, app settings, layout settings, and custom reading themes.
 - Backup filenames use the timestamped form `textview_backup_year_month_day_hour_minute_second.json`.
-- Exported backups include a bilingual beginner bookmark tutorial and a separated `beginnerEditableBookmarks` area for PC editing.
+- Exported backups include friendly bilingual backup-edit guidance and separated `bookmarkEdits.beginner` / `bookmarkEdits.developer` areas for PC editing.
+- Import remains compatible with older backups that use `beginnerEditableBookmarks`, `pcEditPosition`, or older memo/position edit fields.
 - Reading-position persistence per file.
 - Bookmark cleanup and cache cleanup are separate.
 
