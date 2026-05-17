@@ -1,5 +1,97 @@
 # Changelog
 
+## 2.1.2 - 2026-05-17
+
+This package keeps Android metadata at `versionCode 212` and `versionName "2.1.2"`.  It consolidates the TXT Display Rules work, large-TXT paging/search fixes, and main-browser parent-folder navigation while keeping the app version at 2.1.2.
+
+### Main file browser
+
+- Added a parent-folder navigation button to the main file-browser path bar.
+- The button is placed on the right side of the path bar.
+- Button text is **← Parent folder** / **← 상위 폴더로**.
+- Tapping it moves to the current folder's parent without relying on Android Back.
+- At a storage root, it returns to the Recent/home view.
+- The button is hidden on the Recent screen and search-result screen.
+
+### TXT Display Rules
+
+- Added viewing-only TXT masking/replacement rules.
+- Normal TXT Display Rules do not modify the source TXT file.
+- Rules support enabled/disabled state, case-sensitive matching, plain-text matching, regular-expression matching, all-TXT scope, and current-file-only scope.
+- Added rule-source labeling so the rule list can show which TXT file a rule was made from.
+- Added quick rule creation from the TXT viewer through **More > Add display rule** and long-press word prefill.
+- Added rule ordering with Up/Down controls. Up/Down does not reload the active TXT viewer by itself, but rule order affects overlapping replacements and actual-file rule application.
+- Rule changes from the TXT rule manager apply after the rule/add window closes, keeping the rule window responsive while editing.
+- Display rules are applied before visible TXT rendering, pagination, large-TXT partition rendering, exact page-index construction, search, and bookmark positioning.
+- Individual delete actions use rounded confirmation UI.
+
+### Edit Actual TXT File
+
+- Added **Edit Actual TXT File** below **TXT Display Rules** in Settings when Settings is opened from a TXT viewer.
+- The action permanently applies all enabled rules that apply to the current TXT file.
+- Users can choose either original overwrite or copy mode.
+- Original mode overwrites the opened TXT file, marks it physically modified, reloads the viewer, clears stale page/index state, and fully repaginates the TXT.
+- Copy mode writes to `originalname_edited.txt` and overwrites the same edited-copy target instead of creating repeated numbered copies.
+- Copy mode does not reload the currently opened original viewer.
+- The destructive flow uses rounded dialogs, colored warning boxes, a second **Are you sure?** confirmation, and a larger bold **There is no turning back.** warning.
+- Physical writes use a same-folder temporary file and replacement step to reduce partial-write risk.
+- Added large-file warnings and an `OutOfMemoryError` fallback because actual-file editing must read, transform, and rewrite the full file.
+
+### TXT Auto Page Turn
+
+- Added low-power automatic page turning for TXT reading.
+- The interval is entered in seconds per page.
+- Auto Page Turn advances by one full page at each interval rather than continuously scrolling.
+- Auto Page Turn stops at the final page, when the viewer leaves the foreground, or when the user manually scrolls, taps, drags, uses the slider, or uses Go to Page.
+- A stopped message is shown when manual page movement interrupts Auto Page Turn.
+
+### Large TXT page movement and exact indexing
+
+- Large TXT active rendering remains based on fixed 4,000-logical-line partitions.
+- Page movement no longer waits for exact full-page indexing to finish.
+- If exact anchors are still building or fail, Go to Page / slider movement falls back to an estimated 4,000-line partition jump.
+- Exact-index failure is tracked separately instead of being treated as endless calculation.
+- User-facing Korean wording uses **대략적인 위치** for approximate movement.
+- Replaced the memory-heavy full-file exact-index layout path with chunked line-based exact indexing.
+- Large TXT still works toward an accurate full page count even when indexing takes a long time.
+- While chunked exact indexing runs, page movement remains usable through the 4,000-line fallback.
+- When chunked exact anchors finish, the viewer updates the total page count from estimated to exact.
+- The chunked exact index uses the same TXT Display Rule chain as the visible reader.
+
+### Large TXT final-page fixes
+
+- Added a dedicated final-page path for partitioned TXT files.
+- Final-page movement loads or uses the real EOF partition instead of relying only on a global trailing-blank anchor.
+- Fixed a case where manual scroll could reach the final page but tap/page-down stopped at the previous page.
+- Final-page jumps can clamp to the physical visual EOF of the last partition when the final page is only a small EOF tail below the last anchor.
+- Final-page placement is applied before first draw in the final-page path to avoid anchor-page-to-EOF flicker.
+- If the final partition is already active, the viewer moves directly to visual EOF instead of reloading/rebuilding the partition, reducing final-page transition delay.
+
+### TXT body search
+
+- Large-TXT body search no longer searches only the currently loaded 4,000-line partition.
+- Search scans the display-rule-applied TXT stream, finds the matching logical line, loads the owning partition, and moves to the result.
+- Search does not need to wait for exact page indexing to finish.
+- Search result highlighting maps global large-TXT match positions into the active partition before drawing.
+- Large-TXT search uses a separate background executor so long exact-page-index builds do not block find-next/find-previous requests.
+- Added an optional match-number field to the TXT search window.
+- Users can enter a number and tap **Nth / n번째** to jump directly to that occurrence.
+- Nth search works in both normal TXT mode and large TXT partition mode.
+- Next/Previous search behavior is unchanged when the nth field is empty.
+
+### UI and Settings cleanup
+
+- Applied rounded popup styling to new display-rule, actual-file edit, auto-page-turn, delete-confirmation, and settings-reset dialogs.
+- Moved and resized TXT Display Rule / Add Display Rule / Auto Page Turn windows to match the newer one-hand-friendly popup layout.
+- Added **Reset settings** for restoring reader/app preferences while preserving bookmarks, reading positions, recent files, folder shortcuts, TXT Display Rules, custom themes, and PIN lock.
+- Settings backup/export includes TXT Display Rules through the existing settings import/export path.
+
+### Version metadata
+
+- Android `versionCode`: `212`
+- Android `versionName`: `2.1.2`
+- Android package identity remains `com.textview.reader`.
+
 ## 2.1.1 - 2026-05-16
 
 This entry shows the final functional difference from the uploaded **2.1.0** GitHub source package. It does not list every intermediate patch step, while older version entries remain below for full history.
@@ -443,7 +535,7 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 - Removed the shade/ripple/elevation effect from the backup import confirmation option boxes.
 - Kept the rounded box border style and Merge / Replace / Cancel behavior unchanged.
 
-### Import dialog rounded UI hotfix
+### Import dialog rounded UI
 - Changed the backup import confirmation window from the default system AlertDialog to the same rounded custom settings dialog style used by the other Settings popups.
 - Kept import behavior unchanged: Merge, Replace, and Cancel still perform the same actions.
 
@@ -455,5 +547,5 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 ### Compact custom-theme dialogs
 - Made the custom reading-theme action and delete confirmation windows more compact horizontally, about 70% screen width.
 
-### 2.1.0 import dialog compact width hotfix
+### 2.1.0 import dialog compact width
 - Made the Backup Import / 가져오기 confirmation dialog use the compact ~70% dialog width.

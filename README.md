@@ -2,7 +2,33 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.1.1**
+Current version: **2.1.2**
+
+## What changed in 2.1.2 from 2.1.1
+
+- Added **TXT Display Rules** for viewing-only text replacement or masking. Normal display rules change only the text shown in the TXT viewer; the source file is not modified.
+- Rules can be enabled/disabled, case-sensitive or case-insensitive, plain-text or regular-expression based, global for all TXT files, or limited to one TXT file.
+- Added TXT-viewer quick add flow: long-press a visible word or use **More > Add display rule** to create a rule without leaving the reader.
+- Added rule-source labeling so saved rules can show which file they were originally created from.
+- Added rule ordering controls so multiple replacement rules can be moved up/down and applied in top-to-bottom order. Up/down does not reload the active viewer by itself, but order can affect final output when rules overlap.
+- Added quick enable/disable/delete controls and rounded delete-confirmation dialogs in the display-rule list.
+- Reader-side display-rule changes are applied when the rule/add window closes, so the rule manager remains responsive while editing.
+- Display rules are applied before TXT pagination and large-TXT exact indexing, so the page count, slider, Go to Page, search, and bookmarks follow the text shown on screen while rules are enabled.
+- Added **Edit Actual TXT File** below **TXT Display Rules** in Settings when Settings is opened from a TXT viewer. It can permanently apply all enabled applicable rules to either the original TXT file or a copied `*_edited.txt` file.
+- Actual-file edit uses rounded confirmation popups, yellow/red warning boxes, a second **Are you sure?** step, and an emphasized **There is no turning back.** warning.
+- In copy mode, the app writes to the same `*_edited.txt` target and overwrites that edited copy instead of creating repeated numbered copies. In original mode, the opened TXT is reloaded and fully repaginated after the write succeeds. Physical writes now use a same-folder temporary file plus replacement step to reduce the chance of partially written output.
+- Added low-power **Auto Page Turn** as a TXT toolbar button for e-ink/low-end devices: the reader turns one page after the user-specified number of seconds instead of continuously scrolling.
+- Applied rounded popup styling to the new display-rule, actual-file edit, auto-page-turn, and settings-reset dialogs; auto-page-turn action buttons now use short Start/Stop labels.
+- Settings backups include the saved display-rule JSON through the existing settings export/import path.
+- Added **Reset settings** in Settings. It restores reader/app preferences to defaults while keeping bookmarks, reading positions, recent files, folder shortcuts, TXT display rules, custom themes, and PIN lock.
+- Multi-line find/replace is intentionally left out for now to keep large-TXT partition boundaries predictable.
+- Added a right-side **← Parent folder** / **← 상위 폴더로** button in the main file-browser path bar.
+- Improved large-TXT page movement so Go to Page and slider movement can use an estimated 4,000-line partition jump while exact indexing is still building.
+- Replaced the previous large-TXT full-file exact-index path with chunked line-based exact indexing, allowing high-line-count files to continue toward an accurate final page count without one giant full-file layout.
+- Improved large-TXT final-page handling so EOF-tail pages remain reachable by tap/page-down, with reduced flicker and reduced delay when the final partition is already active.
+- Improved large-TXT Find so search can scan the full TXT file and jump to the matching logical line/partition without waiting for exact page indexing to finish.
+- Added an **Nth / n번째** search option for jumping directly to the selected occurrence of a search term.
+- Updated Android version metadata to `versionCode 212` and `versionName "2.1.2"`.
 
 ## What changed in 2.1.1 from 2.1.0
 
@@ -46,6 +72,7 @@ Current version: **2.1.1**
 - **Recent files** are shown first.
 - **File search** filters the visible file list.
 - **Sort button** opens sort options for recent files and folder browsing.
+- **← Parent folder** / **← 상위 폴더로** appears on the right side of the path bar while browsing folders.
 - **Left drawer** contains fixed storage shortcuts, user-added folder shortcuts, recent folders, and bottom actions.
 - **Long-press a folder** in the file browser to add or remove it as a drawer shortcut.
 - **Long-press a user-added shortcut** in the drawer to remove it.
@@ -53,7 +80,8 @@ Current version: **2.1.1**
 ### TXT reader
 
 - Tap the reader area to toggle the overlay controls.
-- Use **Find** for text search.
+- Use **Find** for text search, including next/previous match and direct **Nth / n번째** occurrence movement.
+- In large TXT files, Find can scan the full file and jump to the matching partition without waiting for exact page indexing.
 - Use **Go to Position** for percent/line jumps.
 - Use **Bookmarks** to add, move to, edit, or delete bookmarks.
 - Use **More > Font** to choose built-in, system-scanned, or imported fonts.
@@ -61,6 +89,9 @@ Current version: **2.1.1**
 - Page indicator alignment can be set to left, center, right, or hidden.
 - When the TXT control selector is open, the current file title appears under the top page indicator and hides again in full viewer mode.
 - TXT pagination uses line-boundary anchors to reduce duplicate/skipped lines and keep first/last page rows aligned.
+- Use **More > Add display rule** to create a TXT display rule from inside the reader. Long-pressing a visible word can prefill the find field.
+- Use **More > TXT Display Rules** to manage display rules for viewing-only masking/replacement. Rule changes are applied to the viewer after the rule window closes.
+- Use **Settings > Edit Actual TXT File** only when you want to permanently write enabled display-rule results into the current TXT file or a copied `*_edited.txt` file.
 
 ### PDF reader
 
@@ -95,6 +126,7 @@ Current version: **2.1.1**
 ### File browsing and navigation
 
 - Recent-file-first home screen.
+- Right-side **← Parent folder** / **← 상위 폴더로** button in folder-browsing mode.
 - Folder browsing with sorting by name, date, size, and type.
 - Compact sort dialog with theme-matched selection indicators.
 - Fixed drawer storage shortcuts for common locations.
@@ -108,7 +140,12 @@ Current version: **2.1.1**
 
 - Encoding detection for UTF-8, EUC-KR/CP949/MS949, and UTF-16.
 - Large TXT handling with fixed 4,000-logical-line active partitions, lookahead rendering, neighbor prefetch, and generated page/index cache bookkeeping.
-- Huge TXT preview-only threshold increased to **32 MB**.
+- Large TXT exact page count is built in the background with chunked line-based indexing, so very high-line-count files can still reach an accurate final total page count without requiring one giant full-file layout.
+- Large TXT Go to Page and slider movement can fall back to estimated logical-line/partition jumps before exact indexing finishes.
+- Large TXT search scans the full file and jumps to the result partition without waiting for exact page indexing.
+- TXT search includes an **Nth / n번째** occurrence option for direct match navigation.
+- Final-page jumps in partitioned TXT files use the real EOF partition's visual end to keep the document's last page reachable even when the file ends with blank lines.
+- Final-page tap/page-down handling avoids the old anchor-draw then EOF-correction flicker path, and skips unnecessary final-partition reloads when already active.
 - Generated TXT cache cleanup uses retention logic for disposable pagination/index data.
 - Cache cleanup does not delete bookmarks, history, reading position, folder shortcuts, or documents.
 - Text search with custom reader-dialog input styling.
@@ -118,6 +155,22 @@ Current version: **2.1.1**
 - Volume-key page movement.
 - Auto-resume reading position.
 - Compact rounded theme-matched loading panel instead of a hard black loading box; uncached large-TXT Go to Page, toolbar slider, and bookmark jumps use this loading panel.
+
+### TXT display rules and actual-file editing
+
+- TXT display rules can replace or mask text while viewing TXT files.
+- Rules support enabled/disabled state, case-sensitive matching, regular-expression mode, all-file scope, and current-file-only scope.
+- Rules can be created from Settings or directly from the TXT viewer.
+- Rules created from a TXT file can show the source file where the rule was made.
+- Multiple rules are applied in saved top-to-bottom order. This matters when one rule output can become another rule input.
+- Moving rules up/down changes only the saved order and does not refresh the active TXT viewer by itself.
+- Closing the TXT display-rule manager or add/edit window applies relevant active rule changes to the viewer and recalculates TXT pagination if the visible text changes.
+- The normal display-rule layer is non-destructive: it changes the viewer output, not the original TXT file.
+- **Edit Actual TXT File** is a separate destructive/manual action available from Settings when opened from a TXT viewer.
+- Actual-file edit applies all enabled rules that currently apply to that TXT file, in top-to-bottom order.
+- **Fix original file** overwrites the opened TXT file, reloads the viewer, clears stale page/index state, and recalculates the full page count.
+- **Copy original and fix copy** writes to `originalname_edited.txt`; if that file already exists, the edited copy is overwritten. The original viewer is not reloaded in copy mode.
+- Actual-file edit uses an extra confirmation step and warning boxes because the app does not provide an internal undo for overwritten file content. Large TXT files show an additional memory/time warning because the app must load the whole file before applying the full rule chain.
 
 ### PDF reading
 

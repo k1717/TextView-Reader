@@ -33,6 +33,9 @@ Thank you for improving TextView Reader.
 - Test TXT, PDF, EPUB, and Word paths when changing shared file-opening logic.
 - Test both PDF horizontal slide mode and vertical continuous mode when touching PDF gestures or rendering.
 - Test TXT page indicator left/center/right/hidden alignment when touching reader insets or status-bar behavior.
+- When changing TXT display rules, test enabled/disabled, current-file-only vs all-file scope, case-sensitive mode, regex mode, delete confirmation, and add/edit window close behavior.
+- Up/down display-rule ordering should not reload the active TXT viewer by itself, but order must still be preserved because it affects overlapping actual-rule output.
+- When changing **Edit Actual TXT File**, test both original overwrite and copy overwrite using disposable TXT files only. Original overwrite must reload and repaginate the active TXT viewer; copy overwrite must not change the original viewer.
 
 ## Documentation expectations
 
@@ -40,5 +43,5 @@ When behavior changes, update the relevant docs:
 
 - `README.md` for user-visible features and build instructions.
 - `CHANGELOG.md` for release changes.
-- `PRIVACY.md` for data, permissions, or storage behavior.
+- `PRIVACY.md` for data, permissions, TXT display-rule storage, or file-writing behavior.
 - `GITHUB_UPLOAD_NOTES.md` for packaging/upload workflow changes.

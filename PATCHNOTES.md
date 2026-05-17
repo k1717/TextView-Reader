@@ -1,132 +1,98 @@
-# TextView Reader 2.1.1 Patch Notes
+# TextView Reader 2.1.2 Patch Notes
 
-This package is the GitHub-submittable 2.1.1 source snapshot. These notes summarize the final functional difference from the uploaded 2.1.0 package, not every intermediate hotfix. The complete previous-version history remains in `CHANGELOG.md`.
+This source package keeps Android metadata at `versionCode 212` and `versionName "2.1.2"`.
 
-## Functional difference from 2.1.0
+## Main browser parent-folder button
 
-### 1. Large TXT paging is partition-based but continuity-safe
+- Added a parent-folder button to the main file-browser path bar.
+- The button is placed on the **right side** of the path bar.
+- Button text uses a left arrow: **← Parent folder** / **← 상위 폴더로**.
+- Tapping it moves to the current folder's parent without using Android Back.
+- At a storage root, it returns to the Recent/home view.
+- The button is hidden on the Recent screen and search-result screen.
 
-2.1.1 changes large-TXT active rendering to fixed **4,000-logical-line partitions**. Partitions are internal cache/render windows, not user-visible page boundaries.
+## TXT Display Rules
 
-Functional result:
+- Added viewing-only TXT masking/replacement rules.
+- Normal TXT Display Rules do not modify the source file.
+- Rules support enabled/disabled state, case-sensitive matching, plain-text matching, regular-expression matching, all-file scope, and current-file-only scope.
+- Added rule-source labeling so the list can show which file a rule was made from.
+- Added rule ordering with up/down controls.  Up/down does not reload the active viewer by itself, but rule order affects overlapping replacements.
+- Added quick rule creation from the TXT viewer through **More > Add display rule** and long-press word prefill.
+- Rule changes from the TXT rule manager apply to the viewer after the rule/add window closes, keeping the manager responsive during editing.
+- Display rules are applied before pagination, partition rendering, exact page indexing, search, and bookmark positioning.
 
-- large files can be rendered through smaller active text windows;
-- partition handoff uses the next-page anchor instead of blindly jumping to the next 4,000-line boundary;
-- the configured page-overlap setting is respected;
-- no extra duplicate display beyond the user-selected overlap is intended at partition seams;
-- skipped displayed content at partition seams is avoided by coverage-first handoff.
+## Edit Actual TXT File
 
-### 2. Large TXT exact page indexing was added and hardened
+- Added **Edit Actual TXT File** below **TXT Display Rules** in Settings when Settings is opened from a TXT viewer.
+- The action permanently applies all enabled rules that apply to the current TXT file.
+- Users can choose either:
+  - overwrite the original TXT file, or
+  - write to `originalname_edited.txt`.
+- Copy mode overwrites the same `*_edited.txt` target instead of creating repeated numbered copies.
+- Original mode reloads and fully repaginates the opened viewer after the write succeeds.
+- The destructive flow uses rounded dialogs, colored warning boxes, a second **Are you sure?** step, and an emphasized **There is no turning back.** warning.
+- Physical writes use a same-folder temporary file and replacement step to reduce the risk of partially written output.
+- Large-file warnings and an `OutOfMemoryError` fallback were added because actual-file editing must read, transform, and rewrite the full file.
 
-2.1.1 builds a background exact page-anchor index for large TXT files.
+## TXT Auto Page Turn
 
-Functional result:
+- Added low-power automatic page turning for TXT reading.
+- The interval is entered in seconds per page.
+- Auto Page Turn advances by one full page at each interval.
+- It stops at the final page, when the viewer leaves the foreground, or when the user manually scrolls/moves the page.
 
-- page-count status becomes exact after indexing;
-- current-page lookup is faster;
-- toolbar slider, Go to Page, page keys, and bookmark jumps can target real page anchors;
-- exact Go to Page is blocked from silently using estimates while the exact index is not ready;
-- stale exact-index jobs are discarded if layout geometry, font, overlap, status-bar spacing model, or file metadata changes before indexing finishes.
+## Large TXT page movement fallback
 
-### 3. Fast page movement is more stable
+- Large TXT page movement no longer waits for exact full-page indexing.
+- If exact anchors are still building or fail, Go to Page / slider movement falls back to an estimated 4,000-logical-line partition jump.
+- Exact page anchors are still used automatically after background indexing is ready.
+- Exact-index failure is tracked separately instead of being treated as endless calculation.
+- User-facing wording uses **대략적인 위치** for approximate movement.
 
-2.1.1 prevents temporary partition estimates from overwriting the visible global page/total during partition swaps.
+## Large TXT chunked exact indexing
 
-Functional result:
+- Replaced the memory-heavy full-file exact-index layout path with chunked line-based exact indexing.
+- Large TXT still tries to complete an accurate full page count even when it takes a long time.
+- This targets high-line-count TXT files, such as 30MB-class UTF-8 files with hundreds of thousands of short CRLF lines.
+- While exact indexing runs, page movement remains usable through the 4,000-line fallback.
+- When chunked exact anchors finish, the viewer updates the total page count from estimated to exact.
 
-- fast backward paging near a partition boundary should not jump from a high page number to an earlier partition estimate;
-- total page count is preserved during active partition swaps instead of being recomputed from the temporary active partition;
-- rapid page taps are queued through exact anchors when safe, and unsafe stacked reloads are blocked while the exact index is unavailable.
+## Large TXT final-page fixes
 
-### 4. Status-bar visibility no longer changes TXT page count
+- Added a dedicated final-page path for partitioned TXT files.
+- Final-page movement loads/uses the real EOF partition instead of relying only on a global trailing-blank anchor.
+- Fixed a case where manual scroll could reach the final page but tap/page-down stopped at the previous page.
+- Final-page jumps can clamp to the physical visual EOF of the last partition when the final page is only a small EOF tail below the last anchor.
+- Final-page placement is applied before first draw in the final-page path to avoid anchor-page-to-EOF flicker.
+- If the final partition is already active, the viewer moves directly to visual EOF instead of reloading/rebuilding the partition, reducing the final-page transition delay.
 
-2.1.1 uses status-bar-off top spacing as the canonical TXT pagination geometry.
+## TXT body search and nth occurrence
 
-Functional result:
+- Large-TXT body search no longer searches only the currently loaded 4,000-line partition.
+- Search scans the display-rule-applied TXT stream, finds the matching logical line, loads the owning partition, and moves to the result.
+- Search does not need to wait for exact page indexing to finish.
+- Search result highlighting maps global large-TXT match positions into the active partition before drawing.
+- Large-TXT search uses its own background executor so a long exact-page-index build does not block find-next/find-previous requests.
+- Added an optional match-number field to the TXT body search window.
+- Users can enter a number and tap **Nth / n번째** to jump directly to that occurrence.
+- Nth search works in both normal TXT mode and large TXT partition mode.
+- Next/Previous search behavior is unchanged when the nth field is empty.
 
-- Android status-bar on/off should not change TXT total page count;
-- the TXT page indicator is visually moved one reader text row lower so the stable spacing does not make it feel pinned to the top.
+## Rounded popup and Settings cleanup
 
-### 5. TXT page-jump UI is more stable
+- Applied rounded popup styling to the new display-rule, actual-file edit, auto-page-turn, delete-confirmation, and settings-reset dialogs.
+- Added **Reset settings** for restoring reader/app preferences while keeping user data such as bookmarks, reading positions, recent files, folder shortcuts, TXT Display Rules, custom themes, and PIN lock.
+- Settings backup/export includes TXT Display Rules through the existing settings import/export path.
 
-2.1.1 keeps the toolbar slider and label on the selected target page during async jumps. The loading panel is rounded, compact, theme-aware, and used for slower uncached large-TXT slider, Go to Page, and bookmark jumps.
+## Kept from 2.1.1 / 2.1.0 behavior
 
-Functional result:
+- Large TXT active rendering remains based on fixed 4,000-logical-line partitions.
+- TXT pagination keeps the status-bar-off content spacing model so status-bar visibility does not change total page count.
+- Backup bookmark editing keeps the `bookmarkEdits.beginner` / `bookmarkEdits.developer` structure.
+- PDF, EPUB, and Word/DOCX remain separate document-viewer paths.
+- The package identity remains `com.textview.reader`; legacy-package users still need backup/export/import migration.
 
-- no old-page snap-back while a selected page is loading;
-- no permanent leftover loading panel;
-- no loading panel for fast cached partition jumps.
+## Verification note
 
-### 6. Bookmark backup editing was redesigned
-
-2.1.0 exported a large `beginnerEditableBookmarks` section with repeated guide fields. 2.1.1 exports:
-
-```json
-"bookmarkEdits": {
-  "beginner": [],
-  "developer": []
-}
-```
-
-Functional result:
-
-- normal users edit only the beginner section;
-- developers can repair raw position, anchors, identity, and migration metadata separately;
-- English/Korean guidance is shorter and kinder;
-- old 2.1.0 backup-edit fields still import correctly.
-
-### 7. TXT bookmark restoration gained anchor context
-
-2.1.1 passes nearby TXT anchor text when opening bookmarks.
-
-Functional result:
-
-- bookmark jumps are more robust after layout changes, file rebinding, or large-TXT partition movement.
-
-### 8. PDF page movement was polished
-
-2.1.1 improves original-size PDF swipe sensitivity, removes fast-operation spinner flashes for page/zoom redraws, and centers the new page when changing pages while zoomed in.
-
-Functional result:
-
-- original-size PDF pages turn with shorter swipes;
-- zoomed page turns no longer start at the upper-left corner;
-- quick redraws do not show the small centered loading dot.
-
-### 9. EPUB direction and transition settings were added/refined
-
-2.1.1 adds EPUB page-direction and transition-effect settings. Right-to-left mode is labeled as Japanese-style reading.
-
-Functional result:
-
-- EPUB swipe direction can match left-to-right or Japanese-style right-to-left books;
-- slide animation direction follows the selected reading direction;
-- transition effect can be disabled.
-
-### 10. Large TXT memory/lifecycle hardening was added
-
-2.1.1 clears large-TXT runtime state when the TXT reader is released and invalidates stale background generations during destruction.
-
-Functional result:
-
-- partition cache, pending prefetch markers, exact page anchors, queued page deltas, and partition-switch state are cleared on release;
-- stale exact-index and partition-switch results cannot reapply after the viewer closes;
-- background TXT reads use the application context where possible to reduce temporary Activity retention.
-
-## Current metadata
-
-- Android package/application ID: `com.textview.reader`
-- Android namespace: `com.textview.reader`
-- Java source package: `com.textview.reader`
-- Android `versionCode`: `211`
-- Android `versionName`: `2.1.1`
-- Backup schema: `textview-full-backup-v9`
-- Default backup filename format: `textview_backup_year_month_day_hour_minute_second.json`
-
-## Migration note
-
-Because the package identity already changed in 2.1.0, 2.1.1 follows the same migration rule: if coming from a legacy package build, export a TextView backup from the old app and import it in this app.
-
-## Build note
-
-Use Android Studio with JDK 17, compile SDK 35, and the included Gradle wrapper. In this sandbox, command-line Gradle verification cannot complete because the wrapper needs internet access to download Gradle.
+ZIP integrity and Markdown structure were checked. Full Gradle verification should be run locally in Android Studio or another network-enabled environment if the Gradle wrapper needs to download Gradle.
