@@ -41,6 +41,10 @@ public class PrefsManager {
     public static final int PAGE_STATUS_ALIGN_CENTER = 1;
     public static final int PAGE_STATUS_ALIGN_RIGHT = 2;
     public static final int PAGE_STATUS_ALIGN_HIDDEN = 3;
+    public static final int EPUB_PAGE_DIRECTION_LTR = 0;
+    public static final int EPUB_PAGE_DIRECTION_RTL = 1;
+    public static final int EPUB_PAGE_EFFECT_SLIDE = 0;
+    public static final int EPUB_PAGE_EFFECT_NONE = 1;
 
     private final SharedPreferences prefs;
     private static PrefsManager instance;
@@ -206,6 +210,23 @@ public class PrefsManager {
     }
     public void setEpubBottomPaddingDp(int dp) {
         prefs.edit().putInt("epub_bottom_padding_dp", clampEpubPaddingDp(dp)).apply();
+    }
+
+    public int getEpubPageDirection() {
+        int value = prefs.getInt("epub_page_direction", EPUB_PAGE_DIRECTION_LTR);
+        return value == EPUB_PAGE_DIRECTION_RTL ? EPUB_PAGE_DIRECTION_RTL : EPUB_PAGE_DIRECTION_LTR;
+    }
+    public void setEpubPageDirection(int direction) {
+        prefs.edit().putInt("epub_page_direction",
+                direction == EPUB_PAGE_DIRECTION_RTL ? EPUB_PAGE_DIRECTION_RTL : EPUB_PAGE_DIRECTION_LTR).apply();
+    }
+    public int getEpubPageEffect() {
+        int value = prefs.getInt("epub_page_effect", EPUB_PAGE_EFFECT_SLIDE);
+        return value == EPUB_PAGE_EFFECT_NONE ? EPUB_PAGE_EFFECT_NONE : EPUB_PAGE_EFFECT_SLIDE;
+    }
+    public void setEpubPageEffect(int effect) {
+        prefs.edit().putInt("epub_page_effect",
+                effect == EPUB_PAGE_EFFECT_NONE ? EPUB_PAGE_EFFECT_NONE : EPUB_PAGE_EFFECT_SLIDE).apply();
     }
 
     public int getDarkMode() { return prefs.getInt("dark_mode", DARK_MODE_FOLLOW_SYSTEM); }

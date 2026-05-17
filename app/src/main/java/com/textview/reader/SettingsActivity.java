@@ -90,6 +90,7 @@ public class SettingsActivity extends AppCompatActivity {
         setupLineSpacing();
         setupTextZoneTuning();
         setupEpubBoundary();
+        setupEpubPageBehavior();
         setupSwitches();
         setupLock();
         setupExportImport();
@@ -480,6 +481,69 @@ public class SettingsActivity extends AppCompatActivity {
         return Math.round(clamped / 5f) * 5;
     }
 
+    private void setupEpubPageBehavior() {
+        Spinner directionSpinner = findViewById(R.id.spinner_epub_page_direction);
+        Spinner effectSpinner = findViewById(R.id.spinner_epub_page_effect);
+
+        if (directionSpinner != null) {
+            String[] directionChoices = {
+                    getString(R.string.epub_page_direction_ltr),
+                    getString(R.string.epub_page_direction_rtl)
+            };
+            ArrayAdapter<String> adapter = makeSettingsSpinnerAdapter(directionChoices);
+            directionSpinner.setAdapter(adapter);
+            directionSpinner.setSelection(prefs.getEpubPageDirection());
+            directionSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                    styleSpinnerText(view);
+                    prefs.setEpubPageDirection(position == PrefsManager.EPUB_PAGE_DIRECTION_RTL
+                            ? PrefsManager.EPUB_PAGE_DIRECTION_RTL
+                            : PrefsManager.EPUB_PAGE_DIRECTION_LTR);
+                }
+                @Override public void onNothingSelected(AdapterView<?> parent) {}
+            });
+        }
+
+        if (effectSpinner != null) {
+            String[] effectChoices = {
+                    getString(R.string.epub_page_effect_slide),
+                    getString(R.string.epub_page_effect_none)
+            };
+            ArrayAdapter<String> adapter = makeSettingsSpinnerAdapter(effectChoices);
+            effectSpinner.setAdapter(adapter);
+            effectSpinner.setSelection(prefs.getEpubPageEffect());
+            effectSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                    styleSpinnerText(view);
+                    prefs.setEpubPageEffect(position == PrefsManager.EPUB_PAGE_EFFECT_NONE
+                            ? PrefsManager.EPUB_PAGE_EFFECT_NONE
+                            : PrefsManager.EPUB_PAGE_EFFECT_SLIDE);
+                }
+                @Override public void onNothingSelected(AdapterView<?> parent) {}
+            });
+        }
+    }
+
+    private ArrayAdapter<String> makeSettingsSpinnerAdapter(String[] choices) {
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
+                android.R.layout.simple_spinner_item, choices) {
+            @NonNull @Override
+            public View getView(int position, View convertView, @NonNull ViewGroup parent) {
+                View view = super.getView(position, convertView, parent);
+                styleSpinnerText(view);
+                return view;
+            }
+            @Override
+            public View getDropDownView(int position, View convertView, @NonNull ViewGroup parent) {
+                View view = super.getDropDownView(position, convertView, parent);
+                styleSpinnerText(view);
+                return view;
+            }
+        };
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        return adapter;
+    }
+
     private void setupSwitches() {
         Switch switchScreenOn = findViewById(R.id.switch_keep_screen_on);
         switchScreenOn.setChecked(prefs.getKeepScreenOn());
@@ -695,7 +759,9 @@ public class SettingsActivity extends AppCompatActivity {
         // Page Overlap spinner: no weird boxed field. Blend into background.
         Spinner overlapSpinner = findViewById(R.id.spinner_overlap_lines);
         Spinner tapZoneSpinner = findViewById(R.id.spinner_tap_zone_mode);
-        Spinner[] spinners = new Spinner[]{overlapSpinner, tapZoneSpinner};
+        Spinner epubDirectionSpinner = findViewById(R.id.spinner_epub_page_direction);
+        Spinner epubEffectSpinner = findViewById(R.id.spinner_epub_page_effect);
+        Spinner[] spinners = new Spinner[]{overlapSpinner, tapZoneSpinner, epubDirectionSpinner, epubEffectSpinner};
         for (Spinner spinner : spinners) {
             if (spinner == null) continue;
             spinner.setBackgroundColor(bg);

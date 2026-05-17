@@ -694,6 +694,8 @@ public class BookmarkListActivity extends AppCompatActivity
             intent.putExtra(ReaderActivity.EXTRA_JUMP_TO_POSITION, bookmark.getCharPosition());
             intent.putExtra(ReaderActivity.EXTRA_JUMP_DISPLAY_PAGE, bookmark.getPageNumber());
             intent.putExtra(ReaderActivity.EXTRA_JUMP_TOTAL_PAGES, bookmark.getTotalPages());
+            intent.putExtra(ReaderActivity.EXTRA_JUMP_ANCHOR_BEFORE, bookmark.getAnchorTextBefore());
+            intent.putExtra(ReaderActivity.EXTRA_JUMP_ANCHOR_AFTER, bookmark.getAnchorTextAfter());
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);

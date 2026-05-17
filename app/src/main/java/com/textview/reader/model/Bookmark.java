@@ -11,7 +11,7 @@ import java.util.UUID;
  * Bookmark JSON format (human-readable, easy to edit):
  * {
  *   "id": "uuid-string",
- *   "filePath": "/storage/emulated/0/Books/novel.txt",
+ *   "filePath": "<device-local-book-path>",
  *   "fileName": "novel.txt",
  *   "charPosition": 12345,
  *   "lineNumber": 230,
@@ -138,46 +138,136 @@ public class Bookmark {
         JSONObject obj = new JSONObject();
         int position = getPcEditPosition();
         String type = getFileTypeLabel();
-        obj.put("bookmarkId_DoNotEdit", id != null ? id : "");
-        obj.put("fileName_DoNotEdit", fileName != null ? fileName : "");
-        obj.put("fileType_DoNotEdit", type);
-        obj.put("positionMeans", getBeginnerPositionMeaning(type));
-        obj.put("howToEdit_EN_DoNotEdit", getBeginnerHowToEditEn(type));
-        obj.put("howToEdit_KO_DoNotEdit", getBeginnerHowToEditKo(type));
-        obj.put("sampleEdit_EN_DoNotEdit", getBeginnerSampleEditEn(type, position));
-        obj.put("sampleEdit_KO_DoNotEdit", getBeginnerSampleEditKo(type, position));
 
+        obj.put("bookmarkId", id != null ? id : "");
+        obj.put("fileName", fileName != null ? fileName : "");
+        obj.put("fileType", type);
+        obj.put("help_EN", getBeginnerHowToEditEn(type));
+        obj.put("help_KO", getBeginnerHowToEditKo(type));
+
+        JSONObject current = new JSONObject();
+        current.put("lineOrPage", position);
+        current.put("originalLineOrPage", position);
+        current.put("preview", excerpt != null ? excerpt : "");
+        current.put("memo", label != null ? label : "");
         if ("TXT".equals(type)) {
-            obj.put("currentLine_DoNotEdit", position);
-            obj.put("currentPreview_DoNotEdit", excerpt != null ? excerpt : "");
-            obj.put("setLine", position);
-            obj.put("moveByLines", 0);
-            obj.put("findText", "");
-            obj.put("findOccurrence", 1);
-            obj.put("findTextCaseSensitive", false);
-            obj.put("txtEditPriority_DoNotEdit", "findText first; if findText is empty/not found, setLine is used; moveByLines is applied after that");
-            obj.put("findTextTip_EN_DoNotEdit", "Leave findText empty unless you want to move the bookmark by searching for a phrase. If the phrase appears multiple times, change findOccurrence to 2, 3, etc.");
-            obj.put("findTextTip_KO_DoNotEdit", "문장 검색으로 북마크를 옮기려는 경우가 아니면 findText는 빈칸으로 두세요. 같은 문장이 여러 번 나오면 findOccurrence를 2, 3 등으로 바꾸세요.");
+            current.put("line", position);
+            current.put("meaning", "TXT logical line number, starting from 1");
         } else if ("EPUB".equals(type)) {
-            obj.put("currentPageOrSection_DoNotEdit", position);
-            obj.put("currentPreview_DoNotEdit", excerpt != null ? excerpt : "");
-            obj.put("setPageOrSection", position);
-            obj.put("moveByPages", 0);
+            current.put("pageOrSection", position);
+            current.put("meaning", "EPUB app page/section number, starting from 1");
         } else {
-            obj.put("currentPage_DoNotEdit", position);
-            obj.put("currentPreview_DoNotEdit", excerpt != null ? excerpt : "");
-            obj.put("setPage", position);
-            obj.put("moveByPages", 0);
+            current.put("page", position);
+            current.put("meaning", type + " page number, starting from 1");
         }
+        obj.put("current", current);
 
-        // Backward-compatible alias for older PC-edit instructions/importers.
-        // New edits should prefer setLine/setPage/setPageOrSection + move/find fields above.
-        obj.put("position", position);
-        obj.put("originalPosition_DoNotEdit", position);
+        JSONObject edit = new JSONObject();
+        edit.put("memo", label != null ? label : "");
+        edit.put("lineOrPage", position);
+        edit.put("moveBy", 0);
+        if ("TXT".equals(type)) {
+            edit.put("setLine", position);
+            edit.put("moveByLines", 0);
+            edit.put("findText", "");
+            edit.put("findOccurrence", 1);
+            edit.put("findTextCaseSensitive", false);
+        } else if ("EPUB".equals(type)) {
+            edit.put("setPageOrSection", position);
+            edit.put("moveByPages", 0);
+        } else {
+            edit.put("setPage", position);
+            edit.put("moveByPages", 0);
+        }
+        obj.put("edit", edit);
+        obj.put("editableFields", getBeginnerEditableFields(type));
+        obj.put("tip_EN", "Change only the edit object unless you are sure. current is only there to help you recognize this bookmark.");
+        obj.put("tip_KO", "확실한 경우가 아니라면 edit 안의 값만 수정하세요. current는 이 북마크를 알아보기 위한 참고 정보입니다.");
+        return obj;
+    }
 
-        obj.put("memo", label != null ? label : "");
-        obj.put("editableFields_DoNotEdit", getBeginnerEditableFields(type));
-        obj.put("editNotes_DoNotEdit", "Preview fields are only the current saved context; after import, TextView Reader regenerates the actual preview/anchors from your edited target.");
+    /**
+     * Developer-facing edit row for exported backups.
+     *
+     * This is still safer than editing the machine bookmarks[] array directly:
+     * the importer can detect line/page changes, search-based TXT corrections,
+     * and optional direct charPosition changes from this compact row.
+     */
+    public JSONObject toDeveloperEditJson() throws JSONException {
+        JSONObject obj = new JSONObject();
+        int position = getPcEditPosition();
+        String type = getFileTypeLabel();
+
+        obj.put("bookmarkId", id != null ? id : "");
+        obj.put("fileName", fileName != null ? fileName : "");
+        obj.put("fileType", type);
+        obj.put("help_EN", "For developer repair, edit edit.lineOrPage first. Edit edit.charPosition only when you intentionally want raw internal positioning.");
+        obj.put("help_KO", "개발자 복구용입니다. 먼저 edit.lineOrPage 수정을 권장합니다. raw 내부 위치를 직접 지정해야 할 때만 edit.charPosition을 수정하세요.");
+
+        JSONObject current = new JSONObject();
+        current.put("lineOrPage", position);
+        current.put("originalLineOrPage", position);
+        current.put("charPosition", charPosition);
+        current.put("endPosition", endPosition);
+        current.put("lineNumber", lineNumber);
+        current.put("pageNumber", pageNumber);
+        current.put("totalPages", totalPages);
+        current.put("preview", excerpt != null ? excerpt : "");
+        current.put("memo", label != null ? label : "");
+        if ("TXT".equals(type)) {
+            current.put("line", position);
+        } else if ("EPUB".equals(type)) {
+            current.put("pageOrSection", position);
+        } else {
+            current.put("page", position);
+        }
+        obj.put("current", current);
+
+        JSONObject edit = new JSONObject();
+        edit.put("memo", label != null ? label : "");
+        edit.put("lineOrPage", position);
+        edit.put("moveBy", 0);
+        edit.put("charPosition", charPosition);
+        edit.put("originalCharPosition", charPosition);
+        if ("TXT".equals(type)) {
+            edit.put("setLine", position);
+            edit.put("moveByLines", 0);
+            edit.put("findText", "");
+            edit.put("findOccurrence", 1);
+            edit.put("findTextCaseSensitive", false);
+        } else if ("EPUB".equals(type)) {
+            edit.put("setPageOrSection", position);
+            edit.put("moveByPages", 0);
+        } else {
+            edit.put("setPage", position);
+            edit.put("moveByPages", 0);
+        }
+        obj.put("edit", edit);
+
+        JSONObject identity = new JSONObject();
+        identity.put("localBindingPath", filePath != null ? filePath : "");
+        identity.put("fileSizeBytes", fileSizeBytes);
+        identity.put("quickFingerprint", quickFingerprint != null ? quickFingerprint : "");
+        obj.put("fileIdentity", identity);
+
+        JSONObject anchors = new JSONObject();
+        anchors.put("anchorTextBefore", anchorTextBefore != null ? anchorTextBefore : "");
+        anchors.put("anchorTextAfter", anchorTextAfter != null ? anchorTextAfter : "");
+        obj.put("anchors", anchors);
+
+        JSONObject internal = new JSONObject();
+        internal.put("id", id != null ? id : "");
+        internal.put("filePath", filePath != null ? filePath : "");
+        internal.put("lineNumber", lineNumber);
+        internal.put("pageNumber", pageNumber);
+        internal.put("totalPages", totalPages);
+        internal.put("charPosition", charPosition);
+        internal.put("endPosition", endPosition);
+        internal.put("createdAt", createdAt);
+        internal.put("updatedAt", updatedAt);
+        obj.put("internal", internal);
+        obj.put("tip_EN", "Developer rows are safer than editing bookmarks[] directly, but beginner rows are still recommended for normal edits.");
+        obj.put("tip_KO", "developer 행은 bookmarks[]를 직접 수정하는 것보다 안전하지만, 일반 수정에는 beginner 행을 권장합니다.");
         return obj;
     }
 
@@ -272,22 +362,22 @@ public class Bookmark {
 
     private String getBeginnerHowToEditEn(String type) {
         if ("TXT".equals(type)) {
-            return "TXT: change setLine for an exact line, moveByLines for a small up/down correction, or findText to move by phrase. memo is free text.";
+            return "TXT: change setLine if you know the exact line. Use moveByLines for a small correction, or findText when you know a sentence instead of the line number. memo is free text.";
         }
         if ("EPUB".equals(type)) {
-            return "EPUB: change setPageOrSection for an exact app page/section, or moveByPages for a small correction. memo is free text.";
+            return "EPUB: change setPageOrSection if you know the app page/section. Use moveByPages for a small correction. memo is free text.";
         }
-        return "PDF/Word: change setPage for an exact page, or moveByPages for a small correction. memo is free text.";
+        return "PDF/Word: change setPage if you know the exact page. Use moveByPages for a small correction. memo is free text.";
     }
 
     private String getBeginnerHowToEditKo(String type) {
         if ("TXT".equals(type)) {
-            return "TXT: 정확한 줄을 알면 setLine, 위/아래 조금 보정하려면 moveByLines, 문장으로 찾으려면 findText를 수정하세요. memo는 자유 메모입니다.";
+            return "TXT: 정확한 줄을 알면 setLine을 바꾸세요. 조금 보정하려면 moveByLines를 쓰고, 줄 번호 대신 문장을 알고 있으면 findText를 쓰면 됩니다. memo는 자유 메모입니다.";
         }
         if ("EPUB".equals(type)) {
-            return "EPUB: 정확한 앱 페이지/섹션을 알면 setPageOrSection, 조금 보정하려면 moveByPages를 수정하세요. memo는 자유 메모입니다.";
+            return "EPUB: 정확한 앱 페이지/섹션을 알면 setPageOrSection을 바꾸세요. 조금 보정하려면 moveByPages를 쓰면 됩니다. memo는 자유 메모입니다.";
         }
-        return "PDF/Word: 정확한 페이지를 알면 setPage, 조금 보정하려면 moveByPages를 수정하세요. memo는 자유 메모입니다.";
+        return "PDF/Word: 정확한 페이지를 알면 setPage를 바꾸세요. 조금 보정하려면 moveByPages를 쓰면 됩니다. memo는 자유 메모입니다.";
     }
 
     private String getBeginnerSampleEditEn(String type, int position) {

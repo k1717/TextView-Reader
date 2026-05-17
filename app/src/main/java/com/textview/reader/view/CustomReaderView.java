@@ -42,6 +42,160 @@ public class CustomReaderView extends View {
         void onReaderScrollChanged();
     }
 
+    public static final class PageTextAnchor {
+        public final int charPosition;
+        public final String anchorTextBefore;
+        public final String anchorTextAfter;
+
+        public PageTextAnchor(int charPosition, String anchorTextBefore, String anchorTextAfter) {
+            this.charPosition = Math.max(0, charPosition);
+            this.anchorTextBefore = anchorTextBefore != null ? anchorTextBefore : "";
+            this.anchorTextAfter = anchorTextAfter != null ? anchorTextAfter : "";
+        }
+    }
+
+    private static int getPagingTextEnd(String value) {
+        if (value == null || value.isEmpty()) return 0;
+        int end = value.length();
+        while (end > 0) {
+            char ch = value.charAt(end - 1);
+            if (ch == '\n' || ch == '\r') {
+                end--;
+            } else {
+                break;
+            }
+        }
+        return Math.max(0, end);
+    }
+
+    private static int getEffectivePagingLineCount(StaticLayout sourceLayout, String value) {
+        if (sourceLayout == null || sourceLayout.getLineCount() <= 0) return 0;
+        int layoutLineCount = sourceLayout.getLineCount();
+        int pagingEnd = getPagingTextEnd(value);
+        if (pagingEnd <= 0) return 1;
+
+        // Use the last meaningful character, not the terminal newline.  Otherwise
+        // TXT files that end with one or more line breaks can create a blank
+        // filler page at EOF and make large-TXT exact totals one page too high.
+        int lastContentOffset = Math.max(0, Math.min(pagingEnd - 1, value.length() - 1));
+        int lastContentLine = sourceLayout.getLineForOffset(lastContentOffset);
+        return Math.max(1, Math.min(layoutLineCount, lastContentLine + 1));
+    }
+
+    public int getTextLayoutWidthForIndex() {
+        return Math.max(1, getWidth() - getPaddingLeft() - getPaddingRight()
+                - marginHorizontalPx * 2 - leftTextInsetPx - rightTextInsetPx);
+    }
+
+    public int getMarginVerticalPxForIndex() {
+        return Math.max(0, marginVerticalPx);
+    }
+
+    public int getOverlapLinesForIndex() {
+        return Math.max(0, overlapLines);
+    }
+
+    public TextPaint copyTextPaintForIndex() {
+        TextPaint copy = new TextPaint(TextPaint.ANTI_ALIAS_FLAG | TextPaint.SUBPIXEL_TEXT_FLAG);
+        copy.set(paint);
+        return copy;
+    }
+
+    public float getLineSpacingMultiplierForIndex() {
+        return Math.max(0.8f, lineSpacingMultiplier);
+    }
+
+    public static ArrayList<PageTextAnchor> buildPageTextAnchors(String value,
+                                                                  TextPaint sourcePaint,
+                                                                  int layoutWidth,
+                                                                  int viewportHeight,
+                                                                  int marginVerticalPx,
+                                                                  int overlapLines,
+                                                                  float lineSpacingMultiplier) {
+        ArrayList<PageTextAnchor> result = new ArrayList<>();
+        String fullText = value != null ? value : "";
+        if (fullText.isEmpty()) {
+            result.add(new PageTextAnchor(0, "", ""));
+            return result;
+        }
+
+        TextPaint localPaint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG | TextPaint.SUBPIXEL_TEXT_FLAG);
+        if (sourcePaint != null) {
+            localPaint.set(sourcePaint);
+        }
+
+        StaticLayout localLayout = StaticLayout.Builder
+                .obtain(fullText, 0, fullText.length(), localPaint, Math.max(1, layoutWidth))
+                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                .setLineSpacing(0f, Math.max(0.8f, lineSpacingMultiplier))
+                .setIncludePad(true)
+                .setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_SIMPLE)
+                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
+                .build();
+
+        int lineCount = getEffectivePagingLineCount(localLayout, fullText);
+        if (lineCount <= 0) {
+            result.add(new PageTextAnchor(0, "", ""));
+            return result;
+        }
+
+        int firstPadCompensation = 0;
+        if (lineCount >= 2) {
+            int firstBaselineOffset = localLayout.getLineBaseline(0) - localLayout.getLineTop(0);
+            int normalBaselineOffset = localLayout.getLineBaseline(1) - localLayout.getLineTop(1);
+            firstPadCompensation = Math.max(0, firstBaselineOffset - normalBaselineOffset);
+        }
+
+        int contentHeight = localLayout.getHeight() + Math.max(0, marginVerticalPx) * 2;
+        int viewport = Math.max(1, viewportHeight);
+        int maxScroll = Math.max(0, contentHeight - viewport);
+        int firstPageAnchor = Math.max(0, marginVerticalPx) + firstPadCompensation;
+        int minPageScrollY = (lineCount <= 0 || maxScroll <= 0)
+                ? 0
+                : Math.max(0, Math.min(maxScroll, firstPageAnchor));
+
+        int startLine = 0;
+        int overlap = Math.max(0, Math.min(8, overlapLines));
+        int lastChar = -1;
+        while (startLine < lineCount) {
+            int charPos = Math.max(0, Math.min(fullText.length(), localLayout.getLineStart(startLine)));
+            if (charPos != lastChar) {
+                int beforeStart = Math.max(0, charPos - 80);
+                int afterEnd = Math.min(fullText.length(), charPos + 120);
+                result.add(new PageTextAnchor(
+                        charPos,
+                        fullText.substring(beforeStart, charPos),
+                        fullText.substring(charPos, afterEnd)));
+                lastChar = charPos;
+            }
+
+            int rawAnchor = localLayout.getLineTop(startLine) + Math.max(0, marginVerticalPx);
+            int anchor = Math.max(minPageScrollY, rawAnchor);
+            int pageTop = Math.max(0, anchor - Math.max(0, marginVerticalPx));
+            int pageBottomLimit = pageTop + viewport;
+
+            int lastFullLine = startLine - 1;
+            for (int line = startLine; line < lineCount; line++) {
+                if (localLayout.getLineBottom(line) <= pageBottomLimit) {
+                    lastFullLine = line;
+                } else {
+                    break;
+                }
+            }
+
+            int nextStartLine = Math.max(startLine + 1, lastFullLine + 1 - overlap);
+            if (nextStartLine <= startLine || nextStartLine >= lineCount) {
+                break;
+            }
+            startLine = nextStartLine;
+        }
+
+        if (result.isEmpty()) {
+            result.add(new PageTextAnchor(0, "", fullText.substring(0, Math.min(fullText.length(), 120))));
+        }
+        return result;
+    }
+
     private final TextPaint paint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG | TextPaint.SUBPIXEL_TEXT_FLAG);
     private final Paint searchHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint activeSearchHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -263,7 +417,11 @@ public class CustomReaderView extends View {
     }
 
     private int getContentHeight() {
-        return (layout != null ? layout.getHeight() : 0) + marginVerticalPx * 2;
+        if (layout == null) return marginVerticalPx * 2;
+        int effectiveLines = getEffectivePagingLineCount(layout, text);
+        if (effectiveLines <= 0) return marginVerticalPx * 2;
+        int lastLine = Math.max(0, Math.min(layout.getLineCount() - 1, effectiveLines - 1));
+        return layout.getLineBottom(lastLine) + marginVerticalPx * 2;
     }
 
     public int getViewportHeight() {
@@ -536,7 +694,7 @@ public class CustomReaderView extends View {
             return;
         }
 
-        int lineCount = layout.getLineCount();
+        int lineCount = getEffectivePagingLineCount(layout, text);
         int viewportHeight = Math.max(1, getViewportHeight());
         int overlap = Math.max(0, overlapLines);
 
@@ -669,20 +827,63 @@ public class CustomReaderView extends View {
         return Math.max(1, pageAnchors.size());
     }
 
+
+    public int getPageNumberForCharPosition(int charPosition) {
+        ensurePageAnchors();
+        if (layout == null || pageAnchors.isEmpty()) return 1;
+
+        int pagingEnd = getPagingTextEnd(text);
+        int targetChar = Math.max(0, Math.min(Math.max(0, pagingEnd - 1), charPosition));
+        int effectiveLines = getEffectivePagingLineCount(layout, text);
+        int line = Math.max(0, Math.min(Math.max(0, effectiveLines - 1), layout.getLineForOffset(targetChar)));
+        int targetScrollY = scrollYForLine(line) + 1;
+
+        int lo = 0;
+        int hi = pageAnchors.size() - 1;
+        int best = 0;
+        while (lo <= hi) {
+            int mid = (lo + hi) >>> 1;
+            int anchor = pageAnchors.get(mid);
+            if (targetScrollY >= anchor) {
+                best = mid;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return Math.max(1, Math.min(pageAnchors.size(), best + 1));
+    }
+
+    public boolean isAtVisualEndOfText() {
+        ensurePageAnchors();
+        if (layout == null || text.isEmpty()) return true;
+        return readerScrollY >= Math.max(0, maxScrollY - 2);
+    }
+
     public int getCurrentPageNumber() {
         ensurePageAnchors();
         int total = pageAnchors.size();
         if (total <= 1) return 1;
 
-        int page = 1;
-        for (int i = 0; i < total; i++) {
-            if (readerScrollY + 1 >= pageAnchors.get(i)) {
-                page = i + 1;
+        // Large TXT files can have tens of thousands of page anchors.  This method
+        // is called during scroll/status/menu updates, so use binary search instead
+        // of scanning from page 1 every time.  This keeps e-ink devices responsive
+        // when opening the toolbar or dialogs on 30MB+ files.
+        int target = readerScrollY + 1;
+        int lo = 0;
+        int hi = total - 1;
+        int best = 0;
+        while (lo <= hi) {
+            int mid = (lo + hi) >>> 1;
+            int anchor = pageAnchors.get(mid);
+            if (target >= anchor) {
+                best = mid;
+                lo = mid + 1;
             } else {
-                break;
+                hi = mid - 1;
             }
         }
-        return Math.max(1, Math.min(total, page));
+        return Math.max(1, Math.min(total, best + 1));
     }
 
     private int getPageAnchorScrollY(int page) {
@@ -728,7 +929,8 @@ public class CustomReaderView extends View {
         if (layout == null || text.isEmpty()) return 0;
         int layoutY = Math.max(0, readerScrollY - marginVerticalPx);
         int currentLine = layout.getLineForVertical(layoutY);
-        int targetLine = Math.max(0, Math.min(layout.getLineCount() - 1, currentLine + lineOffset));
+        int effectiveLines = getEffectivePagingLineCount(layout, text);
+        int targetLine = Math.max(0, Math.min(Math.max(0, effectiveLines - 1), currentLine + lineOffset));
         return Math.max(0, Math.min(text.length(), layout.getLineStart(targetLine)));
     }
 

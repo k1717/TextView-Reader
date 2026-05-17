@@ -308,7 +308,7 @@ public class PdfReaderActivity extends AppCompatActivity {
             renderContinuousPages();
         } else {
             resetContinuousPageViews(true);
-            renderCurrentPage();
+            renderCurrentPage(currentBitmap == null);
         }
     }
 
@@ -523,8 +523,8 @@ public class PdfReaderActivity extends AppCompatActivity {
                 float dx = event.getRawX() - gestureStartRawX;
                 float dy = event.getRawY() - gestureStartRawY;
                 if (verticalPageSlideMode) {
-                    boolean strongVerticalPageSwipe = Math.abs(dy) >= dpToPx(82)
-                            && Math.abs(dy) > Math.abs(dx) * 1.25f;
+                    boolean strongVerticalPageSwipe = Math.abs(dy) >= getPdfVerticalPageSwipeThresholdPx()
+                            && Math.abs(dy) > Math.abs(dx) * getPdfVerticalPageSwipeDominanceRatio();
                     if (strongVerticalPageSwipe && canTurnPdfPageFromVerticalSwipe(dy)) {
                         if (dy < 0) goToPage(currentPage + 1, 1);
                         else goToPage(currentPage - 1, -1);
@@ -532,8 +532,8 @@ public class PdfReaderActivity extends AppCompatActivity {
                         return true;
                     }
                 } else {
-                    boolean strongPageSwipe = Math.abs(dx) >= dpToPx(82)
-                            && Math.abs(dx) > Math.abs(dy) * 1.35f;
+                    boolean strongPageSwipe = Math.abs(dx) >= getPdfHorizontalPageSwipeThresholdPx()
+                            && Math.abs(dx) > Math.abs(dy) * getPdfHorizontalPageSwipeDominanceRatio();
                     if (strongPageSwipe && canTurnPdfPageFromSwipe(dx)) {
                         if (dx < 0) goToPage(currentPage + 1, 1);
                         else goToPage(currentPage - 1, -1);
@@ -614,6 +614,26 @@ public class PdfReaderActivity extends AppCompatActivity {
             int nextY = Math.max(0, Math.min(maxY, pdfVScroll.getScrollY() + Math.round(deltaY)));
             pdfVScroll.scrollTo(pdfVScroll.getScrollX(), nextY);
         }
+    }
+
+    private boolean isPdfAtOriginalZoom() {
+        return zoom <= 1.08f;
+    }
+
+    private int getPdfHorizontalPageSwipeThresholdPx() {
+        return dpToPx(isPdfAtOriginalZoom() ? 46 : 82);
+    }
+
+    private float getPdfHorizontalPageSwipeDominanceRatio() {
+        return isPdfAtOriginalZoom() ? 1.08f : 1.35f;
+    }
+
+    private int getPdfVerticalPageSwipeThresholdPx() {
+        return dpToPx(isPdfAtOriginalZoom() ? 52 : 82);
+    }
+
+    private float getPdfVerticalPageSwipeDominanceRatio() {
+        return isPdfAtOriginalZoom() ? 1.10f : 1.25f;
     }
 
     /**
@@ -913,7 +933,7 @@ public class PdfReaderActivity extends AppCompatActivity {
                     pinchZoomChanged = false;
                     activePinchFocusRawX = -1f;
                     activePinchFocusRawY = -1f;
-                    renderCurrentPage();
+                    renderCurrentPage(false);
                 }
             }
         });
@@ -963,10 +983,10 @@ public class PdfReaderActivity extends AppCompatActivity {
                     .scaleX(displayScale)
                     .scaleY(displayScale)
                     .setDuration(90)
-                    .withEndAction(this::renderCurrentPage)
+                    .withEndAction(() -> renderCurrentPage(false))
                     .start();
         } else {
-            renderCurrentPage();
+            renderCurrentPage(false);
         }
     }
 
@@ -1683,7 +1703,7 @@ public class PdfReaderActivity extends AppCompatActivity {
             scrollContinuousListToCurrentPage(false);
             pendingPageSlideDirection = 0;
         } else {
-            renderCurrentPage();
+            renderCurrentPage(false);
         }
     }
 
@@ -1702,6 +1722,10 @@ public class PdfReaderActivity extends AppCompatActivity {
     }
 
     private void renderCurrentPage() {
+        renderCurrentPage(currentBitmap == null);
+    }
+
+    private void renderCurrentPage(boolean showLoadingIndicator) {
         if (verticalPageSlideMode) {
             renderContinuousPages();
             return;
@@ -1711,13 +1735,17 @@ public class PdfReaderActivity extends AppCompatActivity {
         final float zoomToRender = zoom;
         final int generation = ++renderGeneration;
 
-        updateLoadingIndicatorTheme();
-        progressBar.setVisibility(View.VISIBLE);
+        if (showLoadingIndicator) {
+            updateLoadingIndicatorTheme();
+            progressBar.setVisibility(View.VISIBLE);
+        } else {
+            progressBar.setVisibility(View.GONE);
+        }
         updatePageStatus();
 
         int viewportWidth = pdfViewport.getWidth();
         if (viewportWidth <= 0) {
-            pdfViewport.post(this::renderCurrentPage);
+            pdfViewport.post(() -> renderCurrentPage(showLoadingIndicator));
             return;
         }
 
@@ -1764,8 +1792,7 @@ public class PdfReaderActivity extends AppCompatActivity {
                     pageImage.setScaleY(1.0f);
                     pageImage.setImageBitmap(finalBitmap);
                     if (pendingPageSlideDirection != 0) {
-                        if (pdfHScroll != null) pdfHScroll.post(() -> pdfHScroll.scrollTo(0, 0));
-                        if (pdfVScroll != null) pdfVScroll.post(() -> pdfVScroll.scrollTo(0, 0));
+                        positionPdfPageAfterPageTurn();
                     } else {
                         restoreDoubleTapZoomFocusAfterRender();
                     }
@@ -1810,6 +1837,29 @@ public class PdfReaderActivity extends AppCompatActivity {
                     maxY = Math.max(0, pdfVScroll.getChildAt(0).getHeight() - pdfVScroll.getHeight());
                 }
                 pdfVScroll.scrollTo(pdfVScroll.getScrollX(), Math.max(0, Math.min(maxY, targetY)));
+            }
+        });
+    }
+
+    private void positionPdfPageAfterPageTurn() {
+        if (pageImage == null) return;
+        pageImage.post(() -> {
+            if (pageImage == null) return;
+
+            boolean centerZoomedPage = renderedZoom > 1.08f;
+            if (pdfHScroll != null) {
+                int maxX = 0;
+                if (pdfHScroll.getChildCount() > 0) {
+                    maxX = Math.max(0, pdfHScroll.getChildAt(0).getWidth() - pdfHScroll.getWidth());
+                }
+                pdfHScroll.scrollTo(centerZoomedPage ? maxX / 2 : 0, pdfHScroll.getScrollY());
+            }
+            if (pdfVScroll != null) {
+                int maxY = 0;
+                if (pdfVScroll.getChildCount() > 0) {
+                    maxY = Math.max(0, pdfVScroll.getChildAt(0).getHeight() - pdfVScroll.getHeight());
+                }
+                pdfVScroll.scrollTo(pdfVScroll.getScrollX(), centerZoomedPage ? maxY / 2 : 0);
             }
         });
     }

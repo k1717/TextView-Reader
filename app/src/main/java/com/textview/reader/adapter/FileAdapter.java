@@ -281,7 +281,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                 icon.setImageResource(R.drawable.ic_folder);
                 // Avoid file.listFiles() here: it is synchronous disk I/O and was
                 // running on every scroll for every visible directory row, which
-                // hung the UI thread on big roots like /storage/emulated/0.
+                // hung the UI thread on large storage roots.
                 info.setText(R.string.folder);
             } else {
                 icon.setImageResource(R.drawable.ic_text_file);

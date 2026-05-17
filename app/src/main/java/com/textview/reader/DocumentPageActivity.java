@@ -716,7 +716,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                     }
                     if (!wordSwipeTriggered && shouldTurnDocumentPageBySwipe(event)) {
                         wordSwipeTriggered = true;
-                        turnDocumentPageBySwipe(event.getX() < wordSwipeStartX ? 1 : -1);
+                        turnDocumentPageBySwipe(pageDeltaForHorizontalSwipe(event.getX() - wordSwipeStartX));
                         clearDocumentEdgeArm();
                         return true;
                     }
@@ -729,7 +729,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                     }
                     if (!wordSwipeTriggered && shouldTurnDocumentPageBySwipe(event)) {
                         wordSwipeTriggered = true;
-                        turnDocumentPageBySwipe(event.getX() < wordSwipeStartX ? 1 : -1);
+                        turnDocumentPageBySwipe(pageDeltaForHorizontalSwipe(event.getX() - wordSwipeStartX));
                         clearDocumentEdgeArm();
                         return true;
                     }
@@ -787,7 +787,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             return false;
         }
 
-        int direction = dx < 0 ? 1 : -1;
+        int horizontalScrollDirection = dx < 0 ? 1 : -1;
 
         // Non-zoomed / normally wrapped pages should turn immediately on the first
         // swipe. The two-step edge threshold is used only when WebView actually has
@@ -796,7 +796,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             return true;
         }
 
-        if (webView.canScrollHorizontally(direction)) {
+        if (webView.canScrollHorizontally(horizontalScrollDirection)) {
             clearDocumentEdgeArm();
             return false;
         }
@@ -805,8 +805,8 @@ public class DocumentPageActivity extends AppCompatActivity {
         // edge, allow page turn immediately. This keeps the first swipe from
         // jumping while panning to the edge, but avoids needing another arm+turn
         // cycle after the user is already resting at that edge.
-        if ((direction > 0 && wordGestureStartedAtRightEdge)
-                || (direction < 0 && wordGestureStartedAtLeftEdge)) {
+        if ((horizontalScrollDirection > 0 && wordGestureStartedAtRightEdge)
+                || (horizontalScrollDirection < 0 && wordGestureStartedAtLeftEdge)) {
             return true;
         }
 
@@ -821,15 +821,41 @@ public class DocumentPageActivity extends AppCompatActivity {
         // allowed to turn the page.
         boolean armedFromPreviousGesture = armedDocumentEdgeTimeMs > 0L
                 && armedDocumentEdgeTimeMs < event.getDownTime();
-        if (armedDocumentEdgeDirection == direction
+        if (armedDocumentEdgeDirection == horizontalScrollDirection
                 && armedFromPreviousGesture
                 && now - armedDocumentEdgeTimeMs <= 600L) {
             return true;
         }
 
-        armedDocumentEdgeDirection = direction;
+        armedDocumentEdgeDirection = horizontalScrollDirection;
         armedDocumentEdgeTimeMs = now;
         return false;
+    }
+
+    private int pageDeltaForHorizontalSwipe(float dx) {
+        // Default EPUB direction follows Korean/Western books: swipe left = next.
+        // The optional RTL mode supports Japanese-style right-to-left books: swipe right = next.
+        if ("EPUB".equals(docType)
+                && prefs != null
+                && prefs.getEpubPageDirection() == PrefsManager.EPUB_PAGE_DIRECTION_RTL) {
+            return dx > 0 ? 1 : -1;
+        }
+        return dx < 0 ? 1 : -1;
+    }
+
+    private int visualSlideDirectionForPageDelta(int pageDelta) {
+        if (pageDelta == 0) return 0;
+        if ("EPUB".equals(docType)
+                && prefs != null
+                && prefs.getEpubPageEffect() == PrefsManager.EPUB_PAGE_EFFECT_NONE) {
+            return 0;
+        }
+        if ("EPUB".equals(docType)
+                && prefs != null
+                && prefs.getEpubPageDirection() == PrefsManager.EPUB_PAGE_DIRECTION_RTL) {
+            return -pageDelta;
+        }
+        return pageDelta;
     }
 
     private void turnDocumentPageBySwipe(int direction) {
@@ -2736,7 +2762,8 @@ public class DocumentPageActivity extends AppCompatActivity {
             webView.removeCallbacks(releasePageTurnRunnable);
             webView.postDelayed(releasePageTurnRunnable, 190);
         }
-        pendingSlideDirection = direction;
+        int visualSlideDirection = visualSlideDirectionForPageDelta(direction);
+        pendingSlideDirection = visualSlideDirection;
         currentPage = page;
         Page p = pages.get(page);
         String baseUrl = "https://" + LOCAL_HOST + "/";
@@ -2745,7 +2772,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             baseUrl = "https://" + LOCAL_HOST + EPUB_PREFIX + parent;
             if (!baseUrl.endsWith("/")) baseUrl += "/";
         }
-        prepareDocumentSlide(direction);
+        prepareDocumentSlide(visualSlideDirection);
         wordSelectionActive = false;
         webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
         webView.getSettings().setJavaScriptEnabled("Word".equals(docType));
