@@ -162,6 +162,13 @@
                 android:drawableTop="@drawable/ic_bottom_bookmark"
                 android:text="@string/bookmark" />
 
+
+            <TextView
+                android:id="@+id/btn_auto_page"
+                style="@style/ReaderBottomButton"
+                android:drawableTop="@drawable/ic_bottom_auto_page"
+                android:text="@string/auto_page_turn_toolbar" />
+
             <TextView
                 android:id="@+id/btn_settings"
                 style="@style/ReaderBottomButton"

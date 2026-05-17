@@ -271,4 +271,80 @@ Open a text, PDF, EPUB, or Word file to get started.</string>
     <string name="settings_section_updates">Updates</string>
     <string name="update_check_description">Check updates at https://github.com/k1717/TextView-Reader/releases</string>
 
+<string name="add">Add</string>
+    <string name="edit">Edit</string>
+    <string name="enabled">Enabled</string>
+    <string name="txt_display_rules">TXT Display Rules</string>
+    <string name="txt_display_rules_description">Replace or mask text only while viewing TXT files. The original file is not modified.</string>
+    <string name="txt_display_rules_dialog_description">These rules are applied before TXT pagination. Changing rules rebuilds page indexing and may change page count if replacement length or wrapping changes.</string>
+    <string name="txt_display_rules_empty">No display rules yet.</string>
+    <string name="txt_display_rules_actual_file">Edit Actual TXT File</string>
+    <string name="txt_display_rules_actual_file_description">Permanently apply enabled display rules to the current TXT file instead of only masking text in the viewer.</string>
+    <string name="txt_display_rules_actual_file_unavailable">Open Settings from a TXT viewer to edit the current TXT file.</string>
+    <string name="txt_display_rules_actual_file_title">Edit actual TXT file?</string>
+    <string name="txt_display_rules_actual_file_message">Apply the currently enabled TXT display rules to this file permanently?\n\n%1$s</string>
+    <string name="txt_display_rules_actual_file_original">Fix original file</string>
+    <string name="txt_display_rules_actual_file_copy">Copy original and fix copy</string>
+    <string name="txt_display_rules_actual_file_sequence_warning">Rule sequence matters. The edited file applies %1$d enabled rules from top to bottom, so overlapping rules can produce different output after Up/Down.</string>
+    <string name="txt_display_rules_actual_file_overwrite_warning">Fix original overwrites the current file. Copy mode writes to %1$s and overwrites that copy if it already exists.</string>
+    <string name="txt_display_rules_actual_file_large_warning">Large file warning: this TXT file is %1$s. Physical editing loads the full file, applies every enabled rule, and rewrites the result. It may take time and use extra memory, especially with regular-expression rules.</string>
+    <string name="txt_display_rules_actual_file_too_large_runtime">The file was too large to finish safely. Try copy mode, fewer rules, or a smaller file.</string>
+    <string name="txt_display_rules_actual_file_no_rules">No enabled display rules apply to this TXT file.</string>
+    <string name="txt_display_rules_actual_file_applying">Applying TXT display rules…</string>
+    <string name="txt_display_rules_actual_file_no_changes">No text changed. No file was written.</string>
+    <string name="txt_display_rules_actual_file_original_done">Original TXT file updated.</string>
+    <string name="txt_display_rules_actual_file_copy_done">Edited copy saved: %1$s</string>
+    <string name="txt_display_rules_actual_file_failed">Could not edit TXT file: %1$s</string>
+    <string name="txt_display_rules_actual_file_confirm_title">Are you sure?</string>
+    <string name="txt_display_rules_actual_file_confirm_original_message">This will permanently write the rule result into the original file.
+
+Target: %1$s
+Rules: %2$d enabled rules</string>
+    <string name="txt_display_rules_actual_file_confirm_copy_message">This will write the rule result into the edited copy.
+
+Target: %1$s
+Rules: %2$d enabled rules</string>
+    <string name="txt_display_rules_actual_file_confirm_original_warning">Original mode overwrites %1$s directly. This cannot be undone inside the app.</string>
+    <string name="txt_display_rules_actual_file_confirm_copy_warning">Copy mode overwrites %1$s if it already exists.</string>
+    <string name="txt_display_rules_actual_file_no_turning_back">There is no turning back.</string>
+    <string name="txt_display_rules_actual_file_confirm_original_button">Yes, fix original file</string>
+    <string name="txt_display_rules_actual_file_confirm_copy_button">Yes, overwrite edited copy</string>
+    <string name="txt_display_rule_delete_confirm">Delete this TXT display rule?\n\n%1$s</string>
+    <string name="txt_display_rules_clear_confirm">Remove all TXT display rules?</string>
+    <string name="txt_display_rule_find_hint">Text to find</string>
+    <string name="txt_display_rule_replace_hint">Text to show instead</string>
+    <string name="txt_display_rule_find_required">Enter text to find.</string>
+    <string name="txt_display_rule_scope_all_txt">All TXT files</string>
+    <string name="txt_display_rule_scope_current_file">Current file only</string>
+    <string name="txt_display_rule_current_file_only">Apply only to the current TXT file</string>
+    <string name="txt_display_rule_case_sensitive">Case-sensitive</string>
+    <string name="txt_display_rule_case_insensitive">Case-insensitive</string>
+    <string name="txt_display_rule_length_warning">Original files are unchanged. If the shown text becomes longer or shorter, TXT page count, search results, and bookmark positions follow the displayed text while the rule is enabled.</string>
+    <string name="txt_display_rule_use_regex">Use regular expression (advanced)</string>
+    <string name="txt_display_rule_regex_mode">Regex</string>
+    <string name="txt_display_rule_plain_mode">Plain text</string>
+    <string name="txt_display_rule_quick_add">Add display rule</string>
+    <string name="txt_display_rule_manage">Manage display rules</string>
+    <string name="txt_display_rule_quick_tip">Original file is not changed. For AI-translation name/term fixes, current-file scope is usually safest.</string>
+    <string name="txt_display_rule_saved">Display rule saved</string>
+    <string name="txt_display_rule_source_file">Made from: %1$s</string>
+    <string name="txt_display_rule_added">Display rule added</string>
+    <string name="move_up">Up</string>
+    <string name="move_down">Down</string>
+    <string name="enable">Enable</string>
+    <string name="disable">Disable</string>
+    <string name="auto_page_turn">Auto page turn</string>
+    <string name="auto_page_turn_start">Start</string>
+    <string name="auto_page_turn_stop">Stop</string>
+    <string name="auto_page_turn_interval_hint">Interval in seconds per page</string>
+    <string name="auto_page_turn_description">The number is seconds. For example, 8 means one page every 8 seconds. This low-power mode turns pages instead of continuously scrolling.</string>
+    <string name="auto_page_turn_started">Auto page turn started</string>
+    <string name="auto_page_turn_stopped">Auto page turn stopped</string>
+    <string name="auto_page_turn_end_reached">Reached the last page</string>
+    <string name="txt_display_rule_toolbar">Rules</string>
+    <string name="auto_page_turn_toolbar">Auto</string>
+    <string name="settings_reset">Reset settings</string>
+    <string name="settings_reset_confirm_title">Reset settings</string>
+    <string name="settings_reset_confirm_message">Reset reader and app settings to defaults? Bookmarks, reading positions, recent files, folder shortcuts, TXT display rules, custom themes, and PIN lock will be kept.</string>
+    <string name="settings_reset_done">Settings reset</string>
 </resources>

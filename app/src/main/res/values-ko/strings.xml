@@ -271,4 +271,80 @@
     <string name="settings_section_updates">업데이트</string>
     <string name="update_check_description">Check updates at https://github.com/k1717/TextView-Reader/releases</string>
 
+<string name="add">추가</string>
+    <string name="edit">수정</string>
+    <string name="enabled">사용</string>
+    <string name="txt_display_rules">TXT 표시 규칙</string>
+    <string name="txt_display_rules_description">원본 파일은 수정하지 않고 TXT 뷰어에서만 텍스트를 치환하거나 숨겨 보입니다.</string>
+    <string name="txt_display_rules_dialog_description">이 규칙은 TXT 페이지 계산 전에 적용됩니다. 규칙을 바꾸면 페이지 인덱스가 다시 계산되며, 치환 후 길이나 줄바꿈이 달라지면 페이지 수도 달라질 수 있습니다.</string>
+    <string name="txt_display_rules_empty">아직 표시 규칙이 없습니다.</string>
+    <string name="txt_display_rules_actual_file">실제 TXT 파일 수정</string>
+    <string name="txt_display_rules_actual_file_description">뷰어에서만 가리는 대신, 활성화된 표시 규칙을 현재 TXT 파일에 영구 적용합니다.</string>
+    <string name="txt_display_rules_actual_file_unavailable">현재 TXT 파일을 수정하려면 TXT 뷰어에서 설정을 열어 주세요.</string>
+    <string name="txt_display_rules_actual_file_title">실제 TXT 파일을 수정할까요?</string>
+    <string name="txt_display_rules_actual_file_message">현재 활성화된 TXT 표시 규칙을 이 파일에 영구 적용할까요?\n\n%1$s</string>
+    <string name="txt_display_rules_actual_file_original">원본 파일 수정</string>
+    <string name="txt_display_rules_actual_file_copy">원본 복사 후 사본 수정</string>
+    <string name="txt_display_rules_actual_file_sequence_warning">규칙 순서가 중요합니다. 수정된 파일에는 활성 규칙 %1$d개가 위에서 아래 순서로 적용되므로, 겹치는 규칙은 위/아래 이동 후 결과가 달라질 수 있습니다.</string>
+    <string name="txt_display_rules_actual_file_overwrite_warning">원본 수정은 현재 파일을 덮어씁니다. 사본 모드는 %1$s에 저장하며, 이미 있으면 그 사본을 덮어씁니다.</string>
+    <string name="txt_display_rules_actual_file_large_warning">대용량 파일 경고: 이 TXT 파일은 %1$s입니다. 실제 파일 수정은 전체 파일을 읽고, 활성 규칙을 모두 적용한 뒤 다시 저장합니다. 정규식 규칙이 있으면 시간과 메모리를 더 사용할 수 있습니다.</string>
+    <string name="txt_display_rules_actual_file_too_large_runtime">파일이 너무 커서 안전하게 완료하지 못했습니다. 사본 모드, 더 적은 규칙, 또는 더 작은 파일로 시도해 주세요.</string>
+    <string name="txt_display_rules_actual_file_no_rules">이 TXT 파일에 적용되는 활성 표시 규칙이 없습니다.</string>
+    <string name="txt_display_rules_actual_file_applying">TXT 표시 규칙 적용 중…</string>
+    <string name="txt_display_rules_actual_file_no_changes">변경된 텍스트가 없어 파일을 쓰지 않았습니다.</string>
+    <string name="txt_display_rules_actual_file_original_done">원본 TXT 파일을 수정했습니다.</string>
+    <string name="txt_display_rules_actual_file_copy_done">수정된 사본 저장됨: %1$s</string>
+    <string name="txt_display_rules_actual_file_failed">TXT 파일을 수정할 수 없습니다: %1$s</string>
+    <string name="txt_display_rules_actual_file_confirm_title">정말 적용할까요?</string>
+    <string name="txt_display_rules_actual_file_confirm_original_message">규칙 적용 결과를 원본 파일에 영구 저장합니다.
+
+대상: %1$s
+규칙: 활성 규칙 %2$d개</string>
+    <string name="txt_display_rules_actual_file_confirm_copy_message">규칙 적용 결과를 수정 사본에 저장합니다.
+
+대상: %1$s
+규칙: 활성 규칙 %2$d개</string>
+    <string name="txt_display_rules_actual_file_confirm_original_warning">원본 모드는 %1$s 파일을 직접 덮어씁니다. 앱 안에서 되돌릴 수 없습니다.</string>
+    <string name="txt_display_rules_actual_file_confirm_copy_warning">사본 모드는 %1$s 파일이 이미 있으면 덮어씁니다.</string>
+    <string name="txt_display_rules_actual_file_no_turning_back">되돌릴 수 없습니다.</string>
+    <string name="txt_display_rules_actual_file_confirm_original_button">네, 원본 파일 수정</string>
+    <string name="txt_display_rules_actual_file_confirm_copy_button">네, 수정 사본 덮어쓰기</string>
+    <string name="txt_display_rule_delete_confirm">이 TXT 표시 규칙을 삭제할까요?\n\n%1$s</string>
+    <string name="txt_display_rules_clear_confirm">모든 TXT 표시 규칙을 삭제할까요?</string>
+    <string name="txt_display_rule_find_hint">찾을 텍스트</string>
+    <string name="txt_display_rule_replace_hint">대신 보여줄 텍스트</string>
+    <string name="txt_display_rule_find_required">찾을 텍스트를 입력하세요.</string>
+    <string name="txt_display_rule_scope_all_txt">모든 TXT 파일</string>
+    <string name="txt_display_rule_scope_current_file">현재 파일만</string>
+    <string name="txt_display_rule_current_file_only">현재 TXT 파일에만 적용</string>
+    <string name="txt_display_rule_case_sensitive">대소문자 구분</string>
+    <string name="txt_display_rule_case_insensitive">대소문자 무시</string>
+    <string name="txt_display_rule_length_warning">원본 파일은 변경되지 않습니다. 표시 텍스트가 길어지거나 짧아지면, 규칙이 켜져 있는 동안 페이지 수, 검색 결과, 북마크 위치는 표시된 텍스트 기준을 따릅니다.</string>
+    <string name="txt_display_rule_use_regex">정규식 사용 (고급)</string>
+    <string name="txt_display_rule_regex_mode">정규식</string>
+    <string name="txt_display_rule_plain_mode">일반 텍스트</string>
+    <string name="txt_display_rule_quick_add">표시 규칙 추가</string>
+    <string name="txt_display_rule_manage">표시 규칙 관리</string>
+    <string name="txt_display_rule_quick_tip">원본 파일은 바뀌지 않습니다. AI 번역본 이름/용어 교정은 보통 현재 파일 전용 적용이 가장 안전합니다.</string>
+    <string name="txt_display_rule_saved">표시 규칙을 저장했습니다</string>
+    <string name="txt_display_rule_source_file">만든 파일: %1$s</string>
+    <string name="txt_display_rule_added">표시 규칙을 추가했습니다</string>
+    <string name="move_up">위로</string>
+    <string name="move_down">아래로</string>
+    <string name="enable">켜기</string>
+    <string name="disable">끄기</string>
+    <string name="auto_page_turn">자동 페이지 넘김</string>
+    <string name="auto_page_turn_start">시작</string>
+    <string name="auto_page_turn_stop">정지</string>
+    <string name="auto_page_turn_interval_hint">초 단위 간격 (페이지당)</string>
+    <string name="auto_page_turn_description">숫자는 초 단위입니다. 예: 8을 입력하면 8초마다 한 페이지씩 넘깁니다. 저전력 방식이라 화면을 계속 스크롤하지 않습니다.</string>
+    <string name="auto_page_turn_started">자동 페이지 넘김을 시작했습니다</string>
+    <string name="auto_page_turn_stopped">자동 페이지 넘김을 정지했습니다</string>
+    <string name="auto_page_turn_end_reached">마지막 페이지입니다</string>
+    <string name="txt_display_rule_toolbar">규칙</string>
+    <string name="auto_page_turn_toolbar">자동</string>
+    <string name="settings_reset">설정 초기화</string>
+    <string name="settings_reset_confirm_title">설정 초기화</string>
+    <string name="settings_reset_confirm_message">읽기/앱 설정을 기본값으로 되돌릴까요? 북마크, 읽던 위치, 최근 파일, 폴더 바로가기, TXT 표시 규칙, 사용자 테마, PIN 잠금은 유지됩니다.</string>
+    <string name="settings_reset_done">설정을 초기화했습니다</string>
 </resources>
