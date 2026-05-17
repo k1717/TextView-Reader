@@ -1,12 +1,46 @@
+# Android / Gradle
 .gradle/
 build/
 app/build/
-local.properties
+**/build/
+
+# Android Studio / IntelliJ
 .idea/
 *.iml
-*.apk
-*.aab
+*.iws
+*.ipr
+
+# Local machine configuration
+local.properties
+.env
+.env.*
+secrets.properties
+
+# Signing / release secrets
 *.jks
 *.keystore
+*.pem
+*.p12
+*.der
+
+# Generated app packages
+*.apk
+*.aab
+*.apks
+
+# Google/Firebase private configs
+google-services.json
+GoogleService-Info.plist
+
+# Logs / diagnostics
+*.log
+*.hprof
+captures/
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# TextView Reader exported user backups
+textview_backup_*.json
+TextView_backup_*.json
