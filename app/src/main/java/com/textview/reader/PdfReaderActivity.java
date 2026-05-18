@@ -81,6 +81,13 @@ public class PdfReaderActivity extends AppCompatActivity {
     // Match toolbar-triggered PDF popups to the Go to Page bottom offset.
     private static final int PDF_TOOLBAR_POPUP_Y_DP = 74;
 
+    // In horizontal PDF swipe mode, a zoomed page needs to pan around the enlarged
+    // bitmap before the next edge-start swipe can turn the page. Accelerate only
+    // zoomed in-page panning so original-size movement and page-turn thresholds
+    // stay unchanged.
+    private static final float PDF_ZOOMED_HORIZONTAL_PAN_ACCELERATION = 1.62f;
+    private static final float PDF_ZOOMED_VERTICAL_PAN_ACCELERATION = 1.45f;
+
     private View root;
     private View pdfAppBar;
     private View pdfBottomBar;
@@ -505,7 +512,17 @@ public class PdfReaderActivity extends AppCompatActivity {
                     float totalDx = rawX - gestureStartRawX;
                     float totalDy = rawY - gestureStartRawY;
                     if (viewportPanConsumed || Math.hypot(totalDx, totalDy) > touchSlop) {
-                        panPdfContent(-stepDx, -stepDy);
+                        float horizontalPan = -stepDx;
+                        float verticalPan = -stepDy;
+                        if (!isPdfAtOriginalZoom()) {
+                            if (isPdfHorizontallyScrollable()) {
+                                horizontalPan *= PDF_ZOOMED_HORIZONTAL_PAN_ACCELERATION;
+                            }
+                            if (isPdfVerticallyScrollable()) {
+                                verticalPan *= PDF_ZOOMED_VERTICAL_PAN_ACCELERATION;
+                            }
+                        }
+                        panPdfContent(horizontalPan, verticalPan);
                         viewportPanConsumed = true;
                         lastPanRawX = rawX;
                         lastPanRawY = rawY;
@@ -621,11 +638,11 @@ public class PdfReaderActivity extends AppCompatActivity {
     }
 
     private int getPdfHorizontalPageSwipeThresholdPx() {
-        return dpToPx(isPdfAtOriginalZoom() ? 46 : 82);
+        return dpToPx(isPdfAtOriginalZoom() ? 46 : 68);
     }
 
     private float getPdfHorizontalPageSwipeDominanceRatio() {
-        return isPdfAtOriginalZoom() ? 1.08f : 1.35f;
+        return isPdfAtOriginalZoom() ? 1.08f : 1.22f;
     }
 
     private int getPdfVerticalPageSwipeThresholdPx() {
@@ -1179,6 +1196,30 @@ public class PdfReaderActivity extends AppCompatActivity {
         setZoomSmooth(1.0f);
     }
 
+    private boolean isPdfZoomedForPageNavigation() {
+        return zoom > 1.08f || renderedZoom > 1.08f;
+    }
+
+    private boolean resetPdfZoomForPageNavigationIfNeeded() {
+        if (!isPdfZoomedForPageNavigation()) return false;
+
+        zoom = 1.0f;
+        renderedZoom = 1.0f;
+        pendingZoomFocus = false;
+        pinchZoomChanged = false;
+        activePinchFocusRawX = -1f;
+        activePinchFocusRawY = -1f;
+
+        if (pageImage != null) {
+            pageImage.animate().cancel();
+            pageImage.setScaleX(1.0f);
+            pageImage.setScaleY(1.0f);
+            pageImage.setPivotX(pageImage.getWidth() * 0.5f);
+            pageImage.setPivotY(pageImage.getHeight() * 0.5f);
+        }
+        return true;
+    }
+
     private void showFileInfoDialog() {
         LinearLayout box = makeDialogBox();
         box.addView(makeDialogTitle(getString(R.string.file_info)));
@@ -1689,6 +1730,7 @@ public class PdfReaderActivity extends AppCompatActivity {
             return;
         }
 
+        boolean zoomReset = !verticalPageSlideMode && resetPdfZoomForPageNavigationIfNeeded();
         pendingPageSlideDirection = direction == 0 ? Integer.compare(target, currentPage) : direction;
         currentPage = target;
         saveReadingState();
@@ -1703,7 +1745,7 @@ public class PdfReaderActivity extends AppCompatActivity {
             scrollContinuousListToCurrentPage(false);
             pendingPageSlideDirection = 0;
         } else {
-            renderCurrentPage(false);
+            renderCurrentPage(zoomReset || currentBitmap == null);
         }
     }
 
@@ -1846,20 +1888,25 @@ public class PdfReaderActivity extends AppCompatActivity {
         pageImage.post(() -> {
             if (pageImage == null) return;
 
-            boolean centerZoomedPage = renderedZoom > 1.08f;
+            if (renderedZoom <= 1.08f) {
+                // Keep the current scroll offset on page turns instead of forcing
+                // the next page back to the top-left. Existing ScrollView bounds
+                // will clamp the offset if the newly rendered page is smaller.
+                return;
+            }
             if (pdfHScroll != null) {
                 int maxX = 0;
                 if (pdfHScroll.getChildCount() > 0) {
                     maxX = Math.max(0, pdfHScroll.getChildAt(0).getWidth() - pdfHScroll.getWidth());
                 }
-                pdfHScroll.scrollTo(centerZoomedPage ? maxX / 2 : 0, pdfHScroll.getScrollY());
+                pdfHScroll.scrollTo(maxX / 2, pdfHScroll.getScrollY());
             }
             if (pdfVScroll != null) {
                 int maxY = 0;
                 if (pdfVScroll.getChildCount() > 0) {
                     maxY = Math.max(0, pdfVScroll.getChildAt(0).getHeight() - pdfVScroll.getHeight());
                 }
-                pdfVScroll.scrollTo(pdfVScroll.getScrollX(), centerZoomedPage ? maxY / 2 : 0);
+                pdfVScroll.scrollTo(pdfVScroll.getScrollX(), maxY / 2);
             }
         });
     }

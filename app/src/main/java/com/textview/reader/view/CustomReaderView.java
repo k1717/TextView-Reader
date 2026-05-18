@@ -42,6 +42,7 @@ public class CustomReaderView extends View {
         void onTextLongPress(String selectedText, int charPosition, float x, float y);
         void onReaderScrollChanged();
         void onReaderManualScroll();
+        void onReaderManualOverscroll(int direction);
     }
 
     public static final class PageTextAnchor {
@@ -572,6 +573,9 @@ public class CustomReaderView extends View {
                     if (listener != null) listener.onReaderManualScroll();
                 }
                 if (dragging) {
+                    if (listener != null && dy < 0 && readerScrollY <= getMinPageScrollY() + 2) {
+                        listener.onReaderManualOverscroll(-1);
+                    }
                     scrollByPixels((int) dy);
                     lastY = y;
                 }
@@ -746,6 +750,10 @@ public class CustomReaderView extends View {
 
     public int getMaxScrollY() {
         return maxScrollY;
+    }
+
+    public boolean isUserDraggingOrFlinging() {
+        return dragging || !scroller.isFinished();
     }
 
     /**
@@ -1051,6 +1059,38 @@ public class CustomReaderView extends View {
         scrollToPage(current + direction);
     }
 
+    /**
+     * Forward tap/page navigation should never start after the first text row
+     * that was not fully visible on the previous page.  Page anchors are already
+     * built from that rule, but this guard makes the invariant explicit and
+     * repairs edge cases caused by max-scroll clamping, layout-tail pages, or
+     * future pagination changes.
+     *
+     * @return true if the guard had to correct the target position.
+     */
+    public boolean pageForwardWithoutSkippingContent() {
+        if (layout == null || text.isEmpty()) {
+            pageBy(1);
+            return false;
+        }
+
+        int safeNextStart = getCharPositionForNextPageStartRespectingOverlap();
+        int beforeStart = getCurrentPageStartCharPositionForCoverage();
+
+        pageBy(1);
+
+        if (safeNextStart >= text.length()) {
+            return false;
+        }
+
+        int actualStart = getCurrentPageStartCharPositionForCoverage();
+        if (actualStart > safeNextStart && safeNextStart >= beforeStart) {
+            scrollToCharPosition(safeNextStart);
+            return true;
+        }
+        return false;
+    }
+
     public void scrollToPercent(float percent) {
         percent = Math.max(0f, Math.min(1f, percent));
         setReaderScrollY(snapScrollYToLineTop(Math.round(maxScrollY * percent)));
@@ -1111,6 +1151,15 @@ public class CustomReaderView extends View {
         int currentLine = layout.getLineForVertical(layoutY);
         int targetLine = Math.max(0, Math.min(Math.max(0, layout.getLineCount() - 1), currentLine + lineOffset));
         return Math.max(0, Math.min(text.length(), layout.getLineStart(targetLine)));
+    }
+
+    /**
+     * First logical row currently used as the page start, in local text offsets.
+     * This is intentionally line-based, not raw pixel-based, so coverage checks
+     * compare the same anchors that TXT paging uses.
+     */
+    public int getCurrentPageStartCharPositionForCoverage() {
+        return getCharPositionFromCurrentLineOffset(0);
     }
 
     /**
@@ -1175,6 +1224,28 @@ public class CustomReaderView extends View {
 
     public void scrollToCharPositionWithContext(int charPosition) {
         scrollToCharPosition(charPosition, true);
+    }
+
+    public void scrollToSearchResultPosition(int charPosition) {
+        if (layout == null || text.isEmpty()) return;
+        int pos = Math.max(0, Math.min(text.length(), charPosition));
+        int line = layout.getLineForOffset(pos);
+
+        int viewport = Math.max(1, getViewportHeight());
+        int lineHeight = Math.max(1, Math.round(getLineHeightPx()));
+
+        // Search is often performed while the Find popup is still open at the
+        // bottom of the screen.  Keep the matching line in the upper safe zone:
+        // low enough to avoid the title/page toolbar, but high enough that the
+        // bottom search popup cannot cover it.  Compared with the previous 2.1.2b
+        // placement, lift the result by roughly two text rows for better visibility
+        // above the search popup.  Use the same positioning for next/previous,
+        // cross-partition, and nth-result jumps.
+        int safeOffset = Math.max(Math.round(lineHeight * 1.0f), Math.round(viewport * 0.075f));
+        safeOffset = Math.min(safeOffset, Math.round(viewport * 0.14f));
+
+        int scrollY = layout.getLineTop(line) + marginVerticalPx - safeOffset;
+        setReaderScrollY(snapScrollYToLineTop(scrollY));
     }
 
     private void scrollToCharPosition(int charPosition, boolean keepContextAboveTarget) {

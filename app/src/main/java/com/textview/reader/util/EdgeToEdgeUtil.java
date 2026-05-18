@@ -58,6 +58,32 @@ public final class EdgeToEdgeUtil {
                                                  @Nullable View bottomContent,
                                                  @Nullable View foldedContent,
                                                  ChromeVisibilityProvider chromeVisibilityProvider) {
+        applyFoldableChromeInsetsInternal(activity, root, topBar, bottomContent, foldedContent,
+                chromeVisibilityProvider, false);
+    }
+
+    /**
+     * Same as applyFoldableChromeInsets, but keeps bottom chrome fixed when the
+     * soft keyboard appears. DocumentPageActivity uses this because its Word/EPUB
+     * bottom toolbar should not jump above the IME while the Find dialog has focus.
+     */
+    public static void applyFoldableChromeInsetsImeFixed(Activity activity,
+                                                        View root,
+                                                        @Nullable View topBar,
+                                                        @Nullable View bottomContent,
+                                                        @Nullable View foldedContent,
+                                                        ChromeVisibilityProvider chromeVisibilityProvider) {
+        applyFoldableChromeInsetsInternal(activity, root, topBar, bottomContent, foldedContent,
+                chromeVisibilityProvider, true);
+    }
+
+    private static void applyFoldableChromeInsetsInternal(Activity activity,
+                                                         View root,
+                                                         @Nullable View topBar,
+                                                         @Nullable View bottomContent,
+                                                         @Nullable View foldedContent,
+                                                         ChromeVisibilityProvider chromeVisibilityProvider,
+                                                         boolean keepBottomChromeFixedDuringIme) {
         prepareWindow(activity, root);
         final Padding topPad = topBar != null ? new Padding(topBar) : null;
         final Padding bottomPad = bottomContent != null ? new Padding(bottomContent) : null;
@@ -76,12 +102,16 @@ public final class EdgeToEdgeUtil {
                 topBar.setPadding(topPad.left, topPad.top + bars.top, topPad.right, topPad.bottom);
             }
             if (bottomContent != null) {
-                int bottomInset = imeVisible ? Math.max(bars.bottom, ime.bottom) : bars.bottom;
+                int bottomInset = keepBottomChromeFixedDuringIme
+                        ? bars.bottom
+                        : (imeVisible ? Math.max(bars.bottom, ime.bottom) : bars.bottom);
                 bottomContent.setPadding(bottomPad.left, bottomPad.top, bottomPad.right,
                         bottomPad.bottom + bottomInset);
             }
             if (foldedContent != null) {
-                int bottomInset = imeVisible ? 0 : bars.bottom;
+                int bottomInset = keepBottomChromeFixedDuringIme
+                        ? bars.bottom
+                        : (imeVisible ? 0 : bars.bottom);
                 int foldedTopInset = chromeVisible ? 0 : bars.top + foldedExtraInset;
                 int foldedBottomInset = chromeVisible ? 0 : bottomInset + foldedExtraInset;
                 foldedContent.setPadding(foldedPad.left, foldedPad.top + foldedTopInset,

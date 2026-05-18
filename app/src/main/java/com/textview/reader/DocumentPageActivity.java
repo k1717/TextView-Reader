@@ -160,6 +160,7 @@ public class DocumentPageActivity extends AppCompatActivity {
     private boolean wordSwipeMovedEnoughForParentDisallow = false;
     private boolean pageTurnInFlight = false;
     private GestureDetector documentGestureDetector;
+    private boolean documentDoubleTapResetSequence = false;
     private int armedDocumentEdgeDirection = 0;
     private long armedDocumentEdgeTimeMs = 0L;
     private boolean wordGestureStartedAtLeftEdge = true;
@@ -169,6 +170,8 @@ public class DocumentPageActivity extends AppCompatActivity {
     private int loadGeneration = 0;
     private File selectedDocumentFontFile = null;
     private boolean epubHasDocumentFont = false;
+    private boolean epubFixedLayoutLike = false;
+    private boolean fixedLayoutFindOffsetActive = false;
     private boolean wordHasDocumentFont = false;
     private String wordDefaultFontFamily = null;
     private String documentFontOverride = null;
@@ -179,6 +182,9 @@ public class DocumentPageActivity extends AppCompatActivity {
     private int activeDocumentSearchTotal = 0;
     private boolean documentSearchSelectLastAfterCount = false;
     private TextView documentSearchStatusView = null;
+    private FrameLayout documentSearchPanelContainer = null;
+    private FrameLayout documentSearchOverlayContainer = null;
+    private EditText documentSearchInputView = null;
     private final Runnable checkWordSelectionAfterScrollRunnable = this::checkWordSelectionAfterScroll;
     private final Runnable releasePageTurnRunnable = () -> pageTurnInFlight = false;
     private final Map<String, String> wordRelationships = new LinkedHashMap<>();
@@ -212,6 +218,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         // dark-bubble look is preserved even without forcing night mode.
         super.onCreate(savedInstanceState);
         ViewerRegistry.activate(this);
+        getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
 
         resolveReaderThemeColors();
         setContentView(R.layout.activity_document_page);
@@ -220,7 +227,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         // targetSdk 35 forces edge-to-edge regardless of setDecorFitsSystemWindows.
         // Without inset padding, the toolbar sits under the status bar and the
         // bottom button row sits under the 3-button navigation bar.
-        com.textview.reader.util.EdgeToEdgeUtil.applyFoldableChromeInsets(this,
+        com.textview.reader.util.EdgeToEdgeUtil.applyFoldableChromeInsetsImeFixed(this,
                 findViewById(R.id.document_root),
                 findViewById(R.id.document_appbar),
                 findViewById(R.id.document_bottom_scroller),
@@ -253,6 +260,8 @@ public class DocumentPageActivity extends AppCompatActivity {
         pageButton = findViewById(R.id.btn_page_move);
         bookmarkButton = findViewById(R.id.btn_bookmarks);
         moreButton = findViewById(R.id.btn_more);
+        documentSearchPanelContainer = findViewById(R.id.document_search_panel_container);
+        documentSearchOverlayContainer = findViewById(R.id.document_search_overlay_container);
 
         bookmarkManager = BookmarkManager.getInstance(this);
         applyDocumentThemeToViews();
@@ -411,6 +420,8 @@ public class DocumentPageActivity extends AppCompatActivity {
         View bottom = findViewById(R.id.document_bottom_scroller);
         if (root != null) root.setBackgroundColor(readerBg);
         if (viewport != null) viewport.setBackgroundColor(readerBg);
+        if (documentSearchPanelContainer != null) documentSearchPanelContainer.setBackgroundColor(readerBg);
+        if (documentSearchOverlayContainer != null) documentSearchOverlayContainer.setBackgroundColor(Color.TRANSPARENT);
         if (appbar != null) appbar.setBackgroundColor(readerBg);
         if (bottom != null) bottom.setBackgroundColor(readerPanel);
         if (toolbar != null) {
@@ -452,9 +463,21 @@ public class DocumentPageActivity extends AppCompatActivity {
     private boolean handleDocumentTapGesture(@NonNull MotionEvent event) {
         if (documentGestureDetector == null) return false;
         boolean handled = documentGestureDetector.onTouchEvent(event);
-        // Do not consume ACTION_DOWN; the WebView still needs the original down
-        // event for scrolling, text selection, and edge-swipe tracking.
-        return handled && event.getActionMasked() != MotionEvent.ACTION_DOWN;
+        int action = event.getActionMasked();
+
+        if (documentDoubleTapResetSequence) {
+            // A double tap is handled by this Activity as a zoom reset.  Consume the
+            // second tap sequence so Android WebView's own double-tap zoom does not
+            // race against the reset and immediately zoom the EPUB back in/out.
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                documentDoubleTapResetSequence = false;
+            }
+            return true;
+        }
+
+        // Do not consume normal ACTION_DOWN; the WebView still needs the original
+        // down event for scrolling, text selection, and edge-swipe tracking.
+        return handled && action != MotionEvent.ACTION_DOWN;
     }
 
     private void toggleDocumentChrome() {
@@ -514,6 +537,15 @@ public class DocumentPageActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
+    @Override
+    public void onBackPressed() {
+        if (isDocumentSearchPanelVisible()) {
+            hideDocumentSearchPanel(true, true);
+            return;
+        }
+        super.onBackPressed();
+    }
+
     private void setupWebView() {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(false);
@@ -545,12 +577,16 @@ public class DocumentPageActivity extends AppCompatActivity {
             if (documentSearchSelectLastAfterCount && numberOfMatches > 0 && webView != null) {
                 documentSearchSelectLastAfterCount = false;
                 webView.post(() -> {
-                    if (!activityDestroyed && webView != null) webView.findNext(false);
+                    if (!activityDestroyed && webView != null) {
+                        webView.findNext(false);
+                        scheduleDocumentSearchReveal();
+                    }
                 });
                 return;
             }
 
             updateDocumentSearchStatus(documentSearchStatusView);
+            scheduleDocumentSearchReveal();
         });
         webView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
             if ("Word".equals(docType) && Math.abs(scrollY - oldScrollY) > dpToPx(1)) {
@@ -570,11 +606,29 @@ public class DocumentPageActivity extends AppCompatActivity {
                 super.onPageFinished(view, url);
                 if (progressBar != null) progressBar.setVisibility(View.GONE);
                 installWordSelectionCleanupScript();
+                applyFixedLayoutFindOffsetCssIfNeeded();
                 applyDocumentSearchHighlightAfterPageLoad();
                 runDocumentSlideInAnimation();
                 restoreDocumentScrollAfterThemeRefreshIfNeeded(view);
             }
         });
+    }
+
+    private void configureWebViewForCurrentPage() {
+        if (webView == null) return;
+        WebSettings settings = webView.getSettings();
+        if ("EPUB".equals(docType) && epubFixedLayoutLike) {
+            settings.setUseWideViewPort(true);
+            settings.setLoadWithOverviewMode(true);
+            settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.NORMAL);
+            settings.setTextZoom(100);
+            webView.setInitialScale(0);
+        } else {
+            settings.setLoadWithOverviewMode(false);
+            settings.setUseWideViewPort(false);
+            settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING);
+            settings.setTextZoom(documentTextZoomPercent());
+        }
     }
 
     private void setupButtons() {
@@ -679,8 +733,12 @@ public class DocumentPageActivity extends AppCompatActivity {
 
             @Override
             public boolean onDoubleTap(@NonNull MotionEvent e) {
+                documentDoubleTapResetSequence = true;
                 resetDocumentZoom();
                 clearDocumentEdgeArm();
+                if (webView != null) {
+                    webView.postDelayed(() -> documentDoubleTapResetSequence = false, 360);
+                }
                 return true;
             }
         });
@@ -1015,6 +1073,23 @@ public class DocumentPageActivity extends AppCompatActivity {
 
     private void applyEpubBoundaryMarginsIfNeeded() {
         if (webView == null) return;
+        if ("EPUB".equals(docType) && epubFixedLayoutLike) {
+            lastAppliedEpubLeftPaddingDp = 0;
+            lastAppliedEpubRightPaddingDp = 0;
+            lastAppliedEpubTopPaddingDp = 0;
+            lastAppliedEpubBottomPaddingDp = 0;
+            lastAppliedEpubBottomToolbarHeightPx = 0;
+            lastAppliedEpubEffectiveBottomMarginPx = 0;
+            ViewGroup.LayoutParams rawLp = webView.getLayoutParams();
+            if (rawLp instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) rawLp;
+                if (lp.leftMargin != 0 || lp.topMargin != 0 || lp.rightMargin != 0 || lp.bottomMargin != 0) {
+                    lp.setMargins(0, 0, 0, 0);
+                    webView.setLayoutParams(lp);
+                }
+            }
+            return;
+        }
         int left = "EPUB".equals(docType) ? clampEpubBoundaryPx(getEpubLeftPaddingDp()) : 0;
         int right = "EPUB".equals(docType) ? clampEpubBoundaryPx(getEpubRightPaddingDp()) : 0;
         int top = "EPUB".equals(docType) ? clampEpubBoundaryPx(getEpubTopPaddingDp()) : 0;
@@ -1055,13 +1130,37 @@ public class DocumentPageActivity extends AppCompatActivity {
         if (webView == null) return;
         WebSettings settings = webView.getSettings();
         settings.setTextZoom(documentTextZoomPercent());
-        while (webView.canZoomOut()) {
-            webView.zoomOut();
+
+        // WebView zoomOut() is step-based.  Use a bounded loop instead of relying
+        // on an unbounded canZoomOut() loop so double-tap reset cannot overshoot or
+        // get stuck on device-specific WebView implementations.
+        for (int i = 0; i < 18 && webView.canZoomOut(); i++) {
+            if (!webView.zoomOut()) break;
         }
+
+        stabilizeDocumentAfterZoomReset();
         clearDocumentEdgeArm();
     }
 
+    private void stabilizeDocumentAfterZoomReset() {
+        if (webView == null || !"EPUB".equals(docType)) return;
+
+        Runnable stabilize = () -> {
+            if (activityDestroyed || webView == null || !"EPUB".equals(docType)) return;
+            if (epubFixedLayoutLike) {
+                applyFixedLayoutFindOffsetCssIfNeeded();
+                webView.scrollTo(0, 0);
+            }
+            clearDocumentEdgeArm();
+        };
+
+        webView.post(stabilize);
+        webView.postDelayed(stabilize, 90);
+        webView.postDelayed(stabilize, 240);
+    }
+
     private int documentTextZoomPercent() {
+        if ("EPUB".equals(docType) && epubFixedLayoutLike) return 100;
         if (!"EPUB".equals(docType) || prefs == null) return 100;
         float size = Math.max(8f, Math.min(48f, prefs.getFontSize()));
         return Math.max(50, Math.min(267, Math.round(size / PrefsManager.DEFAULT_FONT_SIZE * 100f)));
@@ -1086,6 +1185,10 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
     private void refreshCurrentEpubTextSize() {
+        if ("EPUB".equals(docType) && epubFixedLayoutLike) {
+            Toast.makeText(this, localizedText("Fixed-layout EPUB keeps its original page layout.", "고정 레이아웃 EPUB은 원본 페이지 배치를 유지합니다."), Toast.LENGTH_SHORT).show();
+            return;
+        }
         applyDocumentTextZoom();
         clearDocumentEdgeArm();
         if (!pages.isEmpty() && currentPage >= 0 && currentPage < pages.size()) {
@@ -1970,12 +2073,22 @@ public class DocumentPageActivity extends AppCompatActivity {
 
 
     private void showDocumentSearchDialog() {
-        final int bg = dialogBg();
+        FrameLayout targetContainer = getDocumentSearchPanelTargetContainer();
+        if (targetContainer == null) return;
+
+        if (isDocumentSearchPanelVisible() && documentSearchInputView != null) {
+            focusDocumentSearchInput(documentSearchInputView);
+            return;
+        }
+
         final int fg = dialogFg();
         final int sub = dialogSub();
 
+        clearDocumentSearchPanelContainers();
+        targetContainer.setBackgroundColor(shouldOverlayDocumentSearchPanel() ? Color.TRANSPARENT : readerBg);
+
         FrameLayout titleBox = new FrameLayout(this);
-        titleBox.setPadding(dpToPx(22), dpToPx(18), dpToPx(22), dpToPx(8));
+        titleBox.setPadding(dpToPx(18), dpToPx(10), dpToPx(18), dpToPx(4));
         titleBox.setBackgroundColor(Color.TRANSPARENT);
 
         TextView title = new TextView(this);
@@ -2004,9 +2117,10 @@ public class DocumentPageActivity extends AppCompatActivity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackgroundColor(Color.TRANSPARENT);
-        box.setPadding(dpToPx(24), dpToPx(12), dpToPx(24), dpToPx(8));
+        box.setPadding(dpToPx(18), dpToPx(8), dpToPx(18), dpToPx(6));
 
         EditText input = makeDialogInput(getString(R.string.search_text_hint));
+        documentSearchInputView = input;
         String rememberedQuery = activeDocumentSearchQuery;
         if ((rememberedQuery == null || rememberedQuery.isEmpty()) && prefs != null) {
             rememberedQuery = prefs.getLastReaderSearchQuery();
@@ -2020,14 +2134,14 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
         box.addView(input, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(52)));
+                dpToPx(50)));
 
         TextView hint = new TextView(this);
         hint.setText(getString(R.string.search_hint_multiple));
         hint.setTextColor(sub);
         hint.setTextSize(12f);
         hint.setGravity(Gravity.START);
-        hint.setPadding(0, dpToPx(6), 0, dpToPx(8));
+        hint.setPadding(0, dpToPx(5), 0, dpToPx(5));
         box.addView(hint, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -2035,21 +2149,21 @@ public class DocumentPageActivity extends AppCompatActivity {
         LinearLayout buttons = new LinearLayout(this);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         buttons.setGravity(Gravity.CENTER);
-        buttons.setPadding(0, dpToPx(8), 0, 0);
+        buttons.setPadding(0, dpToPx(4), 0, 0);
 
         TextView prevButton = makeDocumentSearchDialogButton(getString(R.string.find_previous), fg);
         TextView closeButton = makeDocumentSearchDialogButton(getString(R.string.close), fg);
         TextView nextButton = makeDocumentSearchDialogButton(getString(R.string.find_next), fg);
 
-        buttons.addView(prevButton, new LinearLayout.LayoutParams(0, dpToPx(44), 1f));
-        buttons.addView(closeButton, new LinearLayout.LayoutParams(0, dpToPx(44), 1f));
-        buttons.addView(nextButton, new LinearLayout.LayoutParams(0, dpToPx(44), 1f));
+        buttons.addView(prevButton, new LinearLayout.LayoutParams(0, dpToPx(42), 1f));
+        buttons.addView(closeButton, new LinearLayout.LayoutParams(0, dpToPx(42), 1f));
+        buttons.addView(nextButton, new LinearLayout.LayoutParams(0, dpToPx(42), 1f));
         box.addView(buttons, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
         LinearLayout panel = makeDialogBox();
-        panel.setPadding(0, 0, 0, dpToPx(8));
+        panel.setPadding(0, 0, 0, dpToPx(6));
         panel.addView(titleBox, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -2057,27 +2171,105 @@ public class DocumentPageActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        android.app.Dialog dialog = createStablePositionedDialog(panel, DOCUMENT_TOOLBAR_POPUP_Y_DP, true, false);
-
         prevButton.setOnClickListener(v -> performDocumentSearchMove(
                 input.getText() != null ? input.getText().toString() : "", false, matchStatus));
         nextButton.setOnClickListener(v -> performDocumentSearchMove(
                 input.getText() != null ? input.getText().toString() : "", true, matchStatus));
-        closeButton.setOnClickListener(v -> dialog.dismiss());
+        closeButton.setOnClickListener(v -> hideDocumentSearchPanel(true, true));
 
         input.setOnEditorActionListener((v, actionId, event) -> {
             performDocumentSearchMove(input.getText() != null ? input.getText().toString() : "", true, matchStatus);
             return true;
         });
 
-        dialog.setOnDismissListener(d -> {
-            if (prefs != null) {
-                prefs.setLastReaderSearchQuery(input.getText() != null ? input.getText().toString() : "");
+        targetContainer.addView(panel, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER));
+        targetContainer.setVisibility(View.VISIBLE);
+        targetContainer.requestLayout();
+        if (shouldOverlayDocumentSearchPanel()) {
+            fixedLayoutFindOffsetActive = true;
+            targetContainer.post(this::applyFixedLayoutFindOffsetCssIfNeeded);
+            targetContainer.postDelayed(this::applyFixedLayoutFindOffsetCssIfNeeded, 180);
+        } else if (webView != null) {
+            webView.requestLayout();
+        }
+        focusDocumentSearchInput(input);
+    }
+
+    private void focusDocumentSearchInput(@NonNull EditText input) {
+        input.postDelayed(() -> {
+            if (activityDestroyed || input != documentSearchInputView) return;
+            input.requestFocus();
+            Object service = getSystemService(INPUT_METHOD_SERVICE);
+            if (service instanceof android.view.inputmethod.InputMethodManager) {
+                ((android.view.inputmethod.InputMethodManager) service).showSoftInput(input,
+                        android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
             }
-            documentSearchStatusView = null;
-            clearDocumentSearchState(true);
-        });
-        dialog.show();
+        }, 80);
+    }
+
+    private void hideDocumentSearchPanel(boolean saveQuery, boolean clearWebView) {
+        if (saveQuery && prefs != null && documentSearchInputView != null) {
+            prefs.setLastReaderSearchQuery(documentSearchInputView.getText() != null
+                    ? documentSearchInputView.getText().toString()
+                    : "");
+        }
+        if (documentSearchInputView != null) {
+            Object service = getSystemService(INPUT_METHOD_SERVICE);
+            if (service instanceof android.view.inputmethod.InputMethodManager) {
+                ((android.view.inputmethod.InputMethodManager) service).hideSoftInputFromWindow(
+                        documentSearchInputView.getWindowToken(), 0);
+            }
+        }
+        documentSearchInputView = null;
+        documentSearchStatusView = null;
+        boolean wasInlineVisible = documentSearchPanelContainer != null
+                && documentSearchPanelContainer.getVisibility() == View.VISIBLE;
+        boolean wasFixedLayoutOverlayVisible = shouldOverlayDocumentSearchPanel()
+                && documentSearchOverlayContainer != null
+                && documentSearchOverlayContainer.getVisibility() == View.VISIBLE;
+        clearDocumentSearchPanelContainers();
+        clearDocumentSearchState(clearWebView);
+        if (wasFixedLayoutOverlayVisible) setFixedLayoutFindOffsetActive(false);
+        if (wasInlineVisible && webView != null) webView.requestLayout();
+    }
+
+    private boolean shouldOverlayDocumentSearchPanel() {
+        // Fixed-layout EPUB pages are deliberately kept at their original page geometry.
+        // Do not insert the search panel into the vertical document layout for those
+        // pages; shrinking the WebView makes the centered fixed page appear to drop
+        // far below its normal position when Find opens. Overlaying the panel keeps
+        // the page box stable while still allowing native WebView find/highlight.
+        return "EPUB".equals(docType) && epubFixedLayoutLike;
+    }
+
+    private FrameLayout getDocumentSearchPanelTargetContainer() {
+        if (shouldOverlayDocumentSearchPanel() && documentSearchOverlayContainer != null) {
+            return documentSearchOverlayContainer;
+        }
+        return documentSearchPanelContainer;
+    }
+
+    private boolean isDocumentSearchPanelVisible() {
+        return (documentSearchPanelContainer != null
+                && documentSearchPanelContainer.getVisibility() == View.VISIBLE)
+                || (documentSearchOverlayContainer != null
+                && documentSearchOverlayContainer.getVisibility() == View.VISIBLE);
+    }
+
+    private void clearDocumentSearchPanelContainers() {
+        if (documentSearchPanelContainer != null) {
+            documentSearchPanelContainer.removeAllViews();
+            documentSearchPanelContainer.setVisibility(View.GONE);
+            documentSearchPanelContainer.requestLayout();
+        }
+        if (documentSearchOverlayContainer != null) {
+            documentSearchOverlayContainer.removeAllViews();
+            documentSearchOverlayContainer.setVisibility(View.GONE);
+            documentSearchOverlayContainer.requestLayout();
+        }
     }
 
     private TextView makeDocumentSearchDialogButton(String label, int fg) {
@@ -2129,6 +2321,10 @@ public class DocumentPageActivity extends AppCompatActivity {
                     ? activeDocumentSearchOrdinal < activeDocumentSearchCountOnPage
                     : activeDocumentSearchOrdinal > 1;
             if (canMoveWithinPage && webView != null) {
+                // Roll back the forced same-page follow correction.  Let WebView's
+                // native findNext()/FindListener own match selection and scrolling;
+                // the previous manual ordinal + reveal pass made Word results drift
+                // under the find popup on some documents.
                 webView.findNext(forward);
                 return;
             }
@@ -2156,6 +2352,12 @@ public class DocumentPageActivity extends AppCompatActivity {
         webView.postDelayed(() -> {
             if (!activityDestroyed) applyDocumentSearchHighlight(activeDocumentSearchQuery, !documentSearchSelectLastAfterCount);
         }, 60);
+    }
+
+    private void scheduleDocumentSearchReveal() {
+        // Intentionally no-op. Word/EPUB document find now uses native WebView
+        // selection/scroll behavior only; the custom reveal/follow correction from
+        // the previous patch was rolled back because it did not improve Word search.
     }
 
     private void applyDocumentSearchHighlight(String query, boolean forward) {
@@ -2646,9 +2848,11 @@ public class DocumentPageActivity extends AppCompatActivity {
         pages.clear();
         wordRelationships.clear();
         epubHasDocumentFont = false;
+        epubFixedLayoutLike = false;
         wordHasDocumentFont = false;
         wordDefaultFontFamily = null;
         documentFontOverride = null;
+        hideDocumentSearchPanel(false, false);
         clearDocumentSearchState(false);
 
         executor.execute(() -> {
@@ -2720,6 +2924,11 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
     private String applyReaderThemeCss(String html) {
+        if ("EPUB".equals(docType) && epubFixedLayoutLike) {
+            // Fixed-layout EPUB pages already received only the centering CSS in
+            // prepareEpubHtml(). Do not add reader-theme/reflow CSS here.
+            return html != null ? html : "";
+        }
         int linkColor = ThemeManager.getInstance(this).getActiveTheme().getLinkColor();
 
         // Keep CSS minimal.  Do not force user-select/caret/handle behavior here:
@@ -2756,6 +2965,14 @@ public class DocumentPageActivity extends AppCompatActivity {
 
     private void showPage(int page, int direction) {
         if (activityDestroyed || webView == null || page < 0 || page >= pages.size()) return;
+        if ("EPUB".equals(docType) && epubFixedLayoutLike
+                && (webView.getWidth() <= 0 || webView.getHeight() <= 0)) {
+            final int requestedPage = page;
+            webView.post(() -> {
+                if (!activityDestroyed && webView != null) showPage(requestedPage, 0);
+            });
+            return;
+        }
         if (direction != 0 && pageTurnInFlight) return;
         if (direction != 0) {
             pageTurnInFlight = true;
@@ -2776,10 +2993,14 @@ public class DocumentPageActivity extends AppCompatActivity {
         wordSelectionActive = false;
         webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
         webView.getSettings().setJavaScriptEnabled("Word".equals(docType));
-        applyDocumentTextZoom();
+        configureWebViewForCurrentPage();
         applyEpubBoundaryMarginsIfNeeded();
         lastAppliedDocumentThemeSignature = documentThemeSignature();
-        webView.loadDataWithBaseURL(baseUrl, applyReaderThemeCss(p.html), "text/html", "UTF-8", null);
+        String htmlForDisplay = p.html;
+        if ("EPUB".equals(docType) && epubFixedLayoutLike) {
+            htmlForDisplay = prepareFixedLayoutEpubHtml(htmlForDisplay);
+        }
+        webView.loadDataWithBaseURL(baseUrl, applyReaderThemeCss(htmlForDisplay), "text/html", "UTF-8", null);
         updateStatus();
         saveReadingState();
     }
@@ -3246,6 +3467,7 @@ public class DocumentPageActivity extends AppCompatActivity {
     private void loadEpubPages(File file) throws Exception {
         closeResourceZip();
         resourceZip = new ZipFile(file);
+        epubFixedLayoutLike = detectEpubFixedLayoutLike(resourceZip);
         epubHasDocumentFont = detectEpubDeclaredFont(resourceZip);
         List<String> spine = findEpubSpinePaths(resourceZip);
         if (spine.isEmpty()) spine = findEpubHtmlEntries(resourceZip);
@@ -3256,10 +3478,65 @@ public class DocumentPageActivity extends AppCompatActivity {
             String html = readZipEntryString(resourceZip, entry);
             String title = titleFromHtml(html);
             if (title.isEmpty()) title = fileNameFromPath(path);
-            pages.add(new Page(title, prepareEpubHtml(html), path));
+            pages.add(new Page(title, epubFixedLayoutLike ? html : prepareEpubHtml(html), path));
         }
     }
 
+
+    private boolean detectEpubFixedLayoutLike(@NonNull ZipFile zip) {
+        try {
+            // EPUB 3 fixed-layout metadata.
+            ZipEntry containerEntry = zip.getEntry("META-INF/container.xml");
+            if (containerEntry != null) {
+                Document containerDoc;
+                try (InputStream is = zip.getInputStream(containerEntry)) {
+                    containerDoc = secureDocumentBuilder().parse(is);
+                }
+                NodeList rootFiles = containerDoc.getElementsByTagName("rootfile");
+                if (rootFiles.getLength() == 0) rootFiles = containerDoc.getElementsByTagNameNS("*", "rootfile");
+                if (rootFiles.getLength() > 0) {
+                    Node fullPathAttr = rootFiles.item(0).getAttributes() != null
+                            ? rootFiles.item(0).getAttributes().getNamedItem("full-path") : null;
+                    if (fullPathAttr != null) {
+                        String opfPath = fullPathAttr.getNodeValue();
+                        ZipEntry opfEntry = zip.getEntry(opfPath);
+                        if (opfEntry != null) {
+                            String opf = readZipEntryString(zip, opfEntry);
+                            String lower = opf != null ? opf.toLowerCase(Locale.US) : "";
+                            if (lower.contains("rendition:layout") && lower.contains("pre-paginated")) return true;
+                            if (lower.contains("fixed layout") || lower.contains("fixed-layout")) return true;
+                        }
+                    }
+                }
+            }
+
+            // Many EPUB 2 fixed-layout/demo books omit rendition metadata but put
+            // fixed numeric page dimensions in each XHTML viewport.  Detect those
+            // and preserve the original HTML/CSS instead of reflowing it.
+            Enumeration<? extends ZipEntry> entries = zip.entries();
+            int scanned = 0;
+            java.util.regex.Pattern viewport = java.util.regex.Pattern.compile(
+                    "(?is)<meta[^>]+name\\s*=\\s*['\\\"]viewport['\\\"][^>]+content\\s*=\\s*['\\\"][^'\\\"]*width\\s*=\\s*([0-9]{2,5})[^'\\\"]*height\\s*=\\s*([0-9]{2,5})");
+            while (entries.hasMoreElements() && scanned < 80) {
+                ZipEntry entry = entries.nextElement();
+                if (entry == null || entry.isDirectory() || !isEpubHtmlPath(entry.getName())) continue;
+                scanned++;
+                String html = readZipEntryString(zip, entry);
+                if (html == null) continue;
+                java.util.regex.Matcher m = viewport.matcher(html);
+                if (m.find()) {
+                    try {
+                        int w = Integer.parseInt(m.group(1));
+                        int h = Integer.parseInt(m.group(2));
+                        if (w >= 100 && h >= 100) return true;
+                    } catch (Exception ignored) {}
+                }
+            }
+        } catch (Throwable ignored) {
+            // Fall through to reflowable handling if detection fails.
+        }
+        return false;
+    }
 
     private boolean detectEpubDeclaredFont(@NonNull ZipFile zip) {
         try {
@@ -3508,8 +3785,207 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
     }
 
+    private String prepareFixedLayoutEpubHtml(String html) {
+        if (html == null) html = "";
+        int[] viewport = extractFixedLayoutViewportSize(html);
+        String css;
+        if (viewport[0] > 0 && viewport[1] > 0) {
+            int[] margins = computeFixedLayoutCenterMarginsCssPx(viewport[0], viewport[1]);
+            int leftRight = margins[0];
+            int topMargin = margins[1];
+            int bottomMargin = margins[2];
+            int minWidth = viewport[0] + (leftRight * 2);
+            int minHeight = viewport[1] + topMargin + bottomMargin;
+            css = "<style id=\"tekview-fixed-layout-center\">"
+                    + "html{margin:0 !important;padding:0 !important;width:auto !important;"
+                    + "min-width:" + minWidth + "px !important;min-height:" + minHeight + "px !important;"
+                    + "background:" + cssColor(readerBg) + " !important;overflow:auto !important;}"
+                    + "body{width:" + viewport[0] + "px !important;min-width:" + viewport[0] + "px !important;"
+                    + "height:" + viewport[1] + "px !important;min-height:" + viewport[1] + "px !important;"
+                    + "margin:" + topMargin + "px " + leftRight + "px " + bottomMargin + "px " + leftRight + "px !important;"
+                    + "padding:0 !important;box-sizing:border-box !important;position:relative !important;"
+                    + "overflow:visible !important;background:transparent !important;}"
+                    + "body>img:only-child,body>svg:only-child{display:block;margin:0 auto;}"
+                    + "</style>";
+        } else {
+            css = "<style id=\"tekview-fixed-layout-center\">"
+                    + "html{margin:0 !important;padding:0 !important;width:100vw !important;height:100vh !important;"
+                    + "display:flex !important;align-items:center !important;justify-content:center !important;"
+                    + "background:" + cssColor(readerBg) + " !important;overflow:auto !important;}"
+                    + "body{margin:0 !important;padding:0 !important;flex:0 0 auto;box-sizing:border-box !important;}"
+                    + "body>img:only-child,body>svg:only-child{display:block;margin:0 auto;}"
+                    + "</style>";
+        }
+        return injectIntoHtmlHead(html, css);
+    }
+
+    private int[] computeFixedLayoutCenterMarginsCssPx(int pageWidthCssPx, int pageHeightCssPx) {
+        return computeFixedLayoutCenterMarginsCssPx(pageWidthCssPx, pageHeightCssPx, false);
+    }
+
+    private int[] computeFixedLayoutCenterMarginsCssPx(int pageWidthCssPx, int pageHeightCssPx, boolean applyFindOffset) {
+        int[] result = new int[]{0, 0, 0};
+        if (pageWidthCssPx <= 0 || pageHeightCssPx <= 0 || webView == null) return result;
+        int viewWidthPx = webView.getWidth() - webView.getPaddingLeft() - webView.getPaddingRight();
+        int viewHeightPx = webView.getHeight() - webView.getPaddingTop() - webView.getPaddingBottom();
+        if (viewWidthPx <= 0 || viewHeightPx <= 0) return result;
+
+        float pageScale = viewWidthPx / (float) pageWidthCssPx;
+        if (pageScale <= 0f || Float.isNaN(pageScale) || Float.isInfinite(pageScale)) pageScale = 1f;
+        int leftRight = Math.max(0, Math.round(((viewWidthPx / pageScale) - pageWidthCssPx) / 2f));
+        int topBottom = Math.max(0, Math.round(((viewHeightPx / pageScale) - pageHeightCssPx) / 2f));
+        int topMargin = topBottom;
+        int bottomMargin = topBottom;
+
+        if (applyFindOffset) {
+            // Fixed-layout EPUB Find uses an overlay panel.  The page should not
+            // merely move slightly; its visible top edge should begin below the
+            // overlay so the search panel does not cover the page header/content.
+            int requiredVisualTopPx = getFixedLayoutFindOverlayBottomPx();
+            int currentVisualTopPx = Math.max(0, Math.round(topMargin * pageScale));
+            if (requiredVisualTopPx > currentVisualTopPx) {
+                int cssDown = Math.max(0, (int) Math.ceil((requiredVisualTopPx - currentVisualTopPx) / pageScale));
+                topMargin += cssDown;
+                bottomMargin = Math.max(0, bottomMargin - cssDown);
+            }
+        }
+
+        result[0] = leftRight;
+        result[1] = topMargin;
+        result[2] = bottomMargin;
+        return result;
+    }
+
+    private int getFixedLayoutFindOverlayBottomPx() {
+        int fallbackGap = dpToPx(8f);
+        if (documentSearchOverlayContainer == null
+                || documentSearchOverlayContainer.getVisibility() != View.VISIBLE) {
+            return fallbackGap;
+        }
+
+        int overlayHeight = documentSearchOverlayContainer.getHeight();
+        if (overlayHeight <= 0 && documentSearchOverlayContainer.getChildCount() > 0) {
+            View child = documentSearchOverlayContainer.getChildAt(0);
+            int availableWidth = documentSearchOverlayContainer.getWidth()
+                    - documentSearchOverlayContainer.getPaddingLeft()
+                    - documentSearchOverlayContainer.getPaddingRight();
+            if (availableWidth <= 0 && webView != null) {
+                availableWidth = webView.getWidth()
+                        - documentSearchOverlayContainer.getPaddingLeft()
+                        - documentSearchOverlayContainer.getPaddingRight();
+            }
+            if (availableWidth > 0) {
+                int widthSpec = View.MeasureSpec.makeMeasureSpec(availableWidth, View.MeasureSpec.AT_MOST);
+                int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+                child.measure(widthSpec, heightSpec);
+                overlayHeight = child.getMeasuredHeight()
+                        + documentSearchOverlayContainer.getPaddingTop()
+                        + documentSearchOverlayContainer.getPaddingBottom();
+            }
+        }
+
+        return Math.max(fallbackGap, overlayHeight + fallbackGap);
+    }
+
+    private void setFixedLayoutFindOffsetActive(boolean active) {
+        fixedLayoutFindOffsetActive = active;
+        applyFixedLayoutFindOffsetCssIfNeeded();
+    }
+
+    private void applyFixedLayoutFindOffsetCssIfNeeded() {
+        if (!"EPUB".equals(docType) || !epubFixedLayoutLike || webView == null) return;
+        if (activityDestroyed) return;
+        if (!fixedLayoutFindOffsetActive) {
+            evaluateFixedLayoutCssJavascript(
+                    "(function(){var s=document.getElementById('tekview-fixed-layout-find-offset');if(s&&s.parentNode){s.parentNode.removeChild(s);}})();");
+            return;
+        }
+        if (currentPage < 0 || currentPage >= pages.size()) return;
+        Page page = pages.get(currentPage);
+        int[] viewport = extractFixedLayoutViewportSize(page.html);
+        if (viewport[0] <= 0 || viewport[1] <= 0) return;
+
+        int[] margins = computeFixedLayoutCenterMarginsCssPx(viewport[0], viewport[1], true);
+        int leftRight = margins[0];
+        int topMargin = margins[1];
+        int bottomMargin = margins[2];
+        int minWidth = viewport[0] + (leftRight * 2);
+        int minHeight = viewport[1] + topMargin + bottomMargin;
+        String css = "html{margin:0 !important;padding:0 !important;width:auto !important;"
+                + "min-width:" + minWidth + "px !important;min-height:" + minHeight + "px !important;"
+                + "background:" + cssColor(readerBg) + " !important;overflow:auto !important;}"
+                + "body{width:" + viewport[0] + "px !important;min-width:" + viewport[0] + "px !important;"
+                + "height:" + viewport[1] + "px !important;min-height:" + viewport[1] + "px !important;"
+                + "margin:" + topMargin + "px " + leftRight + "px " + bottomMargin + "px " + leftRight + "px !important;"
+                + "padding:0 !important;box-sizing:border-box !important;position:relative !important;"
+                + "overflow:visible !important;background:transparent !important;}";
+        String js = "(function(){var css='" + cssQuote(css) + "';"
+                + "var s=document.getElementById('tekview-fixed-layout-find-offset');"
+                + "if(!s){s=document.createElement('style');s.id='tekview-fixed-layout-find-offset';"
+                + "(document.head||document.documentElement).appendChild(s);}"
+                + "s.textContent=css;})();";
+        evaluateFixedLayoutCssJavascript(js);
+    }
+
+    private void evaluateFixedLayoutCssJavascript(String js) {
+        if (webView == null || js == null || js.isEmpty()) return;
+        WebSettings settings = webView.getSettings();
+        boolean restoreJavascriptOff = !settings.getJavaScriptEnabled();
+        if (restoreJavascriptOff) settings.setJavaScriptEnabled(true);
+        webView.evaluateJavascript(js, value -> {
+            if (!activityDestroyed && webView != null && restoreJavascriptOff
+                    && "EPUB".equals(docType) && epubFixedLayoutLike) {
+                webView.getSettings().setJavaScriptEnabled(false);
+            }
+        });
+    }
+
+    private int[] extractFixedLayoutViewportSize(String html) {
+        int[] result = new int[]{0, 0};
+        if (html == null) return result;
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                    "(?is)<meta[^>]+name\\s*=\\s*['\\\"]viewport['\\\"][^>]+content\\s*=\\s*['\\\"]([^'\\\"]*)['\\\"]")
+                    .matcher(html);
+            if (!m.find()) return result;
+            String content = m.group(1);
+            java.util.regex.Matcher w = java.util.regex.Pattern.compile("(?i)(?:^|[,;\\s])width\\s*=\\s*([0-9]{2,5})").matcher(content);
+            java.util.regex.Matcher h = java.util.regex.Pattern.compile("(?i)(?:^|[,;\\s])height\\s*=\\s*([0-9]{2,5})").matcher(content);
+            if (w.find()) result[0] = Integer.parseInt(w.group(1));
+            if (h.find()) result[1] = Integer.parseInt(h.group(1));
+        } catch (Throwable ignored) {
+            result[0] = 0;
+            result[1] = 0;
+        }
+        return result;
+    }
+
+    private String injectIntoHtmlHead(String html, String injection) {
+        if (html == null) html = "";
+        if (injection == null || injection.isEmpty()) return html;
+        String lower = html.toLowerCase(Locale.ROOT);
+        int headEnd = lower.indexOf("</head>");
+        if (headEnd >= 0) return html.substring(0, headEnd) + injection + html.substring(headEnd);
+        java.util.regex.Matcher headStart = java.util.regex.Pattern.compile("(?i)<head[^>]*>").matcher(html);
+        if (headStart.find()) {
+            int insert = headStart.end();
+            return html.substring(0, insert) + injection + html.substring(insert);
+        }
+        int htmlStartEnd = lower.indexOf("<html");
+        if (htmlStartEnd >= 0) {
+            int tagEnd = html.indexOf('>', htmlStartEnd);
+            if (tagEnd >= 0) return html.substring(0, tagEnd + 1) + "<head>" + injection + "</head>" + html.substring(tagEnd + 1);
+        }
+        return "<!doctype html><html><head>" + injection + "</head><body>" + html + "</body></html>";
+    }
+
     private String prepareEpubHtml(String html) {
         if (html == null) html = "";
+        if (epubFixedLayoutLike) {
+            // Preserve the fixed-layout page geometry, but center the fixed page in
+            // the available WebView area instead of leaving it pinned to the top.
+            return prepareFixedLayoutEpubHtml(html);
+        }
         String css = "<style>" +
                 "html,body{margin:0;padding:0;background:#121212;color:#e8eaed;}" +
                 "body{line-height:1.55;padding:22px;box-sizing:border-box;}" +
