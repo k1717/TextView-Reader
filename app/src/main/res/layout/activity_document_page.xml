@@ -21,6 +21,17 @@
             app:titleTextColor="@android:color/white" />
     </com.google.android.material.appbar.AppBarLayout>
     <FrameLayout
+        android:id="@+id/document_search_panel_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#121212"
+        android:paddingStart="12dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp"
+        android:visibility="gone" />
+
+    <FrameLayout
         android:id="@+id/document_viewport"
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -37,6 +48,17 @@
             android:layout_height="48dp"
             android:layout_gravity="center"
             android:background="@android:color/transparent"
+            android:visibility="gone" />
+        <FrameLayout
+            android:id="@+id/document_search_overlay_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:background="@android:color/transparent"
+            android:paddingStart="12dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="8dp"
             android:visibility="gone" />
     </FrameLayout>
     <LinearLayout

@@ -55,7 +55,8 @@
             android:exported="false"
             android:launchMode="singleTop"
             android:theme="@style/Theme.TextViewReader.DocumentSelectionContrast"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustNothing" />
         <activity
             android:name=".SettingsActivity"
             android:exported="false" />
