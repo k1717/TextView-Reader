@@ -1,41 +1,34 @@
 # Changelog
 
-## 2.1.2 - 2026-05-17
+## 2.1.2b
 
-This package keeps Android metadata at `versionCode 212` and `versionName "2.1.2"`.  It consolidates the TXT Display Rules work, large-TXT paging/search fixes, and main-browser parent-folder navigation while keeping the app version at 2.1.2.
+This package uses Android metadata `versionCode 2122` and `versionName "2.1.2b"`. It consolidates TXT Display Rules, actual-file editing, low-power TXT Auto Page Turn, large-TXT paging/search work, EPUB/Word Find cleanup, fixed-layout EPUB handling, and PDF zoom/pan tuning into one 2.1.2b release.
 
 ### Main file browser
 
-- Added a parent-folder navigation button to the main file-browser path bar.
-- The button is placed on the right side of the path bar.
-- Button text is **← Parent folder** / **← 상위 폴더로**.
+- Added a right-side **← Parent folder** / **← 상위 폴더로** button to the main file-browser path bar.
 - Tapping it moves to the current folder's parent without relying on Android Back.
 - At a storage root, it returns to the Recent/home view.
 - The button is hidden on the Recent screen and search-result screen.
 
 ### TXT Display Rules
 
-- Added viewing-only TXT masking/replacement rules.
-- Normal TXT Display Rules do not modify the source TXT file.
+- Added viewing-only TXT masking/replacement rules. Normal TXT Display Rules do not modify the source TXT file.
 - Rules support enabled/disabled state, case-sensitive matching, plain-text matching, regular-expression matching, all-TXT scope, and current-file-only scope.
-- Added rule-source labeling so the rule list can show which TXT file a rule was made from.
 - Added quick rule creation from the TXT viewer through **More > Add display rule** and long-press word prefill.
-- Added rule ordering with Up/Down controls. Up/Down does not reload the active TXT viewer by itself, but rule order affects overlapping replacements and actual-file rule application.
+- Added rule-source labeling, rule ordering with Up/Down controls, quick enable/disable/delete controls, and rounded delete-confirmation UI.
 - Rule changes from the TXT rule manager apply after the rule/add window closes, keeping the rule window responsive while editing.
 - Display rules are applied before visible TXT rendering, pagination, large-TXT partition rendering, exact page-index construction, search, and bookmark positioning.
-- Individual delete actions use rounded confirmation UI.
 
 ### Edit Actual TXT File
 
 - Added **Edit Actual TXT File** below **TXT Display Rules** in Settings when Settings is opened from a TXT viewer.
 - The action permanently applies all enabled rules that apply to the current TXT file.
 - Users can choose either original overwrite or copy mode.
-- Original mode overwrites the opened TXT file, marks it physically modified, reloads the viewer, clears stale page/index state, and fully repaginates the TXT.
+- Original mode overwrites the opened TXT file, reloads the viewer, clears stale page/index state, and fully repaginates the TXT.
 - Copy mode writes to `originalname_edited.txt` and overwrites the same edited-copy target instead of creating repeated numbered copies.
-- Copy mode does not reload the currently opened original viewer.
-- The destructive flow uses rounded dialogs, colored warning boxes, a second **Are you sure?** confirmation, and a larger bold **There is no turning back.** warning.
+- The destructive flow uses rounded dialogs, warning boxes, a second **Are you sure?** confirmation, and an emphasized **There is no turning back.** warning.
 - Physical writes use a same-folder temporary file and replacement step to reduce partial-write risk.
-- Added large-file warnings and an `OutOfMemoryError` fallback because actual-file editing must read, transform, and rewrite the full file.
 
 ### TXT Auto Page Turn
 
@@ -50,13 +43,12 @@ This package keeps Android metadata at `versionCode 212` and `versionName "2.1.2
 - Large TXT active rendering remains based on fixed 4,000-logical-line partitions.
 - Page movement no longer waits for exact full-page indexing to finish.
 - If exact anchors are still building or fail, Go to Page / slider movement falls back to an estimated 4,000-line partition jump.
-- Exact-index failure is tracked separately instead of being treated as endless calculation.
-- User-facing Korean wording uses **대략적인 위치** for approximate movement.
 - Replaced the memory-heavy full-file exact-index layout path with chunked line-based exact indexing.
-- Large TXT still works toward an accurate full page count even when indexing takes a long time.
-- While chunked exact indexing runs, page movement remains usable through the 4,000-line fallback.
 - When chunked exact anchors finish, the viewer updates the total page count from estimated to exact.
-- The chunked exact index uses the same TXT Display Rule chain as the visible reader.
+- Manual scroll at large-TXT partition seams re-anchors lookahead text into its owning partition after scrolling settles, reducing repeated seam text during drag reading.
+- Dragging downward at the top of a large-TXT partition can load the previous partition, matching backward tap behavior more closely.
+- Sequential tap, volume-key, and auto-page forward movement use a guarded next-page anchor to reduce skip risk across partition seams while preserving configured overlap.
+- The partition-aware exact map follows the sequential reading path instead of restoring the old full-file continuous count that was impractical for very large TXT files.
 
 ### Large TXT final-page fixes
 
@@ -64,7 +56,6 @@ This package keeps Android metadata at `versionCode 212` and `versionName "2.1.2
 - Final-page movement loads or uses the real EOF partition instead of relying only on a global trailing-blank anchor.
 - Fixed a case where manual scroll could reach the final page but tap/page-down stopped at the previous page.
 - Final-page jumps can clamp to the physical visual EOF of the last partition when the final page is only a small EOF tail below the last anchor.
-- Final-page placement is applied before first draw in the final-page path to avoid anchor-page-to-EOF flicker.
 - If the final partition is already active, the viewer moves directly to visual EOF instead of reloading/rebuilding the partition, reducing final-page transition delay.
 
 ### TXT body search
@@ -72,25 +63,40 @@ This package keeps Android metadata at `versionCode 212` and `versionName "2.1.2
 - Large-TXT body search no longer searches only the currently loaded 4,000-line partition.
 - Search scans the display-rule-applied TXT stream, finds the matching logical line, loads the owning partition, and moves to the result.
 - Search does not need to wait for exact page indexing to finish.
-- Search result highlighting maps global large-TXT match positions into the active partition before drawing.
 - Large-TXT search uses a separate background executor so long exact-page-index builds do not block find-next/find-previous requests.
-- Added an optional match-number field to the TXT search window.
-- Users can enter a number and tap **Nth / n번째** to jump directly to that occurrence.
-- Nth search works in both normal TXT mode and large TXT partition mode.
-- Next/Previous search behavior is unchanged when the nth field is empty.
+- Next/Previous search first checks the already-loaded partition and moves immediately when the next match is already in memory.
+- When the total count is unknown, next/previous can show `n / …` first, then a separate background count pass updates it to `n / total` automatically.
+- Added **Nth / n번째** search for jumping directly to a selected occurrence.
+- Search-result jumps use a dedicated reveal position near the upper safe area, keeping matches below the top title/toolbar but high enough to avoid the lower Find popup.
+
+### EPUB and Word reader
+
+- Kept Word Find rollback: Word same-page Previous/Next search uses native WebView `findNext()` / `FindListener` behavior only, with no custom reveal pass, forced ordinal correction, or DOM marker insertion.
+- EPUB and Word Find avoid JavaScript/DOM marker layout edits and rely on native WebView Find behavior.
+- Replaced Word and normal EPUB Find floating dialogs with an inline toolbar-level Find panel so search controls do not cover the WebView viewport.
+- Kept fixed-layout EPUB Find as an overlay so opening Find does not shrink the WebView or push fixed-size pages down through layout reflow.
+- Fixed-layout EPUB pages are detected through fixed-layout metadata / numeric viewport data, kept out of reader-theme reflow CSS, and centered as fixed-size pages during normal reading.
+- While fixed-layout EPUB Find is open, the fixed page top is temporarily moved below the overlay panel; closing Find removes the temporary offset and restores normal centered placement.
+- Kept the EPUB/Word bottom toolbar fixed while the soft keyboard is open in Find and other text-input dialogs.
+- Stabilized EPUB/Word double-tap reset so app reset handling does not fight WebView native double-tap zoom behavior.
+
+### PDF reader
+
+- Corrected PDF zoom-reset scope: vertical continuous scroll keeps the current zoom, while horizontal page-swipe mode resets zoom to `1.0` when moving to another page.
+- Rolled back PDF page-navigation scroll-offset clearing, so page movement no longer forces the next page to top-left.
+- Increased zoomed-page pan speed in PDF horizontal swipe mode.
+- Horizontal and vertical in-page panning now both receive zoom-only acceleration.
+- Kept the existing horizontal page-turn threshold unchanged.
 
 ### UI and Settings cleanup
 
-- Applied rounded popup styling to new display-rule, actual-file edit, auto-page-turn, delete-confirmation, and settings-reset dialogs.
-- Moved and resized TXT Display Rule / Add Display Rule / Auto Page Turn windows to match the newer one-hand-friendly popup layout.
-- Added **Reset settings** for restoring reader/app preferences while preserving bookmarks, reading positions, recent files, folder shortcuts, TXT Display Rules, custom themes, and PIN lock.
+- Applied rounded popup styling to the display-rule, actual-file edit, auto-page-turn, delete-confirmation, and settings-reset dialogs.
+- Added **Reset settings** for restoring reader/app preferences while keeping user data such as bookmarks, reading positions, recent files, folder shortcuts, TXT Display Rules, custom themes, and PIN lock.
 - Settings backup/export includes TXT Display Rules through the existing settings import/export path.
 
 ### Version metadata
 
-- Android `versionCode`: `212`
-- Android `versionName`: `2.1.2`
-- Android package identity remains `com.textview.reader`.
+- Updated Android version metadata to `versionCode 2122` and `versionName "2.1.2b"`.
 
 ## 2.1.1 - 2026-05-16
 

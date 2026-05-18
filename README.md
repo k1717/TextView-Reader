@@ -2,33 +2,33 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.1.2**
+Current version: **2.1.2b**
 
-## What changed in 2.1.2 from 2.1.1
+## 2.1.2b release summary
 
 - Added **TXT Display Rules** for viewing-only text replacement or masking. Normal display rules change only the text shown in the TXT viewer; the source file is not modified.
 - Rules can be enabled/disabled, case-sensitive or case-insensitive, plain-text or regular-expression based, global for all TXT files, or limited to one TXT file.
 - Added TXT-viewer quick add flow: long-press a visible word or use **More > Add display rule** to create a rule without leaving the reader.
-- Added rule-source labeling so saved rules can show which file they were originally created from.
-- Added rule ordering controls so multiple replacement rules can be moved up/down and applied in top-to-bottom order. Up/down does not reload the active viewer by itself, but order can affect final output when rules overlap.
-- Added quick enable/disable/delete controls and rounded delete-confirmation dialogs in the display-rule list.
-- Reader-side display-rule changes are applied when the rule/add window closes, so the rule manager remains responsive while editing.
-- Display rules are applied before TXT pagination and large-TXT exact indexing, so the page count, slider, Go to Page, search, and bookmarks follow the text shown on screen while rules are enabled.
-- Added **Edit Actual TXT File** below **TXT Display Rules** in Settings when Settings is opened from a TXT viewer. It can permanently apply all enabled applicable rules to either the original TXT file or a copied `*_edited.txt` file.
-- Actual-file edit uses rounded confirmation popups, yellow/red warning boxes, a second **Are you sure?** step, and an emphasized **There is no turning back.** warning.
-- In copy mode, the app writes to the same `*_edited.txt` target and overwrites that edited copy instead of creating repeated numbered copies. In original mode, the opened TXT is reloaded and fully repaginated after the write succeeds. Physical writes now use a same-folder temporary file plus replacement step to reduce the chance of partially written output.
-- Added low-power **Auto Page Turn** as a TXT toolbar button for e-ink/low-end devices: the reader turns one page after the user-specified number of seconds instead of continuously scrolling.
-- Applied rounded popup styling to the new display-rule, actual-file edit, auto-page-turn, and settings-reset dialogs; auto-page-turn action buttons now use short Start/Stop labels.
-- Settings backups include the saved display-rule JSON through the existing settings export/import path.
-- Added **Reset settings** in Settings. It restores reader/app preferences to defaults while keeping bookmarks, reading positions, recent files, folder shortcuts, TXT display rules, custom themes, and PIN lock.
-- Multi-line find/replace is intentionally left out for now to keep large-TXT partition boundaries predictable.
+- Added rule-source labeling, rule ordering controls, quick enable/disable/delete controls, and rounded delete-confirmation dialogs for TXT Display Rules.
+- Display rules are applied before TXT pagination, large-TXT partition rendering, exact indexing, search, and bookmarks, so visible page movement follows the text shown on screen while rules are enabled.
+- Added **Edit Actual TXT File** below **TXT Display Rules** in Settings when Settings is opened from a TXT viewer. It can permanently apply enabled applicable rules to either the original TXT file or a copied `*_edited.txt` file.
+- Actual-file edit uses rounded confirmation popups, warning boxes, a second **Are you sure?** step, and an emphasized **There is no turning back.** warning.
+- Added low-power **Auto Page Turn** as a TXT toolbar button. Auto Page Turn advances one page after the user-selected seconds interval and stops when the user manually moves the page.
+- Added **Reset settings** in Settings. It restores reader/app preferences to defaults while keeping bookmarks, reading positions, recent files, folder shortcuts, TXT Display Rules, custom themes, and PIN lock.
 - Added a right-side **← Parent folder** / **← 상위 폴더로** button in the main file-browser path bar.
-- Improved large-TXT page movement so Go to Page and slider movement can use an estimated 4,000-line partition jump while exact indexing is still building.
-- Replaced the previous large-TXT full-file exact-index path with chunked line-based exact indexing, allowing high-line-count files to continue toward an accurate final page count without one giant full-file layout.
+- Improved large-TXT page movement with estimated 4,000-line partition jumps while exact indexing is still building, replacing the previous full-file exact-index path with chunked line-based exact indexing.
 - Improved large-TXT final-page handling so EOF-tail pages remain reachable by tap/page-down, with reduced flicker and reduced delay when the final partition is already active.
-- Improved large-TXT Find so search can scan the full TXT file and jump to the matching logical line/partition without waiting for exact page indexing to finish.
-- Added an **Nth / n번째** search option for jumping directly to the selected occurrence of a search term.
-- Updated Android version metadata to `versionCode 212` and `versionName "2.1.2"`.
+- Improved large-TXT Find so search can jump to the matching logical line/partition without waiting for exact page indexing. Added **Nth / n번째** search and background total-count completion for large-TXT search counters.
+- Kept Word Find rollback: Word same-page Previous/Next search uses native WebView `findNext()` / `FindListener` behavior only, without custom reveal, forced ordinal correction, or DOM marker insertion.
+- Reworked Word and normal EPUB Find UI into an inline toolbar-level panel so the Find controls do not float over the WebView search target.
+- Kept fixed-layout EPUB Find as an overlay so opening Find does not shrink the WebView or push the fixed page down by layout reflow.
+- Fixed-layout EPUB pages are detected through fixed-layout metadata / numeric viewport data, kept out of reader-theme reflow CSS, and centered as fixed-size pages during normal reading.
+- While fixed-layout EPUB Find is open, the fixed page is temporarily positioned below the Find overlay; closing Find removes the temporary offset and restores normal centered placement.
+- Stabilized EPUB/Word double-tap reset so the app reset does not fight WebView native double-tap zoom behavior.
+- PDF horizontal page-swipe mode now resets zoom to `1.0` when moving to another page; PDF vertical continuous scroll keeps the current zoom while scrolling between pages.
+- Rolled back PDF page-navigation scroll-offset clearing, so page movement no longer forces a top-left scroll snap.
+- Increased zoomed PDF in-page pan acceleration for both horizontal and vertical panning in horizontal swipe mode, while keeping the existing horizontal page-turn threshold unchanged.
+- Updated Android version metadata to `versionCode 2122` and `versionName "2.1.2b"`.
 
 ## What changed in 2.1.1 from 2.1.0
 
@@ -140,15 +140,22 @@ Current version: **2.1.2**
 
 - Encoding detection for UTF-8, EUC-KR/CP949/MS949, and UTF-16.
 - Large TXT handling with fixed 4,000-logical-line active partitions, lookahead rendering, neighbor prefetch, and generated page/index cache bookkeeping.
-- Large TXT exact page count is built in the background with chunked line-based indexing, so very high-line-count files can still reach an accurate final total page count without requiring one giant full-file layout.
+- Large TXT exact page count is built in the background with partition-aware chunked indexing, so very high-line-count files can still finish indexing without requiring one giant full-file layout.
+- The exact large-TXT page map follows the same sequential 4,000-line partition path used by tap paging; seam lookahead text is used for continuity, not double-counted as extra independent pages.
+- Manual finger scrolling in large TXT mode now re-anchors from lookahead text into the owning next partition after scrolling settles, reducing duplicated seam text during scroll-based reading.
+- Pulling downward at the top of a large-TXT partition can load the previous partition, so manual scroll navigation is safer in both directions.
+- Sequential TXT page turns now use a coverage guard: forward tap/volume/auto paging cannot start after the first row that was not fully visible on the previous page, and partition handoff uses the same guarded next-page anchor.
 - Large TXT Go to Page and slider movement can fall back to estimated logical-line/partition jumps before exact indexing finishes.
-- Large TXT search scans the full file and jumps to the result partition without waiting for exact page indexing.
+- Large TXT search jumps to the result partition without waiting for exact page indexing. Previous/Next stops at the nearest match for responsiveness, and repeated Previous/Next taps can move instantly when the next match is already inside the loaded 4,000-line partition. Nth occurrence search scans the full file when needed.
+- Search jumps place the matching line in a safe upper-middle reader area so newly loaded large-TXT partitions do not hide the result under the page title, toolbar overlay, or open Find popup.
 - TXT search includes an **Nth / n번째** occurrence option for direct match navigation.
 - Final-page jumps in partitioned TXT files use the real EOF partition's visual end to keep the document's last page reachable even when the file ends with blank lines.
 - Final-page tap/page-down handling avoids the old anchor-draw then EOF-correction flicker path, and skips unnecessary final-partition reloads when already active.
 - Generated TXT cache cleanup uses retention logic for disposable pagination/index data.
 - Cache cleanup does not delete bookmarks, history, reading position, folder shortcuts, or documents.
 - Text search with custom reader-dialog input styling.
+- Search-result jumps use a shared reveal-safe position near the upper area, keeping matches visible above the lower Find popup for Next/Previous and nth-result jumps.
+- Large-TXT Previous/Next search moves after finding the nearest match instead of waiting for a full-file match count. The match counter may temporarily show `n / …` while the total is unknown, then a separate background count fills in `n / total` automatically. The counter stays visible while search/count work is running.
 - Custom reader themes and brightness control.
 - Custom font import, system font scanning, and multiple added-font persistence.
 - User-added font removal from the normal compact font picker by long-press.
@@ -175,14 +182,17 @@ Current version: **2.1.2**
 ### PDF reading
 
 - Android `PdfRenderer` based reading path.
-- Horizontal page-slide mode.
+- Horizontal page-slide / swipe mode.
+- Vertical continuous scroll mode.
 - Original-size page swipes are more sensitive for easier page turning.
-- Vertical continuous mode.
-- Pinch zoom that keeps the selected focal spot stable.
-- Zoomed next/previous page turns land centered instead of at the upper-left corner.
-- Horizontal panning for zoomed pages in vertical continuous mode.
+- Pinch zoom keeps the selected focal spot stable.
+- In horizontal page-swipe mode, moving to another page resets zoom to `1.0`.
+- In vertical continuous scroll mode, page changes keep the current zoom.
+- Page navigation no longer forcibly clears the PDF scroll offset to top-left.
+- Zoomed in-page panning in horizontal swipe mode has increased horizontal and vertical acceleration.
+- The horizontal page-turn threshold is kept unchanged from the previous tuned value.
+- Zoomed edge-swipe page turning still requires a deliberate edge gesture instead of accidental page turns during normal pan movement.
 - Single-tap toolbar fold/return with folded-mode safe-area padding plus a 6dp extra buffer.
-- Faster horizontal pan response for zoomed vertical pages.
 - Improved continuous-mode blank-page recovery and render rebinding.
 - More stable popup/dialog sizing and positioning.
 - Page-turn and zoom redraws avoid showing the centered PDF spinner unless the file is initially loading.
@@ -193,7 +203,15 @@ Current version: **2.1.2**
 
 - EPUB and OOXML Word support through extracted/rendered WebView pages.
 - Bottom-bar Find button next to Next.
-- Search popup uses reader-style input, custom cursor/handle styling, match counter, Previous/Next, and wrap behavior.
+- Word and normal EPUB Find use an inline toolbar-level panel so search controls do not cover the WebView viewport.
+- Fixed-layout EPUB Find remains an overlay so opening Find does not shrink the WebView and does not reflow fixed-size pages downward.
+- Fixed-layout EPUB rendering is preserved by detecting numeric viewport/fixed-layout metadata, avoiding reader-theme reflow CSS, and centering fixed-size pages in the viewer instead of pinning them to the top.
+- While fixed-layout EPUB Find is open, the fixed page is temporarily placed below the Find overlay; closing Find restores normal centered placement.
+- Search UI uses reader-style input, custom cursor/handle styling, match counter, Previous/Next, and wrap behavior.
+- EPUB/Word bottom toolbar stays fixed while the soft keyboard is open in Find/text-input dialogs.
+- EPUB and Word Find avoid JavaScript/DOM marker layout edits and rely on native WebView Find behavior.
+- Word same-page Find-follow correction is rolled back; same-page navigation uses WebView native `findNext()` / `FindListener` behavior only.
+- EPUB/Word double-tap reset is stabilized so app reset handling does not conflict with WebView native double-tap zoom.
 - Font selector follows the TXT reader font-dialog structure.
 - EPUB file-declared fonts can be used as **Default font**.
 - EPUB boundary can be adjusted from **Settings > EPUB layout** for left, right, top, and bottom boundaries without changing Word/DOCX padding.
