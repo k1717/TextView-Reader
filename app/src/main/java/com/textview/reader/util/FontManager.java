@@ -384,6 +384,36 @@ public class FontManager {
      * Built-in logical families such as DEFAULT/SERIF/MONOSPACE return null
      * because WebView can address those through CSS family names directly.
      */
+    /**
+     * Return a stable, process-invariant identifier for a typeface that is selected
+     * by the given font name. Used by page-index signatures so that the exact page
+     * index is not rebuilt across app restarts just because the in-memory Typeface
+     * object was re-created with a different object hash.
+     *
+     * Logical built-in families collapse to a fixed string. File-backed fonts use
+     * their canonical filesystem path. System-family-selected fonts use the
+     * family name as it appears in the user preference.
+     */
+    public String getStableTypefaceKey(String fontName) {
+        if (fontName == null || fontName.trim().isEmpty()
+                || fontName.equals("default") || fontName.equals("DEFAULT")) {
+            return "default";
+        }
+        if (isSystemFamilyValue(fontName)) {
+            String familyName = getSystemFamilyName(fontName);
+            return familyName.isEmpty() ? "default" : ("family:" + familyName);
+        }
+        String path = fontPaths.get(fontName);
+        if (path == null) path = fontName;
+        if (path == null) return "default";
+        switch (path) {
+            case "DEFAULT": return "default";
+            case "SERIF": return "serif";
+            case "MONOSPACE": return "monospace";
+            default: return "file:" + path;
+        }
+    }
+
     public String getFontPathForName(String fontName) {
         if (fontName == null || fontName.trim().isEmpty()) return null;
         if (isSystemFamilyValue(fontName)) return null;

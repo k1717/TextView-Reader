@@ -321,6 +321,51 @@ public class ReaderActivity extends AppCompatActivity {
     private final Set<Integer> largeTextPendingPartitionPrefetches = new HashSet<>();
     private boolean largeTextEstimateActive = false;
     private int largeTextEstimatedTotalPages = 0;
+    /** Debounce token + layout-stability gate for the exact page index builder.
+     *
+     *  The exact page index input includes viewportHeight, layoutWidth,
+     *  marginVertical and overlap. During the first few frames after onFileLoaded()
+     *  these can shift by 1-2 px as edge-to-edge insets, system bar insets, page
+     *  status strip and theme application all settle. Starting a fresh index
+     *  build while those inputs are still transient can let a page index built
+     *  from temporary viewport geometry become the final displayed total.
+     *
+     *  This runnable checks whether the current "layout signature" (the geometry
+     *  inputs only) matches the one captured on the previous tick. If yes, the
+     *  layout has been stable for at least one debounce window and we start the
+     *  build. If no, we update the snapshot and reschedule ourselves, waiting
+     *  for two consecutive identical measurements before committing. */
+    private String lastSeenStableLayoutSignature = "";
+    private final Runnable largeTextRestartIndexingRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (activityDestroyed) return;
+            if (!largeTextEstimateActive) return;
+            String snapshot = filePath;
+            if (snapshot == null) return;
+            if (readerView == null) return;
+
+            String currentLayoutSig = buildLargeTextLayoutOnlySignature();
+            if (currentLayoutSig.isEmpty()) {
+                // View not measured yet. Wait for it.
+                lastSeenStableLayoutSignature = "";
+                handler.removeCallbacks(this);
+                handler.postDelayed(this, LARGE_TEXT_INDEX_RESTART_DEBOUNCE_MS);
+                return;
+            }
+            if (!currentLayoutSig.equals(lastSeenStableLayoutSignature)) {
+                // Geometry changed between this tick and the last one. Wait
+                // for another debounce window and recheck before committing.
+                lastSeenStableLayoutSignature = currentLayoutSig;
+                handler.removeCallbacks(this);
+                handler.postDelayed(this, LARGE_TEXT_INDEX_RESTART_DEBOUNCE_MS);
+                return;
+            }
+            // Same layout signature observed twice in a row ⇒ layout has settled.
+            resetLargeTextExactPageIndex();
+            startLargeTextExactPageIndexing(snapshot);
+        }
+    };
     private boolean largeTextPartitionSwitchInProgress = false;
     private int largeTextPartitionPendingDisplayPage = 0;
     private int largeTextPartitionPendingTotalPages = 0;
@@ -417,6 +462,18 @@ public class ReaderActivity extends AppCompatActivity {
         themeManager = ThemeManager.getInstance(this);
         notificationHelper = new ReadingNotificationHelper(this);
 
+        readerView.addOnLayoutChangeListener((v, left, top, right, bottom,
+                                                oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (!largeTextEstimateActive) return;
+            boolean widthChanged = (right - left) != (oldRight - oldLeft);
+            boolean heightChanged = (bottom - top) != (oldBottom - oldTop);
+            if (widthChanged || heightChanged) {
+                // Debounced via scheduleLargeTextExactPageIndexingRestart, so a
+                // burst of layout changes during the first frames after load
+                // collapses into a single index build.
+                scheduleLargeTextExactPageIndexingRestart();
+            }
+        });
         readerView.setReaderListener(new CustomReaderView.ReaderListener() {
             @Override public void onSingleTap(float x, float y) { handleSingleTap(x, y); }
             @Override public void onTextLongPress(String selectedText, int charPosition, float x, float y) {
@@ -769,8 +826,7 @@ public class ReaderActivity extends AppCompatActivity {
                 readerView.setTextZoneAdjustments(topTextZoneOffsetPx, bottomTextZoneOffsetPx,
                         leftTextInsetPx, rightTextInsetPx);
                 if (largeTextEstimateActive) {
-                    resetLargeTextExactPageIndex();
-                    if (filePath != null) startLargeTextExactPageIndexing(filePath);
+                    scheduleLargeTextExactPageIndexingRestart();
                 }
                 appliedTopTextZoneOffsetPx = topTextZoneOffsetPx;
                 appliedBottomTextZoneOffsetPx = bottomTextZoneOffsetPx;
@@ -796,8 +852,7 @@ public class ReaderActivity extends AppCompatActivity {
                 appliedMarginVerticalPx = marginV;
                 appliedTypeface = tf;
                 if (largeTextEstimateActive) {
-                    resetLargeTextExactPageIndex();
-                    if (filePath != null) startLargeTextExactPageIndexing(filePath);
+                    scheduleLargeTextExactPageIndexingRestart();
                 }
             }
         }
@@ -1988,16 +2043,20 @@ public class ReaderActivity extends AppCompatActivity {
     private void updateReaderContentTopPadding() {
         if (readerView == null) return;
 
-        // The title is an overlay strip in the existing top gap.
-        // TXT pagination intentionally uses the same top padding whether the
-        // Android status bar is visible or hidden. The page indicator is moved
-        // one text row lower visually, but the paginated TXT body always starts
-        // from this canonical status-bar-OFF spacing.
+        // Top padding: canonical (status-bar-OFF spacing).
+        // Bottom padding: canonical too. The previous "lastReaderBottomInset + 12dp"
+        // made readerView.getViewportHeight() depend on the system navigation bar
+        // inset, which was the dominant cause of the "stabilized total page count
+        // differs by a few pages between runs" complaint on large TXT files.
+        //
+        // The actual navigation bar is still covered by navBarSpacer (an opaque
+        // overlay at bottom-gravity in the FrameLayout), so display is identical
+        // to the inset-following layout we used before.
         readerView.setPadding(
                 readerView.getPaddingLeft(),
                 getReaderContentTopPadding(),
                 readerView.getPaddingRight(),
-                lastReaderBottomInset + dpToPx(12));
+                getStableReaderBottomPaddingPx());
     }
 
     private int getStableStatusOffTopPaddingPx() {
@@ -2006,6 +2065,27 @@ public class ReaderActivity extends AppCompatActivity {
                 prefs.getFontSize()
                         * prefs.getLineSpacing()
                         * getResources().getDisplayMetrics().scaledDensity));
+    }
+
+    /**
+     * Canonical bottom padding for the readerView in pixels. Independent of the
+     * live system navigation bar inset AND of the user's current font size.
+     *
+     * <p>This is the central invariant that keeps the large-TXT exact page count
+     * deterministic across runs: viewport height feeds page anchors, and page
+     * anchors decide the total page count. If viewport varies by even 1px because
+     * the OS navigation bar settled to a slightly different inset between runs,
+     * a multi-thousand-page TXT can accumulate that drift into a different total.
+     *
+     * <p>The actual navigation bar is still visually covered by {@code navBarSpacer},
+     * which sits in the FrameLayout at bottom-gravity with an opaque background;
+     * text painted within this canonical bottom band is hidden by that spacer.
+     * The constant ~60dp is chosen to match what 3-button-nav users already saw
+     * (their old "bottomInset + 12dp" ~= 60dp). Gesture-nav users get a slightly
+     * larger bottom gap, but it sits behind navBarSpacer's opaque band.
+     */
+    private int getStableReaderBottomPaddingPx() {
+        return dpToPx(60);
     }
 
     private int getReaderPageStatusBaseHeight() {
@@ -3363,8 +3443,30 @@ public class ReaderActivity extends AppCompatActivity {
                                                         float lineSpacing,
                                                         @NonNull TextPaint paintSnapshot) {
         File source = new File(loadedFilePath);
-        Typeface typeface = paintSnapshot.getTypeface();
-        String typefaceKey = typeface == null ? "default" : typeface.getStyle() + "/" + typeface.hashCode();
+
+        // Process-stable typeface key:
+        //   Previously typeface.hashCode() was used, which is Object.hashCode() and therefore
+        //   different every time Typeface.createFromFile() is called. That made the signature
+        //   change across app restarts even when the user did not change anything. That does
+        //   not change StaticLayout's page count by itself, but it causes false signature
+        //   mismatches and unnecessary rebuilds.
+        //   Using FontManager.getStableTypefaceKey(prefs.getFontFamily()) makes the key depend
+        //   only on the persisted user choice (a font path or family name), not on the in-memory
+        //   object identity.
+        String stableTypefaceKey;
+        try {
+            stableTypefaceKey = FontManager.getInstance().getStableTypefaceKey(
+                    prefs != null ? prefs.getFontFamily() : "default");
+        } catch (Throwable ignored) {
+            // Defensive: if FontManager is not initialised for any reason, fall back to a
+            // typeface-style-only key. Still better than Object.hashCode() across restarts.
+            Typeface typeface = paintSnapshot.getTypeface();
+            stableTypefaceKey = typeface == null ? "default" : ("style:" + typeface.getStyle());
+        }
+
+        // Quantize floats to 4 decimal places so trivial preference/serialization
+        // round-trip noise does not invalidate the signature and force an
+        // unnecessary background rebuild.
         return source.getAbsolutePath()
                 + "|len=" + source.length()
                 + "|mod=" + source.lastModified()
@@ -3372,11 +3474,17 @@ public class ReaderActivity extends AppCompatActivity {
                 + "|h=" + viewportHeight
                 + "|mv=" + marginVertical
                 + "|ol=" + overlap
-                + "|ls=" + lineSpacing
-                + "|ts=" + paintSnapshot.getTextSize()
-                + "|sx=" + paintSnapshot.getTextScaleX()
-                + "|tf=" + typefaceKey
+                + "|ls=" + quantizeFloatForSignature(lineSpacing)
+                + "|ts=" + quantizeFloatForSignature(paintSnapshot.getTextSize())
+                + "|sx=" + quantizeFloatForSignature(paintSnapshot.getTextScaleX())
+                + "|tf=" + stableTypefaceKey
                 + "|displayRules=" + TextDisplayRuleManager.getSignature(getApplicationContext(), loadedFilePath);
+    }
+
+    /** Snap a float to 4-decimal precision, formatted with a fixed locale, so
+     *  the signature string is invariant to tiny FP round-trip drift. */
+    private static String quantizeFloatForSignature(float value) {
+        return String.format(java.util.Locale.ROOT, "%.4f", value);
     }
 
     private String buildCurrentLargeTextExactPageIndexSignature(@NonNull String loadedFilePath) {
@@ -3576,6 +3684,46 @@ public class ReaderActivity extends AppCompatActivity {
                 Toast.LENGTH_SHORT).show();
     }
 
+    /**
+     * Coalesce viewport/style/inset changes into a single index rebuild after
+     * the burst settles. Layout passes, edge-to-edge inset deliveries and theme
+     * application can all fire in close succession during the first ~150ms
+     * after a large TXT is loaded; without debouncing, each one cancels and
+     * restarts the background index build while the viewport is still moving.
+     * The final exact index should be built only from settled geometry.
+     */
+    private static final long LARGE_TEXT_INDEX_RESTART_DEBOUNCE_MS = 200L;
+    private void scheduleLargeTextExactPageIndexingRestart() {
+        if (activityDestroyed) return;
+        if (!largeTextEstimateActive) return;
+        if (handler == null) return;
+        // Reset the stability watcher: a request to restart implies the layout
+        // may move again before settling, so the next two ticks need to match
+        // before we actually rebuild.
+        lastSeenStableLayoutSignature = "";
+        handler.removeCallbacks(largeTextRestartIndexingRunnable);
+        handler.postDelayed(largeTextRestartIndexingRunnable, LARGE_TEXT_INDEX_RESTART_DEBOUNCE_MS);
+    }
+
+    /**
+     * Geometry-only signature used by the layout-stability gate.  Includes the
+     * inputs that drive page anchor positions and that are known to shift during
+     * the first few frames after a file is loaded (system bar insets settling,
+     * edge-to-edge inset delivery, status strip animation, theme application).
+     * Returns an empty string if the view has not been measured yet.
+     */
+    private String buildLargeTextLayoutOnlySignature() {
+        if (readerView == null) return "";
+        int width = readerView.getTextLayoutWidthForIndex();
+        int height = readerView.getViewportHeight();
+        if (width <= 0 || height <= 0) return "";
+        return "w=" + width
+                + "|h=" + height
+                + "|mv=" + readerView.getMarginVerticalPxForIndex()
+                + "|ol=" + readerView.getOverlapLinesForIndex()
+                + "|ls=" + quantizeFloatForSignature(readerView.getLineSpacingMultiplierForIndex());
+    }
+
     private void startLargeTextExactPageIndexing(@NonNull String loadedFilePath) {
         if (readerView == null || loadedFilePath == null) return;
 
@@ -3645,6 +3793,7 @@ public class ReaderActivity extends AppCompatActivity {
                         ? buildCurrentLargeTextExactPageIndexSignature(loadedFilePath)
                         : "";
                 boolean shouldUpdatePosition = false;
+                boolean shouldRescheduleForStableLayout = false;
                 synchronized (largeTextExactPageIndexLock) {
                     if (indexGeneration != largeTextExactPageIndexGeneration.get()
                             || !indexSignature.equals(largeTextExactPageIndexSignature)) {
@@ -3658,24 +3807,45 @@ public class ReaderActivity extends AppCompatActivity {
                         largeTextExactPageAnchors = new ArrayList<>();
                         largeTextExactPageIndexFailed = false;
                         largeTextExactPageIndexFailure = "";
-                        return;
+                        // GPT 2·4: don't just drop the result and stop. The signature
+                        // moved during the build, which means the layout settled at a
+                        // different geometry than what we computed against. Ask the
+                        // stability gate to schedule a fresh build against the new
+                        // settled layout instead of leaving the viewer permanently in
+                        // the "estimate-only" state on this file.
+                        shouldRescheduleForStableLayout = !activityDestroyed
+                                && loadedFilePath.equals(filePath);
+                        if (shouldRescheduleForStableLayout) {
+                            // Fall through below to schedule outside the lock.
+                        } else {
+                            return;
+                        }
                     }
-                    if (finalAnchors.isEmpty()) {
-                        largeTextExactPageIndexReady = false;
-                        largeTextExactPageAnchors = new ArrayList<>();
-                        largeTextExactPageIndexFailed = true;
-                        largeTextExactPageIndexFailure = finalBuildFailed
-                                ? finalFailureReason
-                                : "empty index";
-                        shouldUpdatePosition = true;
+                    if (shouldRescheduleForStableLayout) {
+                        // Don't run the success branch when we are only here to
+                        // reschedule. Jump out of the synchronized block first.
                     } else {
-                        largeTextExactPageAnchors = finalAnchors;
-                        largeTextExactPageIndexReady = true;
-                        largeTextExactPageIndexFailed = false;
-                        largeTextExactPageIndexFailure = "";
-                        largeTextEstimatedTotalPages = Math.max(1, finalAnchors.size());
-                        shouldUpdatePosition = true;
+                        if (finalAnchors.isEmpty()) {
+                            largeTextExactPageIndexReady = false;
+                            largeTextExactPageAnchors = new ArrayList<>();
+                            largeTextExactPageIndexFailed = true;
+                            largeTextExactPageIndexFailure = finalBuildFailed
+                                    ? finalFailureReason
+                                    : "empty index";
+                            shouldUpdatePosition = true;
+                        } else {
+                            largeTextExactPageAnchors = finalAnchors;
+                            largeTextExactPageIndexReady = true;
+                            largeTextExactPageIndexFailed = false;
+                            largeTextExactPageIndexFailure = "";
+                            largeTextEstimatedTotalPages = Math.max(1, finalAnchors.size());
+                            shouldUpdatePosition = true;
+                        }
                     }
+                }
+                if (shouldRescheduleForStableLayout) {
+                    scheduleLargeTextExactPageIndexingRestart();
+                    return;
                 }
                 if (shouldUpdatePosition) {
                     updatePositionLabel();
@@ -4790,7 +4960,15 @@ public class ReaderActivity extends AppCompatActivity {
             }
 
             updatePositionLabel();
-            startLargeTextExactPageIndexing(filePath);
+            // GPT 1·3: route the very first exact-index build through the same
+            // layout-stability gate as later restarts. Calling start...() directly
+            // here used the viewport that the readerView happened to have at the
+            // moment onFileLoaded() finished, which is BEFORE edge-to-edge insets
+            // and the page status strip have settled on the first frame, so the
+            // resulting anchors could be ~1-2 pages off from what is rebuilt on
+            // a subsequent inset change. The debounced path waits until the same
+            // layout signature is observed twice in a row before committing.
+            scheduleLargeTextExactPageIndexingRestart();
             prefetchNeighborLargeTextPartitions();
         });
     }
