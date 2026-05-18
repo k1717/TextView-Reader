@@ -107,6 +107,11 @@ This 2.1.2b package is prepared for GitHub upload. It keeps Android metadata at 
 - PDF, EPUB, and Word/DOCX remain separate document-viewer paths.
 - The package identity remains `com.textview.reader`; legacy-package users still need backup/export/import migration.
 
+## Build toolchain metadata
+
+- README / changelog / patch notes now match the project build files: Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
+- Android app metadata remains `versionCode 2122` and `versionName "2.1.2b"`.
+
 ## Verification note
 
 ZIP integrity and Markdown structure were checked. Full Gradle verification should be run locally in Android Studio or another network-enabled environment if the Gradle wrapper needs to download Gradle.

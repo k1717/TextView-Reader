@@ -98,6 +98,11 @@ This package uses Android metadata `versionCode 2122` and `versionName "2.1.2b"`
 - Added **Reset settings** for restoring reader/app preferences while keeping user data such as bookmarks, reading positions, recent files, folder shortcuts, TXT Display Rules, custom themes, and PIN lock.
 - Settings backup/export includes TXT Display Rules through the existing settings import/export path.
 
+### Build toolchain
+
+- Updated the documented Android build toolchain to match the project files: Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
+- Kept Android metadata at `versionCode 2122` and `versionName "2.1.2b"`.
+
 ### Version metadata
 
 - Updated Android version metadata to `versionCode 2122` and `versionName "2.1.2b"`.

@@ -6,6 +6,7 @@ Current version: **2.1.2b**
 
 ## 2.1.2b release summary
 
+- Updated build toolchain metadata to **Android Gradle Plugin 9.1.1** and **Gradle wrapper 9.3.1**.
 - Added **TXT Display Rules** for viewing-only text replacement or masking. Normal display rules change only the text shown in the TXT viewer; the source file is not modified.
 - Rules can be enabled/disabled, case-sensitive or case-insensitive, plain-text or regular-expression based, global for all TXT files, or limited to one TXT file.
 - Added TXT-viewer quick add flow: long-press a visible word or use **More > Add display rule** to create a rule without leaving the reader.
@@ -299,8 +300,8 @@ Command-line build:
 - Target SDK: 35
 - Compile SDK: 35
 - Language: Java
-- Android Gradle Plugin: 8.13.1
-- Gradle wrapper: 9.0.0
+- Android Gradle Plugin: 9.1.1
+- Gradle wrapper: 9.3.1
 
 Main dependencies:
 
