@@ -45,6 +45,10 @@ This package uses Android metadata `versionCode 2122` and `versionName "2.1.2b"`
 - If exact anchors are still building or fail, Go to Page / slider movement falls back to an estimated 4,000-line partition jump.
 - Replaced the memory-heavy full-file exact-index layout path with chunked line-based exact indexing.
 - When chunked exact anchors finish, the viewer updates the total page count from estimated to exact.
+- Added a layout-stability gate for large-TXT exact indexing: the first build and all rebuilds now wait until width, viewport height, vertical margin, overlap, and line spacing produce the same geometry signature across two debounce checks.
+- If an exact-index build completes after the layout signature has changed, the result is discarded and a new stable-layout build is automatically scheduled instead of leaving the viewer on a stale or estimate-only total.
+- Replaced `Typeface.hashCode()` in the large-TXT exact-index signature with a stable FontManager key based on the selected/backing font identity and style.
+- Normalized TXT reader bottom padding with a canonical 60dp bottom band so navigation-bar inset timing does not change the pagination viewport used for large-TXT page counts.
 - Manual scroll at large-TXT partition seams re-anchors lookahead text into its owning partition after scrolling settles, reducing repeated seam text during drag reading.
 - Dragging downward at the top of a large-TXT partition can load the previous partition, matching backward tap behavior more closely.
 - Sequential tap, volume-key, and auto-page forward movement use a guarded next-page anchor to reduce skip risk across partition seams while preserving configured overlap.

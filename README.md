@@ -17,6 +17,9 @@ Current version: **2.1.2b**
 - Added **Reset settings** in Settings. It restores reader/app preferences to defaults while keeping bookmarks, reading positions, recent files, folder shortcuts, TXT Display Rules, custom themes, and PIN lock.
 - Added a right-side **← Parent folder** / **← 상위 폴더로** button in the main file-browser path bar.
 - Improved large-TXT page movement with estimated 4,000-line partition jumps while exact indexing is still building, replacing the previous full-file exact-index path with chunked line-based exact indexing.
+- Added large-TXT page-count stability handling: exact indexing now waits until the TXT layout geometry is stable before building page anchors, and stale-geometry index results automatically trigger a fresh rebuild instead of becoming the final total.
+- Replaced object-hash-based typeface signature data with a stable font key for large-TXT exact-index signatures, reducing unnecessary index rebuilds across app restarts or font reloads.
+- Normalized TXT reader bottom padding through a canonical bottom band so live navigation-bar inset timing does not change the viewport height used for TXT page counting.
 - Improved large-TXT final-page handling so EOF-tail pages remain reachable by tap/page-down, with reduced flicker and reduced delay when the final partition is already active.
 - Improved large-TXT Find so search can jump to the matching logical line/partition without waiting for exact page indexing. Added **Nth / n번째** search and background total-count completion for large-TXT search counters.
 - Kept Word Find rollback: Word same-page Previous/Next search uses native WebView `findNext()` / `FindListener` behavior only, without custom reveal, forced ordinal correction, or DOM marker insertion.
@@ -141,6 +144,9 @@ Current version: **2.1.2b**
 - Encoding detection for UTF-8, EUC-KR/CP949/MS949, and UTF-16.
 - Large TXT handling with fixed 4,000-logical-line active partitions, lookahead rendering, neighbor prefetch, and generated page/index cache bookkeeping.
 - Large TXT exact page count is built in the background with partition-aware chunked indexing, so very high-line-count files can still finish indexing without requiring one giant full-file layout.
+- Large TXT exact indexing is gated by layout stability: the app waits for matching layout measurements before starting the background page-anchor build, and restarts the build if the layout signature changes before completion.
+- Large TXT page-count signatures use a stable font key instead of `Typeface.hashCode()`, avoiding false rebuild triggers caused by new Typeface object instances.
+- TXT page counting uses a canonical reader bottom band instead of live navigation-bar inset height, making the viewport used for pagination more repeatable across app launches and system-bar timing.
 - The exact large-TXT page map follows the same sequential 4,000-line partition path used by tap paging; seam lookahead text is used for continuity, not double-counted as extra independent pages.
 - Manual finger scrolling in large TXT mode now re-anchors from lookahead text into the owning next partition after scrolling settles, reducing duplicated seam text during scroll-based reading.
 - Pulling downward at the top of a large-TXT partition can load the previous partition, so manual scroll navigation is safer in both directions.

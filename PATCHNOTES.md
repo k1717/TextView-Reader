@@ -49,6 +49,15 @@ This 2.1.2b package is prepared for GitHub upload. It keeps Android metadata at 
 - Manual finger scrolling now has safer large-TXT seam handling: after scrolling settles inside lookahead text, the viewer switches to the owning next partition at the same absolute text position.
 - Downward overscroll at the top of a large-TXT partition queues a previous-partition load instead of leaving manual scrolling trapped at the partition start.
 
+## Large TXT page-count stability
+
+- Exact large-TXT page indexing no longer starts immediately after `onFileLoaded()`. The first build is routed through the same restart path as later rebuilds.
+- The restart path now waits for the TXT layout geometry signature to match across two debounce checks before starting the page-anchor build.
+- The stability signature covers layout width, viewport height, vertical margin, overlap, and quantized line spacing.
+- If the full exact-index signature changes while the background build is running, the stale result is discarded and a fresh stable-layout rebuild is scheduled automatically.
+- The large-TXT exact-index signature now uses a stable FontManager typeface key instead of `Typeface.hashCode()`, avoiding false signature changes from new Typeface object instances.
+- TXT pagination uses a canonical 60dp reader bottom band for page-count input, so live navigation-bar inset timing does not change the viewport height used by large-TXT exact indexing.
+
 ## Large TXT final-page fixes
 
 - Added a dedicated final-page path for partitioned TXT files.
