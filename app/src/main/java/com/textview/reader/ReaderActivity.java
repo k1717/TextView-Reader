@@ -105,9 +105,7 @@ public class ReaderActivity extends AppCompatActivity {
     private static final long VIEWER_BACK_TOAST_DURATION_MS = 650L;
     private static final long LARGE_TEXT_FAST_OPEN_THRESHOLD_BYTES = 3L * 1024L * 1024L;
     private static final long HUGE_TEXT_PREVIEW_ONLY_THRESHOLD_BYTES = 32L * 1024L * 1024L;
-    private static final int LARGE_TEXT_PARTITION_LINES = 4000;
-    private static final int LARGE_TEXT_PARTITION_LOOKAHEAD_LINES = 120;
-    private static final int LARGE_TEXT_EXACT_INDEX_CHUNK_LINES = 4000;
+    private static final int LARGE_TEXT_EXACT_TAP_EPS_CHARS = 8;
     private static final int LARGE_TEXT_EXACT_INDEX_CHUNK_CHARS = 256 * 1024;
     // Kept only for sampling/legacy estimate paths; active large-TXT windows are line-based.
     private static final int LARGE_TEXT_PARTITION_BYTES = 3 * 1024 * 1024;
@@ -159,7 +157,9 @@ public class ReaderActivity extends AppCompatActivity {
         final long largeTextPartitionEndByte;
         final long largeTextFileByteLength;
         final float largeTextEstimatedBytesPerChar;
+        final int largeTextPartitionBodyStartCharCount;
         final int largeTextPartitionBodyCharCount;
+        final int largeTextPartitionWindowStartLine;
         final int largeTextPartitionStartLine;
         final int largeTextPartitionEndLine;
         final int largeTextTotalLogicalLines;
@@ -187,7 +187,9 @@ public class ReaderActivity extends AppCompatActivity {
                            long largeTextPartitionEndByte,
                            long largeTextFileByteLength,
                            float largeTextEstimatedBytesPerChar,
+                           int largeTextPartitionBodyStartCharCount,
                            int largeTextPartitionBodyCharCount,
+                           int largeTextPartitionWindowStartLine,
                            int largeTextPartitionStartLine,
                            int largeTextPartitionEndLine,
                            int largeTextTotalLogicalLines) {
@@ -214,7 +216,9 @@ public class ReaderActivity extends AppCompatActivity {
             this.largeTextPartitionEndByte = Math.max(0L, largeTextPartitionEndByte);
             this.largeTextFileByteLength = Math.max(0L, largeTextFileByteLength);
             this.largeTextEstimatedBytesPerChar = Math.max(1f, largeTextEstimatedBytesPerChar);
+            this.largeTextPartitionBodyStartCharCount = Math.max(0, largeTextPartitionBodyStartCharCount);
             this.largeTextPartitionBodyCharCount = Math.max(0, largeTextPartitionBodyCharCount);
+            this.largeTextPartitionWindowStartLine = Math.max(1, largeTextPartitionWindowStartLine);
             this.largeTextPartitionStartLine = Math.max(1, largeTextPartitionStartLine);
             this.largeTextPartitionEndLine = Math.max(this.largeTextPartitionStartLine, largeTextPartitionEndLine);
             this.largeTextTotalLogicalLines = Math.max(1, largeTextTotalLogicalLines);
@@ -299,6 +303,8 @@ public class ReaderActivity extends AppCompatActivity {
     private int appliedBottomTextZoneOffsetPx = Integer.MIN_VALUE;
     private int appliedLeftTextInsetPx = Integer.MIN_VALUE;
     private int appliedRightTextInsetPx = Integer.MIN_VALUE;
+    private int appliedPagingOverlapLines = Integer.MIN_VALUE;
+    private int appliedLargeTextPartitionMode = Integer.MIN_VALUE;
     private Typeface appliedTypeface = null;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -318,7 +324,15 @@ public class ReaderActivity extends AppCompatActivity {
                     return size() > 7;
                 }
             };
+    private final LinkedHashMap<Integer, LargeTextLinePartitionResult> largeTextManualHandoffPartitionCache =
+            new LinkedHashMap<Integer, LargeTextLinePartitionResult>(3, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<Integer, LargeTextLinePartitionResult> eldest) {
+                    return size() > 3;
+                }
+            };
     private final Set<Integer> largeTextPendingPartitionPrefetches = new HashSet<>();
+    private final Set<Integer> largeTextPendingManualHandoffPartitionPrefetches = new HashSet<>();
     private boolean largeTextEstimateActive = false;
     private int largeTextEstimatedTotalPages = 0;
     /** Debounce token + layout-stability gate for the exact page index builder.
@@ -380,7 +394,10 @@ public class ReaderActivity extends AppCompatActivity {
     private long largeTextPartitionEndByte = 0L;
     private long largeTextFileByteLength = 0L;
     private float largeTextEstimatedBytesPerChar = 1f;
+    private int largeTextPartitionBodyStartCharCount = 0;
     private int largeTextPartitionBodyCharCount = 0;
+    private int largeTextPartitionWindowStartLine = 1;
+    private boolean largeTextActivePartitionUsesLookbehind = false;
     private int largeTextPartitionStartLine = 1;
     private int largeTextPartitionEndLine = 1;
     private int largeTextTotalLogicalLines = 1;
@@ -419,6 +436,7 @@ public class ReaderActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         prefs = PrefsManager.getInstance(this);
+        appliedLargeTextPartitionMode = prefs.getLargeTextPartitionMode();
         prefs.applyLanguage(prefs.getLanguageMode());
         super.onCreate(savedInstanceState);
         ViewerRegistry.activate(this);
@@ -516,6 +534,7 @@ public class ReaderActivity extends AppCompatActivity {
         if (readerView != null && prefs != null && themeManager != null) {
             applyTheme();
             if (maybeReloadForPhysicallyEditedOriginalTxtFile()) return;
+            if (maybeReloadForLargeTextPartitionModeChange()) return;
             maybeReloadForTextDisplayRuleChange();
             updatePositionLabel();
         }
@@ -550,6 +569,53 @@ public class ReaderActivity extends AppCompatActivity {
         resetLargeTextExactPageIndex();
         clearLargeTextPartitionCache();
         loadFileFromIntent(reloadIntent);
+        return true;
+    }
+
+    private boolean maybeReloadForLargeTextPartitionModeChange() {
+        if (prefs == null) return false;
+
+        int currentMode = getLargeTextPartitionMode();
+        if (appliedLargeTextPartitionMode == Integer.MIN_VALUE) {
+            appliedLargeTextPartitionMode = currentMode;
+            return false;
+        }
+        if (appliedLargeTextPartitionMode == currentMode) return false;
+
+        appliedLargeTextPartitionMode = currentMode;
+        resetLargeTextExactPageIndex();
+        synchronized (largeTextPartitionCacheLock) {
+            largeTextPartitionCache.clear();
+            largeTextManualHandoffPartitionCache.clear();
+            largeTextPendingPartitionPrefetches.clear();
+            largeTextPendingManualHandoffPartitionPrefetches.clear();
+        }
+        lastSeenStableLayoutSignature = "";
+        resetLargeTextPageDirectionTracking();
+        clearLargeTextQueuedPageDelta();
+
+        // The old total/page denominator belongs to the previous partition
+        // policy.  Do not carry it through the mode switch as a stable total;
+        // let the refreshed partition produce a new immediate estimate, then
+        // let the full exact-index rebuild replace it with the authoritative
+        // page model.
+        largeTextEstimatedTotalPages = 0;
+        largeTextEstimatedBasePageOffset = 0;
+        pendingLargeTextCachedDisplayPage = 0;
+        pendingLargeTextCachedTotalPages = 0;
+
+        if (!largeTextEstimateActive || readerView == null || filePath == null || filePath.isEmpty()) {
+            return false;
+        }
+
+        int currentPosition = Math.max(0, getCurrentCharPosition());
+        reloadLargeTextPreviewAround(currentPosition, 0, 0, null, null, -1, true);
+        // A partition-mode change alters the global page model, not just the
+        // visible runtime partition.  Rebuild the full exact page index under
+        // the new 4000/400 or 12000/600 model so totalPages, bookmark cached
+        // page metadata, slider/go-to-page anchors, and tap paging all converge
+        // to the same denominator after the mode switch.
+        scheduleLargeTextExactPageIndexingRestart();
         return true;
     }
 
@@ -642,7 +708,9 @@ public class ReaderActivity extends AppCompatActivity {
                 largeTextPartitionEndByte,
                 largeTextFileByteLength,
                 largeTextEstimatedBytesPerChar,
+                largeTextPartitionBodyStartCharCount,
                 largeTextPartitionBodyCharCount,
+                largeTextPartitionWindowStartLine,
                 largeTextPartitionStartLine,
                 largeTextPartitionEndLine,
                 largeTextTotalLogicalLines);
@@ -688,7 +756,9 @@ public class ReaderActivity extends AppCompatActivity {
         largeTextPartitionEndByte = snapshot.largeTextPartitionEndByte;
         largeTextFileByteLength = snapshot.largeTextFileByteLength;
         largeTextEstimatedBytesPerChar = snapshot.largeTextEstimatedBytesPerChar;
+        largeTextPartitionBodyStartCharCount = snapshot.largeTextPartitionBodyStartCharCount;
         largeTextPartitionBodyCharCount = snapshot.largeTextPartitionBodyCharCount;
+        largeTextPartitionWindowStartLine = snapshot.largeTextPartitionWindowStartLine;
         largeTextPartitionStartLine = snapshot.largeTextPartitionStartLine;
         largeTextPartitionEndLine = snapshot.largeTextPartitionEndLine;
         largeTextTotalLogicalLines = snapshot.largeTextTotalLogicalLines;
@@ -799,6 +869,7 @@ public class ReaderActivity extends AppCompatActivity {
         int bottomTextZoneOffsetPx = prefs.getReaderTextBottomOffsetPx();
         int leftTextInsetPx = prefs.getReaderTextLeftInsetPx();
         int rightTextInsetPx = prefs.getReaderTextRightInsetPx();
+        int overlapLines = prefs.getPagingOverlapLines();
 
         Typeface tf = resolveReadingTypeface(prefs.getFontFamily());
 
@@ -817,7 +888,17 @@ public class ReaderActivity extends AppCompatActivity {
             updateReaderContentTopPadding();
 
             readerView.setLargeTextPartitionMode(largeTextEstimateActive);
-            readerView.setOverlapLines(prefs.getPagingOverlapLines());
+            boolean overlapChanged = appliedPagingOverlapLines != Integer.MIN_VALUE
+                    && appliedPagingOverlapLines != overlapLines;
+            readerView.setOverlapLines(overlapLines);
+            appliedPagingOverlapLines = overlapLines;
+            if (overlapChanged) {
+                if (largeTextEstimateActive) {
+                    scheduleLargeTextExactPageIndexingRestartForUserPageModelChange();
+                } else {
+                    updatePositionLabel();
+                }
+            }
 
             if (appliedTopTextZoneOffsetPx != topTextZoneOffsetPx
                     || appliedBottomTextZoneOffsetPx != bottomTextZoneOffsetPx
@@ -2088,6 +2169,32 @@ public class ReaderActivity extends AppCompatActivity {
         return dpToPx(60);
     }
 
+    private int getLargeTextPartitionLines() {
+        return prefs != null
+                ? prefs.getLargeTextPartitionLines()
+                : PrefsManager.LARGE_TEXT_PARTITION_LINES_STANDARD;
+    }
+
+    private int getLargeTextPartitionBufferLines() {
+        return prefs != null
+                ? prefs.getLargeTextPartitionBufferLines()
+                : PrefsManager.LARGE_TEXT_PARTITION_BUFFER_LINES_STANDARD;
+    }
+
+    private int getLargeTextPartitionLookaheadLines() {
+        return getLargeTextPartitionBufferLines();
+    }
+
+    private int getLargeTextPartitionLookbehindLines() {
+        return getLargeTextPartitionBufferLines();
+    }
+
+    private int getLargeTextPartitionMode() {
+        return prefs != null
+                ? prefs.getLargeTextPartitionMode()
+                : PrefsManager.LARGE_TEXT_PARTITION_MODE_STANDARD;
+    }
+
     private int getReaderPageStatusBaseHeight() {
         return dpToPx(28);
     }
@@ -3276,7 +3383,9 @@ public class ReaderActivity extends AppCompatActivity {
         largeTextPartitionEndByte = 0L;
         largeTextFileByteLength = 0L;
         largeTextEstimatedBytesPerChar = 1f;
+        largeTextPartitionBodyStartCharCount = 0;
         largeTextPartitionBodyCharCount = 0;
+        largeTextPartitionWindowStartLine = 1;
         largeTextPartitionStartLine = 1;
         largeTextPartitionEndLine = 1;
         largeTextTotalLogicalLines = 1;
@@ -3339,6 +3448,7 @@ public class ReaderActivity extends AppCompatActivity {
                     int previewLineCount = partition.lineCount;
                     int previewByteCount = Math.max(1, previewContent.length());
                     int previewBaseCharOffset = partition.baseCharOffset;
+                    int partitionBodyStartCharCount = partition.bodyStartCharCount;
                     int partitionBodyCharCount = partition.bodyCharCount;
                     int estimatedTotalChars = Math.max(partition.totalChars,
                             previewBaseCharOffset + previewContent.length());
@@ -3358,8 +3468,8 @@ public class ReaderActivity extends AppCompatActivity {
                                     estimatedTotalChars, previewOnly,
                                     restoreTarget.displayPage, restoreTarget.totalPages,
                                     jumpAnchorBefore, jumpAnchorAfter,
-                                    estimatedBytesPerChar, partitionBodyCharCount,
-                                    partitionStartLine, partitionEndLine, partitionTotalLines);
+                                    estimatedBytesPerChar, partitionBodyStartCharCount, partitionBodyCharCount,
+                                    partition.windowStartLine, partitionStartLine, partitionEndLine, partitionTotalLines);
                         }
                     });
 
@@ -3412,6 +3522,9 @@ public class ReaderActivity extends AppCompatActivity {
                 + "|left=" + prefs.getReaderTextLeftInsetPx()
                 + "|right=" + prefs.getReaderTextRightInsetPx()
                 + "|overlap=" + prefs.getPagingOverlapLines()
+                + "|partitionMode=" + getLargeTextPartitionMode()
+                + "|partitionLines=" + getLargeTextPartitionLines()
+                + "|partitionBuffer=" + getLargeTextPartitionBufferLines()
                 + "|font=" + fontName
                 + "|displayRules=" + TextDisplayRuleManager.getSignature(getApplicationContext(), filePath)
                 + "|screen=" + dm.widthPixels + "x" + dm.heightPixels;
@@ -3441,7 +3554,9 @@ public class ReaderActivity extends AppCompatActivity {
                                                         int marginVertical,
                                                         int overlap,
                                                         float lineSpacing,
-                                                        @NonNull TextPaint paintSnapshot) {
+                                                        @NonNull TextPaint paintSnapshot,
+                                                        int partitionLines,
+                                                        int partitionBufferLines) {
         File source = new File(loadedFilePath);
 
         // Process-stable typeface key:
@@ -3474,6 +3589,9 @@ public class ReaderActivity extends AppCompatActivity {
                 + "|h=" + viewportHeight
                 + "|mv=" + marginVertical
                 + "|ol=" + overlap
+                + "|partitionMode=" + getLargeTextPartitionMode()
+                + "|partitionLines=" + Math.max(1, partitionLines)
+                + "|partitionBuffer=" + Math.max(0, partitionBufferLines)
                 + "|ls=" + quantizeFloatForSignature(lineSpacing)
                 + "|ts=" + quantizeFloatForSignature(paintSnapshot.getTextSize())
                 + "|sx=" + quantizeFloatForSignature(paintSnapshot.getTextScaleX())
@@ -3496,20 +3614,29 @@ public class ReaderActivity extends AppCompatActivity {
                 readerView.getMarginVerticalPxForIndex(),
                 readerView.getOverlapLinesForIndex(),
                 readerView.getLineSpacingMultiplierForIndex(),
-                readerView.copyTextPaintForIndex());
+                readerView.copyTextPaintForIndex(),
+                getLargeTextPartitionLines(),
+                getLargeTextPartitionBufferLines());
     }
 
     private void clearLargeTextPartitionCache() {
         synchronized (largeTextPartitionCacheLock) {
             largeTextPartitionCache.clear();
+            largeTextManualHandoffPartitionCache.clear();
             largeTextPendingPartitionPrefetches.clear();
+            largeTextPendingManualHandoffPartitionPrefetches.clear();
         }
     }
 
     private void cacheLargeTextPartition(@NonNull LargeTextLinePartitionResult partition) {
         synchronized (largeTextPartitionCacheLock) {
-            largeTextPartitionCache.put(partition.startLine, partition);
-            largeTextPendingPartitionPrefetches.remove(partition.startLine);
+            if (partition.includesLookbehind) {
+                largeTextManualHandoffPartitionCache.put(partition.startLine, partition);
+                largeTextPendingManualHandoffPartitionPrefetches.remove(partition.startLine);
+            } else {
+                largeTextPartitionCache.put(partition.startLine, partition);
+                largeTextPendingPartitionPrefetches.remove(partition.startLine);
+            }
         }
     }
 
@@ -3520,15 +3647,37 @@ public class ReaderActivity extends AppCompatActivity {
         }
     }
 
+    private LargeTextLinePartitionResult getCachedLargeTextManualHandoffPartitionByStartLine(int startLine) {
+        int normalizedStart = getLargeTextPartitionStartLineForLine(startLine);
+        synchronized (largeTextPartitionCacheLock) {
+            return largeTextManualHandoffPartitionCache.get(normalizedStart);
+        }
+    }
+
     private LargeTextLinePartitionResult getCachedLargeTextPartitionForChar(int absoluteCharPosition) {
         int target = Math.max(0, absoluteCharPosition);
         synchronized (largeTextPartitionCacheLock) {
             for (LargeTextLinePartitionResult partition : largeTextPartitionCache.values()) {
-                int bodyStart = partition.baseCharOffset;
+                int windowStart = partition.baseCharOffset;
+                int windowEnd = windowStart + Math.max(0, partition.content.length());
+                int bodyStart = windowStart + Math.max(0, partition.bodyStartCharCount);
                 int bodyEnd = partition.bodyCharCount > 0
-                        ? bodyStart + partition.bodyCharCount
-                        : bodyStart + partition.content.length();
-                if (target >= bodyStart && target < Math.max(bodyStart + 1, bodyEnd)) {
+                        ? windowStart + partition.bodyCharCount
+                        : windowEnd;
+                bodyStart = Math.max(windowStart, Math.min(windowEnd, bodyStart));
+                bodyEnd = Math.max(bodyStart, Math.min(windowEnd, bodyEnd));
+                if (bodyEnd <= bodyStart) {
+                    continue;
+                }
+
+                // Runtime lookbehind/lookahead windows overlap adjacent canonical
+                // partitions.  Exact page jumps, bookmarks, and toolbar slider jumps
+                // must resolve a target character to the partition that owns it as
+                // body text, not merely to any cached preview window that happens to
+                // contain it.  Otherwise a target page near a seam can be applied to
+                // the previous/next cached window and land a page or more away from
+                // the exact anchor.
+                if (target >= bodyStart && target < bodyEnd) {
                     return partition;
                 }
             }
@@ -3548,10 +3697,29 @@ public class ReaderActivity extends AppCompatActivity {
         }
     }
 
+    private boolean markLargeTextManualHandoffPartitionPrefetchPending(int startLine) {
+        int normalizedStart = getLargeTextPartitionStartLineForLine(startLine);
+        synchronized (largeTextPartitionCacheLock) {
+            if (largeTextManualHandoffPartitionCache.containsKey(normalizedStart)
+                    || largeTextPendingManualHandoffPartitionPrefetches.contains(normalizedStart)) {
+                return false;
+            }
+            largeTextPendingManualHandoffPartitionPrefetches.add(normalizedStart);
+            return true;
+        }
+    }
+
     private void unmarkLargeTextPartitionPrefetchPending(int startLine) {
         int normalizedStart = getLargeTextPartitionStartLineForLine(startLine);
         synchronized (largeTextPartitionCacheLock) {
             largeTextPendingPartitionPrefetches.remove(normalizedStart);
+        }
+    }
+
+    private void unmarkLargeTextManualHandoffPartitionPrefetchPending(int startLine) {
+        int normalizedStart = getLargeTextPartitionStartLineForLine(startLine);
+        synchronized (largeTextPartitionCacheLock) {
+            largeTextPendingManualHandoffPartitionPrefetches.remove(normalizedStart);
         }
     }
 
@@ -3569,6 +3737,11 @@ public class ReaderActivity extends AppCompatActivity {
 
     private int findExactLargeTextPageForChar(int charPosition) {
         ArrayList<CustomReaderView.PageTextAnchor> anchors = copyLargeTextExactPageAnchors();
+        return findExactLargeTextPageForChar(anchors, charPosition);
+    }
+
+    private int findExactLargeTextPageForChar(@NonNull ArrayList<CustomReaderView.PageTextAnchor> anchors,
+                                              int charPosition) {
         if (anchors.isEmpty()) return 1;
         int target = Math.max(0, charPosition);
         int lo = 0;
@@ -3585,6 +3758,118 @@ public class ReaderActivity extends AppCompatActivity {
             }
         }
         return Math.max(1, Math.min(anchors.size(), best + 1));
+    }
+
+    @NonNull
+    private String buildCurrentLargeTextBookmarkPageSignature() {
+        if (!largeTextEstimateActive || filePath == null || readerView == null) return "";
+        return buildCurrentLargeTextExactPageIndexSignature(filePath);
+    }
+
+    @Nullable
+    private ArrayList<CustomReaderView.PageTextAnchor> copyCurrentLargeTextExactPageAnchorsIfUsable(@NonNull String currentSignature) {
+        if (currentSignature.isEmpty()) return null;
+        synchronized (largeTextExactPageIndexLock) {
+            if (!largeTextExactPageIndexReady
+                    || largeTextExactPageAnchors.isEmpty()
+                    || !currentSignature.equals(largeTextExactPageIndexSignature)) {
+                return null;
+            }
+            return new ArrayList<>(largeTextExactPageAnchors);
+        }
+    }
+
+    @NonNull
+    private String trustedCurrentBookmarkPageSignature() {
+        String currentSignature = buildCurrentLargeTextBookmarkPageSignature();
+        return copyCurrentLargeTextExactPageAnchorsIfUsable(currentSignature) != null
+                ? currentSignature
+                : "";
+    }
+
+    private boolean updateBookmarkPageModelFieldsIfChanged(@NonNull Bookmark bookmark,
+                                                           int pageNumber,
+                                                           int totalPages,
+                                                           @NonNull String pageLayoutSignature) {
+        int page = Math.max(1, pageNumber);
+        int total = Math.max(page, totalPages);
+        String signature = pageLayoutSignature != null ? pageLayoutSignature : "";
+        String oldSignature = bookmark.getPageLayoutSignature() != null
+                ? bookmark.getPageLayoutSignature()
+                : "";
+        if (bookmark.getPageNumber() == page
+                && bookmark.getTotalPages() == total
+                && oldSignature.equals(signature)) {
+            return false;
+        }
+        bookmark.setPageNumber(page);
+        bookmark.setTotalPages(total);
+        bookmark.setPageLayoutSignature(signature);
+        return true;
+    }
+
+    private void syncCurrentFileBookmarksToLargeTextExactPageModel() {
+        if (!largeTextEstimateActive || bookmarkManager == null || filePath == null || readerView == null) return;
+
+        String currentSignature = buildCurrentLargeTextBookmarkPageSignature();
+        ArrayList<CustomReaderView.PageTextAnchor> anchors = copyCurrentLargeTextExactPageAnchorsIfUsable(currentSignature);
+        if (anchors == null || anchors.isEmpty()) return;
+
+        int total = Math.max(1, anchors.size());
+        List<Bookmark> currentBookmarks = bookmarkManager.getBookmarksForFile(filePath);
+        if (currentBookmarks.isEmpty()) return;
+
+        List<Bookmark> changed = new ArrayList<>();
+        for (Bookmark bookmark : currentBookmarks) {
+            if (bookmark == null) continue;
+            int page = findExactLargeTextPageForChar(anchors, bookmark.getCharPosition());
+            if (updateBookmarkPageModelFieldsIfChanged(bookmark, page, total, currentSignature)) {
+                changed.add(bookmark);
+            }
+        }
+        if (!changed.isEmpty()) {
+            bookmarkManager.saveBookmarkPageMetadataRefresh(changed);
+        }
+    }
+
+    private int[] resolveBookmarkDisplayPageTarget(@NonNull Bookmark bookmark, int absoluteCharPosition) {
+        if (!largeTextEstimateActive) {
+            return new int[] {
+                    Math.max(0, bookmark.getPageNumber()),
+                    Math.max(0, bookmark.getTotalPages())
+            };
+        }
+
+        String currentSignature = buildCurrentLargeTextBookmarkPageSignature();
+        ArrayList<CustomReaderView.PageTextAnchor> anchors = copyCurrentLargeTextExactPageAnchorsIfUsable(currentSignature);
+        if (anchors != null && !anchors.isEmpty()) {
+            int total = Math.max(1, anchors.size());
+            int page = findExactLargeTextPageForChar(anchors, absoluteCharPosition);
+            if (updateBookmarkPageModelFieldsIfChanged(bookmark, page, total, currentSignature)) {
+                List<Bookmark> changed = new ArrayList<>();
+                changed.add(bookmark);
+                bookmarkManager.saveBookmarkPageMetadataRefresh(changed);
+            }
+            return new int[] { page, total };
+        }
+
+        String savedSignature = bookmark.getPageLayoutSignature() != null
+                ? bookmark.getPageLayoutSignature()
+                : "";
+        if (!currentSignature.isEmpty()
+                && currentSignature.equals(savedSignature)
+                && bookmark.getPageNumber() > 0
+                && bookmark.getTotalPages() > 0) {
+            int total = Math.max(1, bookmark.getTotalPages());
+            int page = Math.max(1, Math.min(total, bookmark.getPageNumber()));
+            return new int[] { page, total };
+        }
+
+        // The bookmark belongs to a different large-TXT page model, commonly after
+        // switching between Standard and High-buffer partition modes.  Keep the
+        // absolute character/anchor restore, but do not preserve the stale page
+        // denominator or global offset.
+        return new int[] { 0, 0 };
     }
 
     private CustomReaderView.PageTextAnchor getExactLargeTextAnchorForPage(int page) {
@@ -3641,7 +3926,7 @@ public class ReaderActivity extends AppCompatActivity {
                 Math.max(1, largeTextTotalLogicalLines));
 
         // If the EOF partition is already active, do not reload/re-layout the same
-        // 4,000-line block just to move from total-1 to total.  The previous path
+        // selected-size block just to move from total-1 to total.  The previous path
         // fixed flicker, but it still rebuilt the final partition when exact index
         // was ready, which made the final tap feel delayed.  Directly clamp to the
         // visual EOF in the already-rendered partition instead.
@@ -3706,6 +3991,49 @@ public class ReaderActivity extends AppCompatActivity {
     }
 
     /**
+     * User-facing page-model changes such as page-overlap lines should make the
+     * visible total react immediately.  Generic restart requests deliberately do
+     * not invalidate cached restore totals, because doing so while a large TXT is
+     * reopening near EOF can briefly replace e.g. 8585/8590 with a local partition
+     * estimate.  This narrower path is used only after applyPreferences() detects
+     * that the user actually changed the page-overlap setting in an already-open
+     * reader.
+     */
+    private void scheduleLargeTextExactPageIndexingRestartForUserPageModelChange() {
+        if (activityDestroyed) return;
+        if (!largeTextEstimateActive) return;
+        if (handler == null) return;
+        resetLargeTextExactPageIndex();
+        recomputeLargeTextEstimatedTotalForCurrentViewport();
+        updatePositionLabel();
+        scheduleLargeTextExactPageIndexingRestart();
+    }
+
+    /**
+     * Recompute the large-TXT estimated total from the active canonical body pages
+     * under the readerView's current page model.  This is intentionally used only
+     * for direct user setting changes; file-load restore paths keep their cached
+     * display page/total until the exact index commits.
+     */
+    private void recomputeLargeTextEstimatedTotalForCurrentViewport() {
+        if (!largeTextEstimateActive || readerView == null) return;
+        if (largeTextTotalLogicalLines <= 0) return;
+        int bodyPages = getLastLocalPageStartingInsideLargeTextPartition();
+        if (bodyPages <= 0) return;
+
+        float ratio = largeTextTotalLogicalLines / (float) Math.max(1, getLargeTextPartitionLines());
+        int newEstimate = Math.max(bodyPages, Math.round(Math.max(1, bodyPages) * ratio));
+        if (newEstimate <= 0) return;
+
+        largeTextEstimatedTotalPages = newEstimate;
+        largeTextEstimatedBasePageOffset = Math.max(0, Math.min(
+                Math.max(0, largeTextEstimatedTotalPages - 1),
+                Math.round(((largeTextPartitionStartLine - 1)
+                        / (float) Math.max(1, largeTextTotalLogicalLines))
+                        * largeTextEstimatedTotalPages)));
+    }
+
+    /**
      * Geometry-only signature used by the layout-stability gate.  Includes the
      * inputs that drive page anchor positions and that are known to shift during
      * the first few frames after a file is loaded (system bar insets settling,
@@ -3734,9 +4062,13 @@ public class ReaderActivity extends AppCompatActivity {
         final int overlap = readerView.getOverlapLinesForIndex();
         final float lineSpacing = readerView.getLineSpacingMultiplierForIndex();
         final TextPaint paintSnapshot = readerView.copyTextPaintForIndex();
+        final int partitionLines = getLargeTextPartitionLines();
+        final int partitionBufferLines = getLargeTextPartitionBufferLines();
+        final int lookaheadLines = partitionBufferLines;
         final File source = new File(loadedFilePath);
         final String indexSignature = buildLargeTextExactPageIndexSignature(
-                loadedFilePath, layoutWidth, viewportHeight, marginVertical, overlap, lineSpacing, paintSnapshot);
+                loadedFilePath, layoutWidth, viewportHeight, marginVertical, overlap, lineSpacing, paintSnapshot,
+                partitionLines, partitionBufferLines);
         final int indexGeneration;
 
         synchronized (largeTextExactPageIndexLock) {
@@ -3778,6 +4110,8 @@ public class ReaderActivity extends AppCompatActivity {
                         lineSpacing,
                         expectedTotalLines,
                         expectedTotalChars,
+                        partitionLines,
+                        lookaheadLines,
                         indexGeneration);
             } catch (Throwable t) {
                 buildFailed = true;
@@ -3848,6 +4182,7 @@ public class ReaderActivity extends AppCompatActivity {
                     return;
                 }
                 if (shouldUpdatePosition) {
+                    syncCurrentFileBookmarksToLargeTextExactPageModel();
                     updatePositionLabel();
                     prefetchNeighborLargeTextPartitions();
                     processQueuedLargeTextPageDeltaAfterPartitionApply();
@@ -3947,19 +4282,23 @@ public class ReaderActivity extends AppCompatActivity {
                                                                                               float lineSpacing,
                                                                                               int expectedTotalLines,
                                                                                               int expectedTotalChars,
+                                                                                              int partitionLines,
+                                                                                              int lookaheadLines,
                                                                                               int indexGeneration) throws IOException {
         ArrayList<CustomReaderView.PageTextAnchor> result = new ArrayList<>();
+        partitionLines = Math.max(1, partitionLines);
+        lookaheadLines = Math.max(0, lookaheadLines);
 
         // The exact index must use the same page-break model as the live large-TXT
         // renderer.  The renderer does not lay out one continuous 30MB+ document;
-        // it lays out fixed 4,000-logical-line partitions, with a small lookahead
+        // it lays out fixed runtime-selected logical-line partitions, with a small lookahead
         // tail for seam continuity, and then page-turns to the next partition.
         // Building one global scroll height from chunk metrics made Go to Page and
         // the toolbar slider drift after indexing completed because page boundaries
         // could cross partition seams that the actual viewer treats as hard page
         // boundaries.  Build exact anchors per live partition instead.
-        ArrayList<String> windowLines = new ArrayList<>(LARGE_TEXT_PARTITION_LINES + LARGE_TEXT_PARTITION_LOOKAHEAD_LINES + 8);
-        ArrayList<Integer> windowStarts = new ArrayList<>(LARGE_TEXT_PARTITION_LINES + LARGE_TEXT_PARTITION_LOOKAHEAD_LINES + 8);
+        ArrayList<String> windowLines = new ArrayList<>(partitionLines + lookaheadLines + 8);
+        ArrayList<Integer> windowStarts = new ArrayList<>(partitionLines + lookaheadLines + 8);
         int globalChar = 0;
         int nextPartitionStartLine = 1;
         int minAllowedExactAnchorChar = 0;
@@ -3982,12 +4321,12 @@ public class ReaderActivity extends AppCompatActivity {
                 windowLines.add(normalized);
                 globalChar += normalized.length() + 1;
 
-                while (windowLines.size() >= LARGE_TEXT_PARTITION_LINES + LARGE_TEXT_PARTITION_LOOKAHEAD_LINES) {
+                while (windowLines.size() >= partitionLines + lookaheadLines) {
                     minAllowedExactAnchorChar = appendLargeTextExactPartitionAnchors(
                             result,
                             windowLines,
                             windowStarts,
-                            LARGE_TEXT_PARTITION_LINES,
+                            partitionLines,
                             paintSnapshot,
                             layoutWidth,
                             viewportHeight,
@@ -3995,10 +4334,10 @@ public class ReaderActivity extends AppCompatActivity {
                             overlap,
                             lineSpacing,
                             minAllowedExactAnchorChar);
-                    int removeCount = Math.min(LARGE_TEXT_PARTITION_LINES, windowLines.size());
+                    int removeCount = Math.min(partitionLines, windowLines.size());
                     windowLines.subList(0, removeCount).clear();
                     windowStarts.subList(0, removeCount).clear();
-                    nextPartitionStartLine += LARGE_TEXT_PARTITION_LINES;
+                    nextPartitionStartLine += partitionLines;
                 }
             }
         }
@@ -4010,7 +4349,7 @@ public class ReaderActivity extends AppCompatActivity {
                 throw new IOException("cancelled");
             }
 
-            int bodyLineCount = Math.min(LARGE_TEXT_PARTITION_LINES, windowLines.size());
+            int bodyLineCount = Math.min(partitionLines, windowLines.size());
             minAllowedExactAnchorChar = appendLargeTextExactPartitionAnchors(
                     result,
                     windowLines,
@@ -4023,10 +4362,10 @@ public class ReaderActivity extends AppCompatActivity {
                     overlap,
                     lineSpacing,
                     minAllowedExactAnchorChar);
-            int removeCount = Math.min(LARGE_TEXT_PARTITION_LINES, windowLines.size());
+            int removeCount = Math.min(partitionLines, windowLines.size());
             windowLines.subList(0, removeCount).clear();
             windowStarts.subList(0, removeCount).clear();
-            nextPartitionStartLine += LARGE_TEXT_PARTITION_LINES;
+            nextPartitionStartLine += partitionLines;
         }
 
         if (!sawAnyLine || result.isEmpty()) {
@@ -4084,9 +4423,9 @@ public class ReaderActivity extends AppCompatActivity {
         // If the previous partition's real next-page start landed inside this
         // partition body, make that handoff point an explicit page anchor.  The
         // simple partition-local index would otherwise start from this partition's
-        // own page 1 (for example line 4001) even though the previous page's
-        // lookahead already showed those lines and actual tap paging resumes at a
-        // later line (for example line 4051).  This keeps the exact page map equal
+        // own page 1 (for example the first line after a partition boundary) even
+        // though the previous page's lookahead already showed those lines and actual
+        // tap paging resumes later.  This keeps the exact page map equal
         // to the sequential tap-reading path instead of resurrecting duplicate seam
         // pages just to inflate the total page count.
         if (minAllowed > baseCharOffset && minAllowed < bodyEndGlobal) {
@@ -4267,7 +4606,10 @@ public class ReaderActivity extends AppCompatActivity {
         final int endLine;
         final int totalLines;
         final int baseCharOffset;
+        final int bodyStartCharCount;
         final int bodyCharCount;
+        final int windowStartLine;
+        final boolean includesLookbehind;
         final int totalChars;
 
         LargeTextLinePartitionResult(String content,
@@ -4276,7 +4618,10 @@ public class ReaderActivity extends AppCompatActivity {
                                      int endLine,
                                      int totalLines,
                                      int baseCharOffset,
+                                     int bodyStartCharCount,
                                      int bodyCharCount,
+                                     int windowStartLine,
+                                     boolean includesLookbehind,
                                      int totalChars) {
             this.content = content != null ? content : "";
             this.lineCount = Math.max(1, lineCount);
@@ -4284,7 +4629,10 @@ public class ReaderActivity extends AppCompatActivity {
             this.endLine = Math.max(this.startLine, endLine);
             this.totalLines = Math.max(1, totalLines);
             this.baseCharOffset = Math.max(0, baseCharOffset);
-            this.bodyCharCount = Math.max(0, bodyCharCount);
+            this.bodyStartCharCount = Math.max(0, Math.min(this.content.length(), bodyStartCharCount));
+            this.bodyCharCount = Math.max(this.bodyStartCharCount, Math.min(this.content.length(), bodyCharCount));
+            this.windowStartLine = Math.max(1, windowStartLine);
+            this.includesLookbehind = includesLookbehind;
             this.totalChars = Math.max(this.baseCharOffset + this.content.length(), totalChars);
         }
     }
@@ -4363,7 +4711,7 @@ public class ReaderActivity extends AppCompatActivity {
 
     private int getLargeTextPartitionStartLineForLine(int line) {
         int clampedLine = Math.max(1, line);
-        return ((clampedLine - 1) / LARGE_TEXT_PARTITION_LINES) * LARGE_TEXT_PARTITION_LINES + 1;
+        return ((clampedLine - 1) / getLargeTextPartitionLines()) * getLargeTextPartitionLines() + 1;
     }
 
     private BufferedReader openLargeTextReader(@NonNull File file) throws IOException {
@@ -4404,7 +4752,7 @@ public class ReaderActivity extends AppCompatActivity {
                                                                            int targetCharPosition) throws IOException {
         LargeTextLineStats stats = scanLargeTextLineStats(file, targetCharPosition);
         int startLine = getLargeTextPartitionStartLineForLine(stats.targetLine);
-        return readLargeTextLinePartitionAtStartLine(file, startLine, stats.totalLines, stats.totalChars);
+        return readLargeTextLinePartitionAtStartLine(file, startLine, stats.totalLines, stats.totalChars, false);
     }
 
     private LargeTextLinePartitionResult readLargeTextLinePartitionAtStartLine(@NonNull File file,
@@ -4414,20 +4762,32 @@ public class ReaderActivity extends AppCompatActivity {
         if (startLine > stats.totalLines) {
             startLine = getLargeTextPartitionStartLineForLine(stats.totalLines);
         }
-        return readLargeTextLinePartitionAtStartLine(file, startLine, stats.totalLines, stats.totalChars);
+        return readLargeTextLinePartitionAtStartLine(file, startLine, stats.totalLines, stats.totalChars, false);
     }
 
     private LargeTextLinePartitionResult readLargeTextLinePartitionAtStartLine(@NonNull File file,
                                                                                int requestedStartLine,
                                                                                int knownTotalLines,
                                                                                int knownTotalChars) throws IOException {
+        return readLargeTextLinePartitionAtStartLine(file, requestedStartLine, knownTotalLines, knownTotalChars, false);
+    }
+
+    private LargeTextLinePartitionResult readLargeTextLinePartitionAtStartLine(@NonNull File file,
+                                                                               int requestedStartLine,
+                                                                               int knownTotalLines,
+                                                                               int knownTotalChars,
+                                                                               boolean includeLookbehind) throws IOException {
         int startLine = getLargeTextPartitionStartLineForLine(requestedStartLine);
-        int bodyEndLine = Math.min(Math.max(1, knownTotalLines), startLine + LARGE_TEXT_PARTITION_LINES - 1);
-        int captureEndLine = Math.min(Math.max(1, knownTotalLines), bodyEndLine + LARGE_TEXT_PARTITION_LOOKAHEAD_LINES);
+        int bodyEndLine = Math.min(Math.max(1, knownTotalLines), startLine + getLargeTextPartitionLines() - 1);
+        int windowStartLine = includeLookbehind
+                ? Math.max(1, startLine - getLargeTextPartitionLookbehindLines())
+                : startLine;
+        int captureEndLine = Math.min(Math.max(1, knownTotalLines), bodyEndLine + getLargeTextPartitionLookaheadLines());
 
         StringBuilder out = new StringBuilder();
         long baseChars = 0L;
         int line = 1;
+        int bodyStartCharCount = 0;
         int bodyCharCount = 0;
         boolean capturedAny = false;
 
@@ -4440,7 +4800,7 @@ public class ReaderActivity extends AppCompatActivity {
                 normalized = TextDisplayRuleManager.apply(normalized, activeRules);
                 int lineChars = normalized.length() + 1;
 
-                if (line < startLine) {
+                if (line < windowStartLine) {
                     baseChars += lineChars;
                 } else if (line <= captureEndLine) {
                     capturedAny = true;
@@ -4454,6 +4814,9 @@ public class ReaderActivity extends AppCompatActivity {
                         out.append('\n');
                     }
                     firstCapturedLine = false;
+                    if (line == startLine) {
+                        bodyStartCharCount = out.length();
+                    }
                     out.append(normalized);
                     if (line <= bodyEndLine) {
                         bodyCharCount = out.length();
@@ -4468,6 +4831,7 @@ public class ReaderActivity extends AppCompatActivity {
         String content = out.toString();
         if (!capturedAny) {
             content = "";
+            bodyStartCharCount = 0;
             bodyCharCount = 0;
         }
         return new LargeTextLinePartitionResult(
@@ -4477,7 +4841,10 @@ public class ReaderActivity extends AppCompatActivity {
                 bodyEndLine,
                 knownTotalLines,
                 (int) Math.max(0L, Math.min(Integer.MAX_VALUE, baseChars)),
+                bodyStartCharCount,
                 bodyCharCount,
+                windowStartLine,
+                includeLookbehind,
                 knownTotalChars);
     }
 
@@ -4846,7 +5213,9 @@ public class ReaderActivity extends AppCompatActivity {
                                           String jumpAnchorBefore,
                                           String jumpAnchorAfter,
                                           float estimatedBytesPerChar,
+                                          int partitionBodyStartCharCount,
                                           int partitionBodyCharCount,
+                                          int partitionWindowStartLine,
                                           int partitionStartLine,
                                           int partitionEndLine,
                                           int partitionTotalLines) {
@@ -4876,7 +5245,10 @@ public class ReaderActivity extends AppCompatActivity {
         largeTextPartitionEndByte = Math.max(largeTextPartitionStartByte, partitionEndByte);
         largeTextFileByteLength = Math.max(1L, fullByteLength);
         largeTextEstimatedBytesPerChar = Math.max(1f, estimatedBytesPerChar);
-        largeTextPartitionBodyCharCount = Math.max(0, Math.min(fileContent.length(), partitionBodyCharCount));
+        largeTextPartitionBodyStartCharCount = Math.max(0, Math.min(fileContent.length(), partitionBodyStartCharCount));
+        largeTextPartitionBodyCharCount = Math.max(largeTextPartitionBodyStartCharCount, Math.min(fileContent.length(), partitionBodyCharCount));
+        largeTextPartitionWindowStartLine = Math.max(1, partitionWindowStartLine);
+        largeTextActivePartitionUsesLookbehind = false;
         largeTextPartitionStartLine = Math.max(1, partitionStartLine);
         largeTextPartitionEndLine = Math.max(largeTextPartitionStartLine, partitionEndLine);
         largeTextTotalLogicalLines = Math.max(1, partitionTotalLines);
@@ -4887,7 +5259,10 @@ public class ReaderActivity extends AppCompatActivity {
                 largeTextPartitionEndLine,
                 largeTextTotalLogicalLines,
                 largeTextPreviewBaseCharOffset,
+                largeTextPartitionBodyStartCharCount,
                 largeTextPartitionBodyCharCount,
+                largeTextPartitionWindowStartLine,
+                false,
                 largeTextEstimatedTotalChars));
 
         readerView.setLargeTextPartitionMode(true);
@@ -4923,7 +5298,7 @@ public class ReaderActivity extends AppCompatActivity {
                             cachedTotalPages,
                             jumpAnchorBefore,
                             jumpAnchorAfter,
-                            getLargeTextPartitionStartLineForLine(largeTextPartitionStartLine - LARGE_TEXT_PARTITION_LINES));
+                            getLargeTextPartitionStartLineForLine(largeTextPartitionStartLine - getLargeTextPartitionLines()));
                     return;
                 } else if (localRestorePosition >= fileContent.length() && hasNextLargeTextPartition()) {
                     reloadLargeTextPreviewAround(
@@ -4939,10 +5314,11 @@ public class ReaderActivity extends AppCompatActivity {
                 }
             }
 
-            int previewPages = Math.max(1, readerView.getTotalPageCount());
             int bodyPages = getLastLocalPageStartingInsideLargeTextPartition();
-            float ratio = largeTextTotalLogicalLines / (float) Math.max(1, LARGE_TEXT_PARTITION_LINES);
-            largeTextEstimatedTotalPages = Math.max(previewPages, Math.round(Math.max(1, bodyPages) * ratio));
+            float ratio = largeTextTotalLogicalLines / (float) Math.max(1, getLargeTextPartitionLines());
+            // Runtime lookbehind/lookahead pages are seam buffers, not body pages.
+            // Estimate the global total from the canonical body portion only.
+            largeTextEstimatedTotalPages = Math.max(bodyPages, Math.round(Math.max(1, bodyPages) * ratio));
             largeTextEstimatedBasePageOffset = Math.max(0, Math.min(
                     Math.max(0, largeTextEstimatedTotalPages - 1),
                     Math.round(((largeTextPartitionStartLine - 1) / (float) Math.max(1, largeTextTotalLogicalLines))
@@ -5009,7 +5385,9 @@ public class ReaderActivity extends AppCompatActivity {
         largeTextPartitionEndByte = 0L;
         largeTextFileByteLength = 0L;
         largeTextEstimatedBytesPerChar = 1f;
+        largeTextPartitionBodyStartCharCount = 0;
         largeTextPartitionBodyCharCount = 0;
+        largeTextPartitionWindowStartLine = 1;
         largeTextPartitionStartLine = 1;
         largeTextPartitionEndLine = 1;
         largeTextTotalLogicalLines = 1;
@@ -5095,12 +5473,43 @@ public class ReaderActivity extends AppCompatActivity {
 
         int currentLocalStart = Math.max(0, Math.min(contentLength,
                 readerView.getCurrentPageStartCharPositionForCoverage()));
+        int visibleEndLocal = Math.max(currentLocalStart, Math.min(contentLength,
+                readerView.getCharPositionAfterCurrentVisibleContent()));
+
+        int nextStartLine = getLargeTextPartitionStartLineForLine(largeTextPartitionEndLine + 1);
+        LargeTextLinePartitionResult nextCached = getCachedLargeTextManualHandoffPartitionByStartLine(nextStartLine);
+
+        // Early handoff: if the screen bottom is already reading into the tail
+        // lookahead, and the next partition has been prefetched with enough
+        // lookbehind to reproduce the current viewport top, swap ownership now.
+        // If the cache is not ready or the top is outside the next window, keep the
+        // old top-based handoff to avoid jumps on very small fonts / huge screens.
+        if (currentLocalStart < bodyEnd && visibleEndLocal > bodyEnd) {
+            if (nextCached == null) {
+                prefetchLargeTextManualHandoffPartitionByStartLine(nextStartLine);
+                return;
+            }
+            int currentAbsTop = largeTextPreviewBaseCharOffset + currentLocalStart;
+            int nextWindowStart = nextCached.baseCharOffset;
+            int nextWindowEnd = nextWindowStart + Math.max(0, nextCached.content.length());
+            if (currentAbsTop >= nextWindowStart && currentAbsTop < nextWindowEnd) {
+                int total = Math.max(1, getDisplayedTotalPageCount());
+                int displayPage = isLargeTextExactPageIndexReady()
+                        ? Math.max(1, Math.min(total, findExactLargeTextPageForChar(currentAbsTop)))
+                        : Math.max(1, Math.min(total, getDisplayedCurrentPageNumber()));
+                recordLargeTextPageDirection(+1);
+                switchLargeTextPartitionInPlace(currentAbsTop, displayPage, total, null, null,
+                        nextStartLine, false, false, true);
+            }
+            return;
+        }
+
         if (currentLocalStart < bodyEnd) {
             return;
         }
 
         // The user has manually scrolled into the lookahead text owned by the next
-        // 4,000-line partition.  Re-anchor to the owning partition at the same
+        // runtime-selected partition.  Re-anchor to the owning partition at the same
         // absolute text position, instead of letting the next partition show that
         // already-read lookahead again.
         int targetAbs = largeTextPreviewBaseCharOffset + currentLocalStart;
@@ -5114,7 +5523,7 @@ public class ReaderActivity extends AppCompatActivity {
                 ? Math.max(1, Math.min(total, findExactLargeTextPageForChar(targetAbs)))
                 : Math.max(1, Math.min(total, getDisplayedCurrentPageNumber()));
         recordLargeTextPageDirection(+1);
-        switchLargeTextPartitionInPlace(targetAbs, displayPage, total, null, null, -1, false);
+        switchLargeTextPartitionInPlace(targetAbs, displayPage, total, null, null, nextStartLine, false);
     }
 
     private void handleLargeTextManualOverscroll(int direction) {
@@ -5147,7 +5556,7 @@ public class ReaderActivity extends AppCompatActivity {
             int total = Math.max(1, getDisplayedTotalPageCount());
             int displayedTarget = Math.max(1, Math.min(total, getDisplayedCurrentPageNumber() - 1));
             int previousStart = getLargeTextPartitionStartLineForLine(
-                    largeTextPartitionStartLine - LARGE_TEXT_PARTITION_LINES);
+                    largeTextPartitionStartLine - getLargeTextPartitionLines());
             recordLargeTextPageDirection(-1);
             reloadLargeTextPartitionByStartLine(previousStart, displayedTarget, total);
         });
@@ -5168,11 +5577,14 @@ public class ReaderActivity extends AppCompatActivity {
         if (readerView == null || !largeTextEstimateActive || fileContent == null || fileContent.isEmpty()) {
             return 1;
         }
+        int bodyStart = Math.max(0, Math.min(fileContent.length(), largeTextPartitionBodyStartCharCount));
         int bodyEnd = largeTextPartitionBodyCharCount > 0
                 ? Math.min(fileContent.length(), largeTextPartitionBodyCharCount)
                 : fileContent.length();
-        int lastBodyChar = Math.max(0, bodyEnd - 1);
-        return Math.max(1, readerView.getPageNumberForCharPosition(lastBodyChar));
+        int firstBodyPage = Math.max(1, readerView.getPageNumberForCharPosition(bodyStart));
+        int lastBodyChar = Math.max(bodyStart, Math.max(0, bodyEnd - 1));
+        int lastBodyPage = Math.max(firstBodyPage, readerView.getPageNumberForCharPosition(lastBodyChar));
+        return Math.max(1, lastBodyPage - firstBodyPage + 1);
     }
 
     private void reloadLargeTextPartitionByStartLine(int startLine, int displayPage, int totalPages) {
@@ -5185,14 +5597,14 @@ public class ReaderActivity extends AppCompatActivity {
             // partition body does not contain the separator newline after its final
             // body line, so bodyCharCount alone points one char too early.
             targetChar = cached != null
-                    ? cached.baseCharOffset
+                    ? cached.baseCharOffset + Math.max(0, cached.bodyStartCharCount)
                     : largeTextPreviewBaseCharOffset + Math.max(0, largeTextPartitionBodyCharCount) + 1;
         } else if (partitionStartLine < largeTextPartitionStartLine) {
             // Previous partition: target the previous body end and let the reader
             // clamp to the final visual page of that partition.
             targetChar = cached != null
                     ? cached.baseCharOffset + Math.max(0, cached.bodyCharCount - 1)
-                    : Math.max(0, largeTextPreviewBaseCharOffset - 1);
+                    : Math.max(0, largeTextPreviewBaseCharOffset + Math.max(0, largeTextPartitionBodyStartCharCount) - 1);
         }
 
         int preservedDisplayPage = displayPage;
@@ -5220,14 +5632,14 @@ public class ReaderActivity extends AppCompatActivity {
         if (!largeTextEstimateActive || filePath == null) return;
 
         int nextStart = getLargeTextPartitionStartLineForLine(largeTextPartitionEndLine + 1);
-        int previousStart = getLargeTextPartitionStartLineForLine(largeTextPartitionStartLine - LARGE_TEXT_PARTITION_LINES);
+        int previousStart = getLargeTextPartitionStartLineForLine(largeTextPartitionStartLine - getLargeTextPartitionLines());
         boolean preferPrevious = largeTextLastPageDirection < 0;
 
         if (preferPrevious) {
             if (hasPreviousLargeTextPartition()) {
                 prefetchLargeTextPartitionByStartLine(previousStart);
                 if (largeTextSameDirectionPageCount >= 2) {
-                    int previousPrevious = getLargeTextPartitionStartLineForLine(previousStart - LARGE_TEXT_PARTITION_LINES);
+                    int previousPrevious = getLargeTextPartitionStartLineForLine(previousStart - getLargeTextPartitionLines());
                     if (previousPrevious >= 1 && previousPrevious < previousStart) {
                         prefetchLargeTextPartitionByStartLine(previousPrevious);
                     }
@@ -5240,7 +5652,7 @@ public class ReaderActivity extends AppCompatActivity {
             if (hasNextLargeTextPartition()) {
                 prefetchLargeTextPartitionByStartLine(nextStart);
                 if (largeTextSameDirectionPageCount >= 2) {
-                    int nextNext = getLargeTextPartitionStartLineForLine(nextStart + LARGE_TEXT_PARTITION_LINES);
+                    int nextNext = getLargeTextPartitionStartLineForLine(nextStart + getLargeTextPartitionLines());
                     if (nextNext <= largeTextTotalLogicalLines && nextNext > nextStart) {
                         prefetchLargeTextPartitionByStartLine(nextNext);
                     }
@@ -5277,6 +5689,34 @@ public class ReaderActivity extends AppCompatActivity {
                 }
             } catch (Throwable ignored) {
                 unmarkLargeTextPartitionPrefetchPending(startLine);
+            }
+        });
+    }
+
+    private void prefetchLargeTextManualHandoffPartitionByStartLine(int requestedStartLine) {
+        if (filePath == null || !largeTextEstimateActive) return;
+        final int startLine = getLargeTextPartitionStartLineForLine(requestedStartLine);
+        if (!markLargeTextManualHandoffPartitionPrefetchPending(startLine)) return;
+
+        final int generation = loadGeneration.get();
+        final String expectedPath = filePath;
+        final int knownTotalLines = Math.max(1, largeTextTotalLogicalLines);
+        final int knownTotalChars = Math.max(0, largeTextEstimatedTotalChars);
+
+        largeTextPartitionExecutor.execute(() -> {
+            try {
+                File source = new File(expectedPath);
+                LargeTextLinePartitionResult partition = readLargeTextLinePartitionAtStartLine(
+                        source, startLine, knownTotalLines, knownTotalChars, true);
+                if (!activityDestroyed
+                        && generation == loadGeneration.get()
+                        && expectedPath.equals(filePath)) {
+                    cacheLargeTextPartition(partition);
+                } else {
+                    unmarkLargeTextManualHandoffPartitionPrefetchPending(startLine);
+                }
+            } catch (Throwable ignored) {
+                unmarkLargeTextManualHandoffPartitionPrefetchPending(startLine);
             }
         });
     }
@@ -5325,6 +5765,19 @@ public class ReaderActivity extends AppCompatActivity {
                                                 int partitionStartLine,
                                                 boolean showLoadingForAsyncPartitionJump,
                                                 boolean forceFinalVisualPage) {
+        switchLargeTextPartitionInPlace(charPosition, displayPage, totalPages, anchorBefore, anchorAfter,
+                partitionStartLine, showLoadingForAsyncPartitionJump, forceFinalVisualPage, false);
+    }
+
+    private void switchLargeTextPartitionInPlace(int charPosition,
+                                                int displayPage,
+                                                int totalPages,
+                                                String anchorBefore,
+                                                String anchorAfter,
+                                                int partitionStartLine,
+                                                boolean showLoadingForAsyncPartitionJump,
+                                                boolean forceFinalVisualPage,
+                                                boolean useManualLookbehind) {
         if (filePath == null || !largeTextEstimateActive) return;
 
         final int targetChar = Math.max(0, charPosition);
@@ -5334,9 +5787,11 @@ public class ReaderActivity extends AppCompatActivity {
         final int switchGeneration = largeTextPartitionSwitchGeneration.incrementAndGet();
         beginLargeTextPartitionSwitchPending(displayPage, totalPages);
 
-        LargeTextLinePartitionResult cached = targetStartLine > 0
+        LargeTextLinePartitionResult cached = useManualLookbehind && targetStartLine > 0
+                ? getCachedLargeTextManualHandoffPartitionByStartLine(targetStartLine)
+                : (targetStartLine > 0
                 ? getCachedLargeTextPartitionByStartLine(targetStartLine)
-                : getCachedLargeTextPartitionForChar(targetChar);
+                : getCachedLargeTextPartitionForChar(targetChar));
         if (cached != null) {
             applyLargeTextPartitionInPlace(
                     cached, targetChar, displayPage, totalPages, anchorBefore, anchorAfter,
@@ -5357,7 +5812,7 @@ public class ReaderActivity extends AppCompatActivity {
             try {
                 File source = new File(expectedPath);
                 LargeTextLinePartitionResult partition = targetStartLine > 0
-                        ? readLargeTextLinePartitionAtStartLine(source, targetStartLine, knownTotalLines, knownTotalChars)
+                        ? readLargeTextLinePartitionAtStartLine(source, targetStartLine, knownTotalLines, knownTotalChars, useManualLookbehind)
                         : readLargeTextLinePartitionForChar(source, targetChar);
                 cacheLargeTextPartition(partition);
 
@@ -5447,7 +5902,10 @@ public class ReaderActivity extends AppCompatActivity {
         hugeTextPreviewOnly = true;
         largeTextPartitionStartByte = 0L;
         largeTextPartitionEndByte = Math.max(largeTextPartitionStartByte, largeTextFileByteLength);
-        largeTextPartitionBodyCharCount = Math.max(0, Math.min(fileContent.length(), partition.bodyCharCount));
+        largeTextPartitionBodyStartCharCount = Math.max(0, Math.min(fileContent.length(), partition.bodyStartCharCount));
+        largeTextPartitionBodyCharCount = Math.max(largeTextPartitionBodyStartCharCount, Math.min(fileContent.length(), partition.bodyCharCount));
+        largeTextPartitionWindowStartLine = Math.max(1, partition.windowStartLine);
+        largeTextActivePartitionUsesLookbehind = partition.includesLookbehind;
         largeTextPartitionStartLine = Math.max(1, partition.startLine);
         largeTextPartitionEndLine = Math.max(largeTextPartitionStartLine, partition.endLine);
         largeTextTotalLogicalLines = Math.max(1, partition.totalLines);
@@ -5536,14 +5994,15 @@ public class ReaderActivity extends AppCompatActivity {
             return;
         }
 
-        int previewPages = Math.max(1, readerView.getTotalPageCount());
         int bodyPages = getLastLocalPageStartingInsideLargeTextPartition();
         int exactTotal = isLargeTextExactPageIndexReady() ? copyLargeTextExactPageAnchors().size() : 0;
         if (exactTotal > 0) {
             largeTextEstimatedTotalPages = Math.max(1, exactTotal);
         } else if (largeTextEstimatedTotalPages <= 0) {
-            float ratio = largeTextTotalLogicalLines / (float) Math.max(1, LARGE_TEXT_PARTITION_LINES);
-            largeTextEstimatedTotalPages = Math.max(previewPages, Math.round(Math.max(1, bodyPages) * ratio));
+            float ratio = largeTextTotalLogicalLines / (float) Math.max(1, getLargeTextPartitionLines());
+            // Use only body pages for global estimates; runtime lookbehind/lookahead
+            // exists to smooth seam handoff and must not inflate total pages.
+            largeTextEstimatedTotalPages = Math.max(bodyPages, Math.round(Math.max(1, bodyPages) * ratio));
         }
 
         largeTextEstimatedBasePageOffset = Math.max(0, Math.min(
@@ -5632,8 +6091,17 @@ public class ReaderActivity extends AppCompatActivity {
             if (isLargeTextExactPageIndexReady()) {
                 CustomReaderView.PageTextAnchor anchor = getExactLargeTextAnchorForPage(target);
                 if (anchor != null) {
+                    // Exact page anchors are generated from the current file and
+                    // current layout signature.  For page/slider jumps, the raw
+                    // anchor char is already the authoritative page-start position.
+                    // Do not run bookmark-style text-context re-anchoring here:
+                    // repeated phrases inside a large TXT partition can resolve the
+                    // before/after snippets to another occurrence on the same global
+                    // page, which preserves the page label but lands at the wrong
+                    // vertical position.  Bookmark restore still keeps contextual
+                    // anchoring through jumpToAbsoluteCharPosition(..., before, after).
                     jumpToAbsoluteCharPosition(anchor.charPosition, target, total,
-                            anchor.anchorTextBefore, anchor.anchorTextAfter,
+                            null, null,
                             showLoadingForAsyncPartitionJump);
                     return true;
                 }
@@ -5759,10 +6227,12 @@ public class ReaderActivity extends AppCompatActivity {
     private boolean isAbsoluteCharPositionInCurrentLargeTextBody(int absolutePosition) {
         if (!largeTextEstimateActive || fileContent == null) return false;
         int localPosition = absolutePosition - largeTextPreviewBaseCharOffset;
+        int bodyStart = Math.max(0, Math.min(fileContent.length(), largeTextPartitionBodyStartCharCount));
         int bodyEnd = largeTextPartitionBodyCharCount > 0
                 ? Math.min(fileContent.length(), largeTextPartitionBodyCharCount)
                 : fileContent.length();
-        return localPosition >= 0 && localPosition < bodyEnd;
+        bodyEnd = Math.max(bodyStart, Math.min(fileContent.length(), bodyEnd));
+        return bodyEnd > bodyStart && localPosition >= bodyStart && localPosition < bodyEnd;
     }
 
     private void jumpToAbsoluteCharPosition(int charPosition,
@@ -5790,6 +6260,16 @@ public class ReaderActivity extends AppCompatActivity {
             return;
         }
 
+        if (largeTextActivePartitionUsesLookbehind) {
+            // Runtime lookbehind partitions exist only for manual-scroll seam
+            // reconstruction.  Page/slider, bookmark, search, and tap navigation
+            // must immediately reload the canonical body partition before applying
+            // the target, otherwise local page anchors are shifted by the prepended
+            // lookbehind lines and the target can appear as previous-page content.
+            reloadLargeTextPreviewAround(charPosition, displayPage, totalPages, anchorBefore, anchorAfter, showLoadingForAsyncPartitionJump);
+            return;
+        }
+
         // In fixed-line partition mode, the lookahead text is only a render aid for
         // pages that cross the partition edge.  A bookmark/page target that belongs
         // to the next partition must reload its owning partition; otherwise the
@@ -5808,17 +6288,18 @@ public class ReaderActivity extends AppCompatActivity {
                 return;
             }
 
-            if (displayPage > 0) {
-                int localPage = Math.max(1, readerView != null ? readerView.getCurrentPageNumber() : 1);
-                int displayedTotal = totalPages > 0 ? totalPages : getDisplayedTotalPageCount();
-                largeTextEstimatedTotalPages = Math.max(displayedTotal, localPage);
-                largeTextEstimatedBasePageOffset = Math.max(0, displayPage - localPage);
-            }
             if (isActiveSearchTarget(resolvedPosition)) {
                 scrollToSearchResultPosition(resolvedPosition);
             } else {
                 scrollToCharPosition(resolvedPosition);
             }
+            // For in-partition page/slider jumps, compute the global page offset
+            // only after the local scroll has landed.  Computing it before the
+            // scroll used the old local page and could make the label show the
+            // requested global page while the viewport was still aligned to the
+            // previous page inside the same partition.
+            recomputeLargeTextDisplayPageOffset(displayPage, totalPages);
+            updatePositionLabel();
             return;
         }
 
@@ -5999,12 +6480,92 @@ public class ReaderActivity extends AppCompatActivity {
         }
         int delta = queuedLargeTextPageDelta;
         clearLargeTextQueuedPageDelta();
-        int total = Math.max(1, getDisplayedTotalPageCount());
-        int current = Math.max(1, Math.min(total, getDisplayedCurrentPageNumber()));
-        int target = Math.max(1, Math.min(total, current + delta));
-        if (target != current) {
-            scrollToPageNumber(target, false, false);
+        if (!pageLargeTextByExactAnchorDelta(delta, false)) {
+            int total = Math.max(1, getDisplayedTotalPageCount());
+            int current = Math.max(1, Math.min(total, getDisplayedCurrentPageNumber()));
+            int target = Math.max(1, Math.min(total, current + delta));
+            if (target != current) {
+                scrollToPageNumber(target, false, false);
+            }
         }
+    }
+
+    private boolean pageLargeTextByExactAnchorDelta(int direction, boolean showLoadingForAsyncPartitionJump) {
+        if (!largeTextEstimateActive || readerView == null || filePath == null || direction == 0) return false;
+
+        ArrayList<CustomReaderView.PageTextAnchor> anchors;
+        String currentSignature = buildCurrentLargeTextExactPageIndexSignature(filePath);
+        synchronized (largeTextExactPageIndexLock) {
+            if (!largeTextExactPageIndexReady
+                    || largeTextExactPageAnchors.isEmpty()
+                    || !currentSignature.equals(largeTextExactPageIndexSignature)) {
+                return false;
+            }
+            anchors = new ArrayList<>(largeTextExactPageAnchors);
+        }
+
+        int total = Math.max(1, anchors.size());
+        int currentAbs = Math.max(0, getCurrentCharPosition());
+        int targetIndex = findExactTapTargetAnchorIndex(anchors, currentAbs, direction);
+        if (targetIndex < 0) {
+            updatePositionLabel();
+            return true;
+        }
+        if (Math.abs(direction) > 1) {
+            int extraSteps = Math.abs(direction) - 1;
+            targetIndex += direction > 0 ? extraSteps : -extraSteps;
+            targetIndex = Math.max(0, Math.min(anchors.size() - 1, targetIndex));
+        }
+
+        int targetPage = Math.max(1, Math.min(total, targetIndex + 1));
+        CustomReaderView.PageTextAnchor targetAnchor = anchors.get(targetPage - 1);
+
+        // Exact-index tap navigation uses the same global page-start table as the
+        // toolbar slider and Go to Page.  The target is selected from the current
+        // absolute top position, not from the displayed page label, so a small
+        // manual scroll between taps snaps to the next/previous exact page start
+        // instead of compounding local partition offsets.  Do not route this
+        // through scrollToPageNumber(...): its final-page special case intentionally
+        // clamps to visual EOF, while tap navigation should land on the exact page
+        // start anchor.
+        jumpToAbsoluteCharPosition(targetAnchor.charPosition, targetPage, total,
+                null, null, showLoadingForAsyncPartitionJump);
+        return true;
+    }
+
+    private int findExactTapTargetAnchorIndex(ArrayList<CustomReaderView.PageTextAnchor> anchors,
+                                              int currentAbs,
+                                              int direction) {
+        if (anchors == null || anchors.isEmpty() || direction == 0) return -1;
+
+        if (direction > 0) {
+            int threshold = Math.max(0, currentAbs + LARGE_TEXT_EXACT_TAP_EPS_CHARS);
+            int lo = 0;
+            int hi = anchors.size();
+            while (lo < hi) {
+                int mid = (lo + hi) >>> 1;
+                if (anchors.get(mid).charPosition > threshold) {
+                    hi = mid;
+                } else {
+                    lo = mid + 1;
+                }
+            }
+            return lo < anchors.size() ? lo : -1;
+        }
+
+        int threshold = Math.max(0, currentAbs - LARGE_TEXT_EXACT_TAP_EPS_CHARS);
+        int lo = 0;
+        int hi = anchors.size();
+        while (lo < hi) {
+            int mid = (lo + hi) >>> 1;
+            if (anchors.get(mid).charPosition < threshold) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        int idx = lo - 1;
+        return idx >= 0 ? idx : -1;
     }
     private void pageBy(int direction) {
         pageBy(direction, false);
@@ -6020,23 +6581,18 @@ public class ReaderActivity extends AppCompatActivity {
             return;
         }
 
+        if (largeTextEstimateActive && isLargeTextExactPageIndexReady()) {
+            recordLargeTextPageDirection(direction);
+            if (pageLargeTextByExactAnchorDelta(direction, false)) {
+                return;
+            }
+        }
+
         if (largeTextEstimateActive) {
             recordLargeTextPageDirection(direction);
             if (pageLargeTextSequentiallyWithoutSkipping(direction)) {
                 return;
             }
-        }
-
-        if (largeTextEstimateActive && isLargeTextExactPageIndexReady()) {
-            int total = getDisplayedTotalPageCount();
-            int current = getDisplayedCurrentPageNumber();
-            int target = Math.max(1, Math.min(total, current + direction));
-            if (target != current) {
-                scrollToPageNumber(target, false, false);
-            } else {
-                updatePositionLabel();
-            }
-            return;
         }
 
         if (largeTextEstimateActive) {
@@ -6071,7 +6627,7 @@ public class ReaderActivity extends AppCompatActivity {
                 }
             }
             if (direction < 0 && localPage <= 1 && hasPreviousLargeTextPartition()) {
-                int previousStart = getLargeTextPartitionStartLineForLine(largeTextPartitionStartLine - LARGE_TEXT_PARTITION_LINES);
+                int previousStart = getLargeTextPartitionStartLineForLine(largeTextPartitionStartLine - getLargeTextPartitionLines());
                 int displayedTarget = Math.max(1, Math.min(displayedTotal, displayedCurrent - 1));
                 reloadLargeTextPartitionByStartLine(previousStart, displayedTarget, displayedTotal);
                 return;
@@ -6172,7 +6728,7 @@ public class ReaderActivity extends AppCompatActivity {
         int localPage = Math.max(1, readerView.getCurrentPageNumber());
         if (localPage <= 1 && hasPreviousLargeTextPartition()) {
             int previousStart = getLargeTextPartitionStartLineForLine(
-                    largeTextPartitionStartLine - LARGE_TEXT_PARTITION_LINES);
+                    largeTextPartitionStartLine - getLargeTextPartitionLines());
             reloadLargeTextPartitionByStartLine(previousStart, displayedTarget, displayedTotal);
             return true;
         }
@@ -6344,7 +6900,7 @@ public class ReaderActivity extends AppCompatActivity {
         int lines = 1;
         for (int i = 0; i < end; i++) if (fileContent.charAt(i) == '\n') lines++;
         if (largeTextEstimateActive) {
-            return Math.max(1, largeTextPartitionStartLine + lines - 1);
+            return Math.max(1, largeTextPartitionWindowStartLine + lines - 1);
         }
         return lines;
     }
@@ -6558,6 +7114,7 @@ public class ReaderActivity extends AppCompatActivity {
                 b.setEndPosition(bookmarkEndPosition);
                 b.setPageNumber(getDisplayedCurrentPageNumber());
                 b.setTotalPages(getDisplayedTotalPageCount());
+                b.setPageLayoutSignature(largeTextEstimateActive ? trustedCurrentBookmarkPageSignature() : "");
                 bookmarkManager.updateBookmark(b);
                 Toast.makeText(this, getString(R.string.bookmark_updated), Toast.LENGTH_SHORT).show();
                 if (afterSave != null) afterSave.run();
@@ -6571,6 +7128,7 @@ public class ReaderActivity extends AppCompatActivity {
         bookmark.setEndPosition(bookmarkEndPosition);
         bookmark.setPageNumber(getDisplayedCurrentPageNumber());
         bookmark.setTotalPages(getDisplayedTotalPageCount());
+        bookmark.setPageLayoutSignature(largeTextEstimateActive ? trustedCurrentBookmarkPageSignature() : "");
         // No label prompt here. Original behavior is excerpt/position based.
         // Optional memo editing remains available by long-pressing a bookmark.
         bookmarkManager.addBookmark(bookmark);
@@ -6589,10 +7147,11 @@ public class ReaderActivity extends AppCompatActivity {
         // position first, then resolve the anchor inside that partition.
         if (largeTextEstimateActive
                 && !isAbsoluteCharPositionInCurrentLargeTextBody(bookmark.getCharPosition())) {
+            int[] pageTarget = resolveBookmarkDisplayPageTarget(bookmark, bookmark.getCharPosition());
             jumpToAbsoluteCharPosition(
                     bookmark.getCharPosition(),
-                    bookmark.getPageNumber(),
-                    bookmark.getTotalPages(),
+                    pageTarget[0],
+                    pageTarget[1],
                     bookmark.getAnchorTextBefore(),
                     bookmark.getAnchorTextAfter(),
                     true);
@@ -6607,10 +7166,15 @@ public class ReaderActivity extends AppCompatActivity {
                 bookmark.getAnchorTextAfter());
 
         boolean cacheStillMatches = Math.abs(resolvedPosition - bookmark.getCharPosition()) <= 3;
+        int[] pageTarget = resolveBookmarkDisplayPageTarget(bookmark, resolvedPosition);
+        if (!cacheStillMatches && !isLargeTextExactPageIndexReady()) {
+            pageTarget[0] = 0;
+            pageTarget[1] = 0;
+        }
         jumpToAbsoluteCharPosition(
                 resolvedPosition,
-                cacheStillMatches ? bookmark.getPageNumber() : 0,
-                cacheStillMatches ? bookmark.getTotalPages() : 0,
+                pageTarget[0],
+                pageTarget[1],
                 bookmark.getAnchorTextBefore(),
                 bookmark.getAnchorTextAfter(),
                 true);
@@ -6712,6 +7276,8 @@ public class ReaderActivity extends AppCompatActivity {
         final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
 
         Runnable refresh = () -> {
+            syncCurrentFileBookmarksToLargeTextExactPageModel();
+            adapter.setCurrentPageLayoutSignature(buildCurrentLargeTextBookmarkPageSignature());
             List<Bookmark> allBookmarks = bookmarkManager.getAllBookmarks();
             adapter.setBookmarks(allBookmarks, expandedFolders, filePath);
             // Keep the bookmark dialog height stable even when the list is empty.
@@ -8853,7 +9419,9 @@ public class ReaderActivity extends AppCompatActivity {
         largeTextPartitionEndByte = 0L;
         largeTextFileByteLength = 0L;
         largeTextEstimatedBytesPerChar = 1f;
+        largeTextPartitionBodyStartCharCount = 0;
         largeTextPartitionBodyCharCount = 0;
+        largeTextPartitionWindowStartLine = 1;
         largeTextPartitionStartLine = 1;
         largeTextPartitionEndLine = 1;
         largeTextTotalLogicalLines = 1;

@@ -45,6 +45,12 @@ public class PrefsManager {
     public static final int EPUB_PAGE_DIRECTION_RTL = 1;
     public static final int EPUB_PAGE_EFFECT_SLIDE = 0;
     public static final int EPUB_PAGE_EFFECT_NONE = 1;
+    public static final int LARGE_TEXT_PARTITION_MODE_STANDARD = 0;
+    public static final int LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER = 1;
+    public static final int LARGE_TEXT_PARTITION_LINES_STANDARD = 4000;
+    public static final int LARGE_TEXT_PARTITION_BUFFER_LINES_STANDARD = 400;
+    public static final int LARGE_TEXT_PARTITION_LINES_HIGH_BUFFER = 12000;
+    public static final int LARGE_TEXT_PARTITION_BUFFER_LINES_HIGH_BUFFER = 600;
 
     private final SharedPreferences prefs;
     private static PrefsManager instance;
@@ -198,7 +204,8 @@ public class PrefsManager {
                 "tap_leading_zone_percent",
                 "tap_trailing_zone_percent",
                 "paging_overlap_lines",
-                "active_theme_id"
+                "active_theme_id",
+                "large_text_partition_mode"
         };
         for (String key : keys) editor.remove(key);
         editor.commit();
@@ -374,6 +381,34 @@ public class PrefsManager {
     public void setAutoPageTurnIntervalSeconds(int seconds) {
         prefs.edit().putInt("auto_page_turn_interval_seconds", Math.max(2, Math.min(120, seconds))).apply();
     }
+
+    public int getLargeTextPartitionMode() {
+        return normalizeLargeTextPartitionMode(
+                prefs.getInt("large_text_partition_mode", LARGE_TEXT_PARTITION_MODE_STANDARD));
+    }
+
+    public void setLargeTextPartitionMode(int mode) {
+        prefs.edit().putInt("large_text_partition_mode", normalizeLargeTextPartitionMode(mode)).apply();
+    }
+
+    public int getLargeTextPartitionLines() {
+        return getLargeTextPartitionMode() == LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
+                ? LARGE_TEXT_PARTITION_LINES_HIGH_BUFFER
+                : LARGE_TEXT_PARTITION_LINES_STANDARD;
+    }
+
+    public int getLargeTextPartitionBufferLines() {
+        return getLargeTextPartitionMode() == LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
+                ? LARGE_TEXT_PARTITION_BUFFER_LINES_HIGH_BUFFER
+                : LARGE_TEXT_PARTITION_BUFFER_LINES_STANDARD;
+    }
+
+    private int normalizeLargeTextPartitionMode(int mode) {
+        return mode == LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
+                ? LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
+                : LARGE_TEXT_PARTITION_MODE_STANDARD;
+    }
+
     public String getLastDirectory() { return prefs.getString("last_directory", null); }
 
     public String getLastReaderSearchQuery() { return prefs.getString("last_reader_search_query", ""); }

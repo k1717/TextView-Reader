@@ -116,6 +116,7 @@ public class SettingsActivity extends AppCompatActivity {
         setupFontSize();
         setupLineSpacing();
         setupTextZoneTuning();
+        setupLargeTextPartitionMode();
         setupTextDisplayRules();
         setupTextDisplayRulesActualFile();
         setupEpubBoundary();
@@ -412,6 +413,30 @@ public class SettingsActivity extends AppCompatActivity {
         });
     }
 
+
+    private void setupLargeTextPartitionMode() {
+        Spinner modeSpinner = findViewById(R.id.spinner_large_txt_partition_mode);
+        if (modeSpinner == null) return;
+
+        String[] choices = {
+                getString(R.string.large_txt_partition_mode_standard),
+                getString(R.string.large_txt_partition_mode_high_buffer)
+        };
+        ArrayAdapter<String> adapter = makeSettingsSpinnerAdapter(choices);
+        modeSpinner.setAdapter(adapter);
+        modeSpinner.setSelection(prefs.getLargeTextPartitionMode() == PrefsManager.LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
+                ? PrefsManager.LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
+                : PrefsManager.LARGE_TEXT_PARTITION_MODE_STANDARD);
+        modeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                styleSpinnerText(view);
+                prefs.setLargeTextPartitionMode(position == PrefsManager.LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
+                        ? PrefsManager.LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
+                        : PrefsManager.LARGE_TEXT_PARTITION_MODE_STANDARD);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+    }
 
     private void setupTextDisplayRules() {
         View button = findViewById(R.id.btn_txt_display_rules);
@@ -1500,9 +1525,10 @@ public class SettingsActivity extends AppCompatActivity {
         // Page Overlap spinner: no weird boxed field. Blend into background.
         Spinner overlapSpinner = findViewById(R.id.spinner_overlap_lines);
         Spinner tapZoneSpinner = findViewById(R.id.spinner_tap_zone_mode);
+        Spinner largeTxtModeSpinner = findViewById(R.id.spinner_large_txt_partition_mode);
         Spinner epubDirectionSpinner = findViewById(R.id.spinner_epub_page_direction);
         Spinner epubEffectSpinner = findViewById(R.id.spinner_epub_page_effect);
-        Spinner[] spinners = new Spinner[]{overlapSpinner, tapZoneSpinner, epubDirectionSpinner, epubEffectSpinner};
+        Spinner[] spinners = new Spinner[]{overlapSpinner, tapZoneSpinner, largeTxtModeSpinner, epubDirectionSpinner, epubEffectSpinner};
         for (Spinner spinner : spinners) {
             if (spinner == null) continue;
             spinner.setBackgroundColor(bg);
@@ -1517,6 +1543,8 @@ public class SettingsActivity extends AppCompatActivity {
         if (font != null) font.setTextColor(sub);
         TextView spacing = findViewById(R.id.line_spacing_label);
         if (spacing != null) spacing.setTextColor(sub);
+        TextView boundaryDescription = findViewById(R.id.txt_boundary_description);
+        if (boundaryDescription != null) boundaryDescription.setTextColor(sub);
         TextView topOffset = findViewById(R.id.txt_top_offset_label);
         if (topOffset != null) topOffset.setTextColor(sub);
         TextView bottomOffset = findViewById(R.id.txt_bottom_offset_label);

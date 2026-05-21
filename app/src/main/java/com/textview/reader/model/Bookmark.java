@@ -15,6 +15,9 @@ import java.util.UUID;
  *   "fileName": "novel.txt",
  *   "charPosition": 12345,
  *   "lineNumber": 230,
+ *   "pageNumber": 123,
+ *   "totalPages": 456,
+ *   "pageLayoutSignature": "layout/page-model signature used for cached pageNumber/totalPages; TXT values depend on the selected large-TXT partition mode",
  *   "pcEditPosition": 230,
  *   "pcEditOriginalPosition": 230,
  *   "pcEditPositionType": "TXT logical line (1-based)",
@@ -39,6 +42,7 @@ public class Bookmark {
     private int lineNumber;    // approximate line number
     private int pageNumber;    // cached displayed page number for fast large-file restore
     private int totalPages;    // cached displayed total page count when bookmark was saved
+    private String pageLayoutSignature; // signature for the layout/page model that produced pageNumber/totalPages
     private String excerpt;    // text excerpt for quick reference
     private String label;      // optional user-defined label
     private String anchorTextBefore; // text immediately before charPosition for robust TXT restore
@@ -81,10 +85,13 @@ public class Bookmark {
         obj.put("lineNumber", lineNumber);
         obj.put("pageNumber", pageNumber);
         obj.put("totalPages", totalPages);
+        obj.put("pageLayoutSignature", pageLayoutSignature != null ? pageLayoutSignature : "");
 
-        // PC-edit helper fields.  They intentionally duplicate the internal
-        // position/memo in a friendlier form for exported JSON files:
-        // - Edit pcEditPosition only, then import the JSON back.
+        // PC-edit helper fields. They intentionally duplicate the internal
+        // position/memo in a clearer form for exported JSON files:
+        // - TXT editing should use logical lines or findText, not displayed
+        //   pageNumber/totalPages, because large-TXT page totals depend on the
+        //   selected runtime partition/page model.
         // - Leave pcEditOriginalPosition unchanged so the importer can detect
         //   that the human-readable position was intentionally changed.
         // - Edit memo instead of label if using a spreadsheet/text editor.
@@ -144,6 +151,8 @@ public class Bookmark {
         obj.put("fileType", type);
         obj.put("help_EN", getBeginnerHowToEditEn(type));
         obj.put("help_KO", getBeginnerHowToEditKo(type));
+        obj.put("pageModelNote_EN", getPageModelNoteEn(type));
+        obj.put("pageModelNote_KO", getPageModelNoteKo(type));
 
         JSONObject current = new JSONObject();
         current.put("lineOrPage", position);
@@ -153,6 +162,10 @@ public class Bookmark {
         if ("TXT".equals(type)) {
             current.put("line", position);
             current.put("meaning", "TXT logical line number, starting from 1");
+            current.put("cachedPageNumber", pageNumber);
+            current.put("cachedTotalPages", totalPages);
+            current.put("cachedPageModel", pageLayoutSignature != null ? pageLayoutSignature : "");
+            current.put("cachedPageMeaning", "Reference only: cached TXT page/total from the selected large-TXT partition page model. Edit setLine, moveByLines, or findText instead of cached page metadata.");
         } else if ("EPUB".equals(type)) {
             current.put("pageOrSection", position);
             current.put("meaning", "EPUB app page/section number, starting from 1");
@@ -201,8 +214,10 @@ public class Bookmark {
         obj.put("bookmarkId", id != null ? id : "");
         obj.put("fileName", fileName != null ? fileName : "");
         obj.put("fileType", type);
-        obj.put("help_EN", "For developer repair, edit edit.lineOrPage first. Edit edit.charPosition only when you intentionally want raw internal positioning.");
-        obj.put("help_KO", "개발자 복구용입니다. 먼저 edit.lineOrPage 수정을 권장합니다. raw 내부 위치를 직접 지정해야 할 때만 edit.charPosition을 수정하세요.");
+        obj.put("help_EN", getDeveloperHowToEditEn(type));
+        obj.put("help_KO", getDeveloperHowToEditKo(type));
+        obj.put("pageModelNote_EN", getPageModelNoteEn(type));
+        obj.put("pageModelNote_KO", getPageModelNoteKo(type));
 
         JSONObject current = new JSONObject();
         current.put("lineOrPage", position);
@@ -261,6 +276,7 @@ public class Bookmark {
         internal.put("lineNumber", lineNumber);
         internal.put("pageNumber", pageNumber);
         internal.put("totalPages", totalPages);
+        internal.put("pageLayoutSignature", pageLayoutSignature != null ? pageLayoutSignature : "");
         internal.put("charPosition", charPosition);
         internal.put("endPosition", endPosition);
         internal.put("createdAt", createdAt);
@@ -281,6 +297,7 @@ public class Bookmark {
         b.lineNumber = obj.optInt("lineNumber", 0);
         b.pageNumber = obj.optInt("pageNumber", 0);
         b.totalPages = obj.optInt("totalPages", 0);
+        b.pageLayoutSignature = obj.optString("pageLayoutSignature", obj.optString("layoutSignature", ""));
         b.excerpt = obj.optString("excerpt", "");
         b.anchorTextBefore = obj.optString("anchorTextBefore", "");
         b.anchorTextAfter = obj.optString("anchorTextAfter", "");
@@ -342,6 +359,34 @@ public class Bookmark {
         return "TXT logical line (1-based)";
     }
 
+    private String getPageModelNoteEn(String type) {
+        if ("TXT".equals(type)) {
+            return "TXT pageNumber/totalPages are cached display metadata from the selected large-TXT partition page model. They may differ between Standard 4000/400 and High-buffer 12000/600 modes. For backup editing, use setLine, moveByLines, or findText as the stable target.";
+        }
+        return "For PDF, EPUB, and Word bookmarks, the page/section value is the app document-page target.";
+    }
+
+    private String getPageModelNoteKo(String type) {
+        if ("TXT".equals(type)) {
+            return "TXT pageNumber/totalPages는 선택된 대용량 TXT 파티션 페이지 모델에서 나온 표시용 캐시입니다. 기본 4000/400과 고버퍼 12000/600 모드 사이에서 달라질 수 있습니다. 백업에서 위치를 수정할 때는 setLine, moveByLines, findText를 안정적인 기준으로 사용하세요.";
+        }
+        return "PDF, EPUB, Word 북마크의 페이지/섹션 값은 앱 문서 페이지 기준의 이동 대상입니다.";
+    }
+
+    private String getDeveloperHowToEditEn(String type) {
+        if ("TXT".equals(type)) {
+            return "For developer repair, prefer edit.lineOrPage, edit.setLine, or edit.findText first. pageNumber/totalPages are mode-dependent cached display values; edit charPosition only when you intentionally want raw internal positioning.";
+        }
+        return "For developer repair, edit edit.lineOrPage first. Edit edit.charPosition only when you intentionally want raw internal positioning.";
+    }
+
+    private String getDeveloperHowToEditKo(String type) {
+        if ("TXT".equals(type)) {
+            return "개발자 복구용입니다. 먼저 edit.lineOrPage, edit.setLine, edit.findText 수정을 권장합니다. pageNumber/totalPages는 모드에 따라 달라지는 표시용 캐시이므로, raw 내부 위치를 직접 지정해야 할 때만 charPosition을 수정하세요.";
+        }
+        return "개발자 복구용입니다. 먼저 edit.lineOrPage 수정을 권장합니다. raw 내부 위치를 직접 지정해야 할 때만 edit.charPosition을 수정하세요.";
+    }
+
     private String getBeginnerPositionMeaning(String type) {
         if ("PDF".equals(type)) return "PDF page number, starting from 1";
         if ("EPUB".equals(type)) return "EPUB page/section number, starting from 1";
@@ -362,7 +407,7 @@ public class Bookmark {
 
     private String getBeginnerHowToEditEn(String type) {
         if ("TXT".equals(type)) {
-            return "TXT: change setLine if you know the exact line. Use moveByLines for a small correction, or findText when you know a sentence instead of the line number. memo is free text.";
+            return "TXT: use setLine if you know the logical line, moveByLines for a small correction, or findText when you know a sentence. Do not edit cached pageNumber/totalPages for normal backup edits because those values depend on the selected partition page model. memo is free text.";
         }
         if ("EPUB".equals(type)) {
             return "EPUB: change setPageOrSection if you know the app page/section. Use moveByPages for a small correction. memo is free text.";
@@ -372,7 +417,7 @@ public class Bookmark {
 
     private String getBeginnerHowToEditKo(String type) {
         if ("TXT".equals(type)) {
-            return "TXT: 정확한 줄을 알면 setLine을 바꾸세요. 조금 보정하려면 moveByLines를 쓰고, 줄 번호 대신 문장을 알고 있으면 findText를 쓰면 됩니다. memo는 자유 메모입니다.";
+            return "TXT: 논리 줄 번호를 알면 setLine을 바꾸세요. 조금 보정하려면 moveByLines를 쓰고, 줄 번호 대신 문장을 알고 있으면 findText를 쓰면 됩니다. 일반 백업 수정에서는 파티션 페이지 모델에 따라 달라지는 cached pageNumber/totalPages를 직접 수정하지 마세요. memo는 자유 메모입니다.";
         }
         if ("EPUB".equals(type)) {
             return "EPUB: 정확한 앱 페이지/섹션을 알면 setPageOrSection을 바꾸세요. 조금 보정하려면 moveByPages를 쓰면 됩니다. memo는 자유 메모입니다.";
@@ -383,7 +428,7 @@ public class Bookmark {
     private String getBeginnerSampleEditEn(String type, int position) {
         int base = Math.max(1, position);
         if ("TXT".equals(type)) {
-            return "Examples: setLine=" + (base + 10) + ", moveByLines=0 -> move to line " + (base + 10) + "; keep setLine=" + base + " and set moveByLines=2 -> move to line " + (base + 2) + "; set findText=\"target phrase\", findOccurrence=1 -> move to that phrase.";
+            return "Examples: setLine=" + (base + 10) + ", moveByLines=0 -> move to line " + (base + 10) + "; keep setLine=" + base + " and set moveByLines=2 -> move to line " + (base + 2) + "; set findText=\"target phrase\", findOccurrence=1 -> move to that phrase. Do not use cached pageNumber/totalPages as the edit target for TXT.";
         }
         if ("EPUB".equals(type)) {
             return "Examples: setPageOrSection=" + (base + 5) + ", moveByPages=0 -> move to app page/section " + (base + 5) + "; keep setPageOrSection=" + base + " and set moveByPages=-1 -> move one page/section earlier.";
@@ -394,7 +439,7 @@ public class Bookmark {
     private String getBeginnerSampleEditKo(String type, int position) {
         int base = Math.max(1, position);
         if ("TXT".equals(type)) {
-            return "예시: setLine=" + (base + 10) + ", moveByLines=0 -> " + (base + 10) + "번째 줄로 이동; setLine=" + base + " 그대로 두고 moveByLines=2 -> " + (base + 2) + "번째 줄로 이동; findText=\"찾을 문장\", findOccurrence=1 -> 그 문장 위치로 이동.";
+            return "예시: setLine=" + (base + 10) + ", moveByLines=0 -> " + (base + 10) + "번째 줄로 이동; setLine=" + base + " 그대로 두고 moveByLines=2 -> " + (base + 2) + "번째 줄로 이동; findText=\"찾을 문장\", findOccurrence=1 -> 그 문장 위치로 이동. TXT 위치 수정에서는 cached pageNumber/totalPages를 기준으로 쓰지 마세요.";
         }
         if ("EPUB".equals(type)) {
             return "예시: setPageOrSection=" + (base + 5) + ", moveByPages=0 -> 앱 기준 " + (base + 5) + "번째 페이지/섹션으로 이동; setPageOrSection=" + base + " 그대로 두고 moveByPages=-1 -> 한 페이지/섹션 앞쪽으로 이동.";
@@ -441,6 +486,9 @@ public class Bookmark {
 
     public int getTotalPages() { return totalPages; }
     public void setTotalPages(int totalPages) { this.totalPages = totalPages; }
+
+    public String getPageLayoutSignature() { return pageLayoutSignature; }
+    public void setPageLayoutSignature(String pageLayoutSignature) { this.pageLayoutSignature = pageLayoutSignature; }
 
     public String getExcerpt() { return excerpt; }
     public void setExcerpt(String excerpt) { this.excerpt = excerpt; }

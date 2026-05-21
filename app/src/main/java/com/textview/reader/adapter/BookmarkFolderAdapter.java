@@ -97,6 +97,7 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
     private int textColor = Color.WHITE;
     private int subTextColor = Color.LTGRAY;
     private int pathTextColor = Color.GRAY;
+    private String currentPageLayoutSignature = "";
 
     public BookmarkFolderAdapter() {
         setHasStableIds(true);
@@ -116,6 +117,11 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
         this.subTextColor = blendColors(dialogBgColor, textColor, lightDialog ? 0.74f : 0.78f);
         this.pathTextColor = blendColors(dialogBgColor, textColor, lightDialog ? 0.58f : 0.66f);
         this.folderBorderColor = blendColors(dialogBgColor, textColor, lightDialog ? 0.260f : 0.360f);
+        notifyDataSetChanged();
+    }
+
+    public void setCurrentPageLayoutSignature(String signature) {
+        this.currentPageLayoutSignature = signature != null ? signature : "";
         notifyDataSetChanged();
     }
 
@@ -487,11 +493,42 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
             String range = end > bookmark.getCharPosition()
                     ? bookmark.getCharPosition() + " - " + end
                     : String.valueOf(bookmark.getCharPosition());
-            meta.setText("Position " + range + "  •  " + dateStr);
+            String pageText = "";
+            if (shouldShowPageMetadata(bookmark)) {
+                int total = Math.max(1, bookmark.getTotalPages());
+                int page = Math.max(1, Math.min(total, bookmark.getPageNumber()));
+                pageText = "Page " + page + " / " + total + "  •  ";
+            }
+            meta.setText(pageText + "Position " + range + "  •  " + dateStr);
             meta.setTextColor(pathTextColor);
 
             btnDelete.setColorFilter(subTextColor);
             btnDelete.setBackgroundColor(Color.TRANSPARENT);
+        }
+
+        private boolean shouldShowPageMetadata(Bookmark bookmark) {
+            if (bookmark == null || bookmark.getPageNumber() <= 0 || bookmark.getTotalPages() <= 0) {
+                return false;
+            }
+
+            String name = bookmark.getFileName();
+            if (name == null || name.trim().isEmpty()) {
+                name = bookmark.getFilePath();
+            }
+            boolean txtBookmark = name != null && FileUtils.isTextFile(name);
+            if (!txtBookmark) {
+                return true;
+            }
+
+            // TXT page numbers depend on the active large-file partition/page model.
+            // Do not display a saved TXT page total unless it was produced by the
+            // currently active model. This prevents old 4000/400 vs 12000/600 totals
+            // from appearing as if they were current.
+            String savedSignature = bookmark.getPageLayoutSignature() != null
+                    ? bookmark.getPageLayoutSignature()
+                    : "";
+            return !currentPageLayoutSignature.isEmpty()
+                    && currentPageLayoutSignature.equals(savedSignature);
         }
     }
 }
