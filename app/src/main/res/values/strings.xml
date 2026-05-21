@@ -7,7 +7,7 @@
     <string name="all_bookmarks_status">All bookmarks: %1$d files / %2$d bookmarks\nCurrent: Page %3$d / %4$d</string>
     <string name="app_name">TextView</string>
     <string name="auto_save_position">Auto-save Reading Position</string>
-    <string name="backup_description">Export/import bookmarks, reading positions, settings, and custom reading themes as a TextView JSON backup. Export files are named like textview_backup_year_month_day_hour_minute_second.json. For PC editing, use bookmarkEdits.beginner for safe memo/line/page changes, or bookmarkEdits.developer only for advanced repair. The backup includes friendly English/Korean guidance.</string>
+    <string name="backup_description">Export/import bookmarks, reading positions, settings, and custom reading themes as a TextView JSON backup. Export files are named like textview_backup_year_month_day_hour_minute_second.json. For PC editing, use bookmarkEdits.beginner for safe memo, TXT-line/search, and document-page changes, or bookmarkEdits.developer only for advanced repair. TXT cached page totals are page-model dependent. The backup includes clear English/Korean guidance.</string>
     <string name="bookmark">Bookmark</string>
     <string name="bottom_page">Page</string>
     <string name="bookmark_hints_show">Hints</string>
@@ -165,6 +165,7 @@
     <string name="tap_zone_leading_format">Previous zone: %1$d%%</string>
     <string name="tap_zone_trailing_format">Next zone: %1$d%%</string>
     <string name="settings_section_txt_layout">TXT layout</string>
+    <string name="txt_boundary_description">TXT boundaries move the readable viewport inward. TXT uses full-line clipping to avoid half-cut lines, so even several slider steps or tens of pixels may look unchanged until the next line boundary; page count also changes in line-sized steps.</string>
     <string name="txt_top_offset_default">TXT top boundary: 0px</string>
     <string name="txt_top_offset_format">TXT top boundary: %1$dpx</string>
     <string name="txt_bottom_offset_default">TXT bottom boundary: 0px</string>
@@ -173,6 +174,10 @@
     <string name="txt_left_inset_format">TXT left boundary: %1$dpx</string>
     <string name="txt_right_inset_default">TXT right boundary: 0px</string>
     <string name="txt_right_inset_format">TXT right boundary: %1$dpx</string>
+    <string name="large_txt_partition_mode">Large TXT partition mode</string>
+    <string name="large_txt_partition_mode_standard">Standard — 4,000 / 400 lines</string>
+    <string name="large_txt_partition_mode_high_buffer">High buffer — 12,000 / 600 lines</string>
+    <string name="large_txt_partition_mode_description">Controls the canonical partition size for large TXT files. Standard is the default stable model; High buffer uses wider runtime windows for smoother very-large-file handoff.</string>
 
     <string name="epub_page_direction">EPUB page direction</string>
     <string name="epub_page_direction_ltr">Left-to-right / Korean-Western books</string>

@@ -7,7 +7,7 @@
     <string name="all_bookmarks_status">전체 북마크: 파일 %1$d개 / 북마크 %2$d개\n현재: %3$d / %4$d쪽</string>
     <string name="app_name">TextView</string>
     <string name="auto_save_position">읽던 위치 자동 저장</string>
-    <string name="backup_description">북마크, 읽던 위치, 설정, 사용자 읽기 테마를 TextView JSON 백업으로 내보내기/가져오기합니다. 내보내기 파일 이름은 textview_backup_year_month_day_hour_minute_second.json 형식입니다. PC 수정은 안전한 메모/줄/페이지 변경용 bookmarkEdits.beginner를 사용하고, 고급 복구가 필요할 때만 bookmarkEdits.developer를 사용하세요. 백업에는 친절한 영문/국문 안내가 함께 들어갑니다.</string>
+    <string name="backup_description">북마크, 읽던 위치, 설정, 사용자 읽기 테마를 TextView JSON 백업으로 내보내기/가져오기합니다. 내보내기 파일 이름은 textview_backup_year_month_day_hour_minute_second.json 형식입니다. PC 수정은 안전한 메모, TXT 줄/문장 검색, 문서 페이지 변경용 bookmarkEdits.beginner를 사용하고, 고급 복구가 필요할 때만 bookmarkEdits.developer를 사용하세요. TXT 캐시 페이지 총수는 페이지 모델에 따라 달라집니다. 백업에는 간단한 영문/국문 안내가 함께 들어갑니다.</string>
     <string name="bookmark">북마크</string>
     <string name="bottom_page">페이지</string>
     <string name="bookmark_hints_show">도움말</string>
@@ -165,6 +165,7 @@
     <string name="tap_zone_leading_format">이전 영역: %1$d%%</string>
     <string name="tap_zone_trailing_format">다음 영역: %1$d%%</string>
     <string name="settings_section_txt_layout">TXT 레이아웃</string>
+    <string name="txt_boundary_description">TXT 경계는 본문 표시 영역을 화면 안쪽으로 줄입니다. TXT는 줄이 잘리지 않도록 완전한 줄 단위로 맞추기 때문에, 글꼴 크기·줄간격·현재 줄 위치에 따라 여러 단계 또는 수십 px 차이도 다음 줄 경계를 넘기 전까지 바로 보이지 않을 수 있습니다. 페이지 수 역시 줄 경계 단위로 계단식으로 변합니다.</string>
     <string name="txt_top_offset_default">TXT 상단 경계: 0px</string>
     <string name="txt_top_offset_format">TXT 상단 경계: %1$dpx</string>
     <string name="txt_bottom_offset_default">TXT 하단 경계: 0px</string>
@@ -173,6 +174,10 @@
     <string name="txt_left_inset_format">TXT 좌측 경계: %1$dpx</string>
     <string name="txt_right_inset_default">TXT 우측 경계: 0px</string>
     <string name="txt_right_inset_format">TXT 우측 경계: %1$dpx</string>
+    <string name="large_txt_partition_mode">대용량 TXT 파티션 모드</string>
+    <string name="large_txt_partition_mode_standard">기본 — 4,000 / 400줄</string>
+    <string name="large_txt_partition_mode_high_buffer">고버퍼 — 12,000 / 600줄</string>
+    <string name="large_txt_partition_mode_description">대용량 TXT의 공식 파티션 크기를 정합니다. 기본 모드는 안정성을 우선하고, 고버퍼 모드는 매우 큰 파일에서 전환 구간을 더 넓게 잡습니다.</string>
 
     <string name="epub_page_direction">EPUB 페이지 넘김 방향</string>
     <string name="epub_page_direction_ltr">왼쪽에서 오른쪽 / 국내·서양 서적</string>
