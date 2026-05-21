@@ -1,5 +1,48 @@
 # Changelog
 
+## 2.1.4 - 2026-05-21
+
+This package uses Android metadata `versionCode 2140` and `versionName "2.1.4"`.
+
+### Large TXT partition modes and page model
+
+- Added two Settings-selectable large-TXT partition tracks: Standard `4000/400` by default and High buffer `12000/600`.
+- The selected buffer size is applied consistently to both lookahead and manual-scroll lookbehind: `400` lines in Standard mode and `600` lines in High buffer mode.
+- Moved the large-TXT partition-mode selector below the TXT boundary sliders in Settings.
+- Made the selected runtime canonical partition mode the official large-TXT page model for exact page count, tap next/previous, slider, Go to Page, bookmark, search jump, exact-anchor cache, and partition cache signatures.
+- Changing the partition mode while a large TXT is open now invalidates stale exact-page denominators, refreshes the active partition under the new mode, and schedules a full exact page-index rebuild through the stable-layout gate.
+- Partition mode, partition body length, and buffer length are included in page/index cache signatures so exact anchors and cached bookmark page metadata are not reused across incompatible models.
+
+### Large TXT navigation and manual-scroll continuity
+
+- After exact indexing is ready, tap next/previous follows the exact page-anchor table directly, selecting the next/previous anchor from the current absolute top character position.
+- Slider and Go to Page use canonical body-partition exact anchors; manual-scroll seam buffers are not reused as page-number jump targets.
+- Exact-completed slider and Go to Page jumps land on the raw exact page anchor directly, avoiding context-based shifts when repeated text appears nearby.
+- Manual scroll can hand off to a prefetched neighboring partition after scroll settles while preserving the same absolute top position.
+- Conservative top-based partition handoff remains the fallback when the next partition is not cached or cannot represent the current viewport safely.
+- Runtime lookbehind remains a seam-handoff buffer only and does not inflate exact page counts or page-number navigation targets.
+
+### TXT bookmarks and backup page-model state
+
+- TXT bookmarks now store the page-layout signature that produced their cached page/total metadata.
+- When switching between Standard `4000/400` and High buffer `12000/600`, stale TXT bookmark page totals are not displayed as current.
+- When the current large-TXT exact anchor table is ready, existing bookmarks for the opened file are refreshed to the active partition mode's page/total count.
+- TXT bookmark jumps keep absolute text/anchor restoration and ignore stale page-offset metadata saved under a different partition mode.
+- Exported backups now include large-TXT bookmark page-model state, including the active partition mode, lookahead/lookbehind size, and whether cached TXT page metadata matches the current mode.
+- TXT bookmark backup edits that move a bookmark by line/search/raw character clear stale cached page metadata/signatures so the viewer recalculates `Page X / Y` from the active partition mode.
+- Backup edit guidance now explains that TXT `pageNumber` / `totalPages` are mode-dependent display metadata and that normal TXT bookmark edits should use `setLine`, `moveByLines`, or `findText`.
+- Full backup schema marker is now `textview-full-backup-v10` with format version `8`.
+
+### TXT layout and page-count stability
+
+- Added an in-app TXT boundary note explaining that boundary sliders move the readable viewport inward while rendering and pagination snap to complete line boundaries.
+- Explicit page-model changes invalidate stale exact indexes immediately, while general large-TXT exact page-count rebuilds remain behind the debounced layout-stability gate.
+- Large-TXT exact indexing still discards stale-signature results and schedules a fresh stable-layout rebuild when needed.
+
+### Build metadata
+
+- Kept documented build toolchain at Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
+
 ## 2.1.2b
 
 This package uses Android metadata `versionCode 2122` and `versionName "2.1.2b"`. It consolidates TXT Display Rules, actual-file editing, low-power TXT Auto Page Turn, large-TXT paging/search work, EPUB/Word Find cleanup, fixed-layout EPUB handling, and PDF zoom/pan tuning into one 2.1.2b release.
@@ -40,9 +83,9 @@ This package uses Android metadata `versionCode 2122` and `versionName "2.1.2b"`
 
 ### Large TXT page movement and exact indexing
 
-- Large TXT active rendering remains based on fixed 4,000-logical-line partitions.
+- Large TXT active rendering remains based on fixed selected-size logical-line partitions.
 - Page movement no longer waits for exact full-page indexing to finish.
-- If exact anchors are still building or fail, Go to Page / slider movement falls back to an estimated 4,000-line partition jump.
+- If exact anchors are still building or fail, Go to Page / slider movement falls back to an estimated selected-size partition jump.
 - Replaced the memory-heavy full-file exact-index layout path with chunked line-based exact indexing.
 - When chunked exact anchors finish, the viewer updates the total page count from estimated to exact.
 - Added a layout-stability gate for large-TXT exact indexing: the first build and all rebuilds now wait until width, viewport height, vertical margin, overlap, and line spacing produce the same geometry signature across two debounce checks.
@@ -64,7 +107,7 @@ This package uses Android metadata `versionCode 2122` and `versionName "2.1.2b"`
 
 ### TXT body search
 
-- Large-TXT body search no longer searches only the currently loaded 4,000-line partition.
+- Large-TXT body search no longer searches only the currently loaded selected-size partition.
 - Search scans the display-rule-applied TXT stream, finds the matching logical line, loads the owning partition, and moves to the result.
 - Search does not need to wait for exact page indexing to finish.
 - Large-TXT search uses a separate background executor so long exact-page-index builds do not block find-next/find-previous requests.
@@ -75,7 +118,7 @@ This package uses Android metadata `versionCode 2122` and `versionName "2.1.2b"`
 
 ### EPUB and Word reader
 
-- Kept Word Find rollback: Word same-page Previous/Next search uses native WebView `findNext()` / `FindListener` behavior only, with no custom reveal pass, forced ordinal correction, or DOM marker insertion.
+- Word same-page Previous/Next search uses native WebView `findNext()` / `FindListener` behavior only, with no custom reveal pass, forced ordinal correction, or DOM marker insertion.
 - EPUB and Word Find avoid JavaScript/DOM marker layout edits and rely on native WebView Find behavior.
 - Replaced Word and normal EPUB Find floating dialogs with an inline toolbar-level Find panel so search controls do not cover the WebView viewport.
 - Kept fixed-layout EPUB Find as an overlay so opening Find does not shrink the WebView or push fixed-size pages down through layout reflow.
@@ -87,7 +130,7 @@ This package uses Android metadata `versionCode 2122` and `versionName "2.1.2b"`
 ### PDF reader
 
 - Corrected PDF zoom-reset scope: vertical continuous scroll keeps the current zoom, while horizontal page-swipe mode resets zoom to `1.0` when moving to another page.
-- Rolled back PDF page-navigation scroll-offset clearing, so page movement no longer forces the next page to top-left.
+- PDF page navigation preserves the current scroll offset, so page movement no longer forces the next page to top-left.
 - Increased zoomed-page pan speed in PDF horizontal swipe mode.
 - Horizontal and vertical in-page panning now both receive zoom-only acceleration.
 - Kept the existing horizontal page-turn threshold unchanged.
@@ -113,10 +156,10 @@ This entry shows the final functional difference from the uploaded **2.1.0** Git
 
 ### Large TXT paging and partitioning
 
-- Changed large TXT active rendering to fixed **4,000-logical-line partitions** instead of the earlier estimated preview-window behavior.
-- Added a lookahead region after each active partition so partition-end pages can render smoothly.
+- Changed large TXT active rendering to fixed **selected-size logical-line partitions** instead of the earlier estimated preview-window behavior.
+- Expanded the lookahead region after each active partition according to the selected mode so partition-end pages can render smoothly.
 - Added in-place partition switching so crossing a partition boundary behaves like a page turn instead of a visible file reload where possible.
-- Added coverage-exact partition handoff: before the exact global index is ready, large-TXT forward page turns continue from the first line not displayed on the previous screen instead of jumping blindly to the next 4,000-line boundary. This prevents skipped content and prevents extra repeated displayed lines beyond the configured overlap at partition seams.
+- Added coverage-exact partition handoff: before the exact global index is ready, large-TXT forward page turns continue from the first line not displayed on the previous screen instead of jumping blindly to the next selected-size boundary. This prevents skipped content and prevents extra repeated displayed lines beyond the configured overlap at partition seams.
 - Respected the configured page-overlap setting in large-TXT partition mode while preventing extra duplication at partition seams beyond the user-selected overlap.
 - Preserved the displayed global page number during partition-boundary page turns when the exact large-TXT page index is still unavailable, preventing jumps such as `8082/8093` suddenly falling back to an earlier partition estimate.
 - Hardened rapid backward page turns at partition boundaries by blocking stacked boundary reloads until the active partition swap finishes.
@@ -161,7 +204,7 @@ This entry shows the final functional difference from the uploaded **2.1.0** Git
 
 - `bookmarkEdits.beginner` is intended for safe user edits such as memo, target line/page, relative movement, and TXT phrase search.
 - `bookmarkEdits.developer` keeps repair-oriented fields such as raw character position, anchors, file identity, and internal metadata.
-- Added shorter and kinder bilingual English/Korean guidance for both beginner and developer sections.
+- Added shorter and clear bilingual English/Korean guidance for both beginner and developer sections.
 - Kept import compatibility with the older 2.1.0 backup-edit fields.
 
 ### Bookmark jump anchoring

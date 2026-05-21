@@ -2,7 +2,23 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.1.2b**
+Current version: **2.1.4**
+
+
+## 2.1.4 release summary
+
+- Updated Android version metadata to `versionCode 2140` and `versionName "2.1.4"`.
+- Added two Settings-selectable large-TXT partition tracks: Standard `4000/400` by default and High buffer `12000/600`. The second value is used for both lookahead and manual-scroll lookbehind.
+- Moved the large-TXT partition-mode selector below the TXT boundary sliders in Settings so it sits with the TXT layout controls.
+- Made the selected runtime canonical partition mode the official large-TXT page model. Final page count, tap next/previous, slider, Go to Page, bookmark, search jump, exact-anchor cache, and partition cache signatures now use the same model.
+- Changing the large-TXT partition mode while a TXT is open now invalidates the previous exact-page denominator, refreshes the active partition under the selected mode, and schedules a full exact page-index rebuild through the layout-stability gate.
+- After the large-TXT exact page index is ready, tap next/previous follows the exact page-anchor table. The target is selected from the current absolute top character position, so a small manual scroll before tapping snaps to the proper page start.
+- Kept low-power manual-scroll continuity: after scroll settles, the reader can hand off to a prefetched neighboring partition while preserving the same absolute top position; conservative top-based handoff remains the fallback when the next partition is not ready.
+- TXT bookmarks now store the page-layout signature that produced cached `Page X / Y` metadata. When the active large-TXT page model changes, stale cached page totals are not reused, and bookmarks are refreshed after the current exact anchor table is ready.
+- Exported backups now include large-TXT bookmark page-model state, including the active partition mode, lookahead/lookbehind size, and whether cached TXT page metadata matches the current mode.
+- TXT bookmark backup-edit guidance now treats `pageNumber` / `totalPages` as mode-dependent display metadata and directs normal edits to `setLine`, `moveByLines`, or `findText` instead.
+- Full backup schema marker is now `textview-full-backup-v10` with format version `8` for the added large-TXT partition page-model fields.
+- Preserved the Android build toolchain metadata at **Android Gradle Plugin 9.1.1** and **Gradle wrapper 9.3.1**.
 
 ## 2.1.2b release summary
 
@@ -17,34 +33,35 @@ Current version: **2.1.2b**
 - Added low-power **Auto Page Turn** as a TXT toolbar button. Auto Page Turn advances one page after the user-selected seconds interval and stops when the user manually moves the page.
 - Added **Reset settings** in Settings. It restores reader/app preferences to defaults while keeping bookmarks, reading positions, recent files, folder shortcuts, TXT Display Rules, custom themes, and PIN lock.
 - Added a right-side **← Parent folder** / **← 상위 폴더로** button in the main file-browser path bar.
-- Improved large-TXT page movement with estimated 4,000-line partition jumps while exact indexing is still building, replacing the previous full-file exact-index path with chunked line-based exact indexing.
+- Improved large-TXT page movement with estimated selected-size partition jumps while exact indexing is still building, replacing the previous full-file exact-index path with chunked line-based exact indexing.
 - Added large-TXT page-count stability handling: exact indexing now waits until the TXT layout geometry is stable before building page anchors, and stale-geometry index results automatically trigger a fresh rebuild instead of becoming the final total.
 - Replaced object-hash-based typeface signature data with a stable font key for large-TXT exact-index signatures, reducing unnecessary index rebuilds across app restarts or font reloads.
 - Normalized TXT reader bottom padding through a canonical bottom band so live navigation-bar inset timing does not change the viewport height used for TXT page counting.
 - Improved large-TXT final-page handling so EOF-tail pages remain reachable by tap/page-down, with reduced flicker and reduced delay when the final partition is already active.
 - Improved large-TXT Find so search can jump to the matching logical line/partition without waiting for exact page indexing. Added **Nth / n번째** search and background total-count completion for large-TXT search counters.
-- Kept Word Find rollback: Word same-page Previous/Next search uses native WebView `findNext()` / `FindListener` behavior only, without custom reveal, forced ordinal correction, or DOM marker insertion.
+- Word same-page Previous/Next search uses native WebView `findNext()` / `FindListener` behavior only, without custom reveal, forced ordinal correction, or DOM marker insertion.
 - Reworked Word and normal EPUB Find UI into an inline toolbar-level panel so the Find controls do not float over the WebView search target.
 - Kept fixed-layout EPUB Find as an overlay so opening Find does not shrink the WebView or push the fixed page down by layout reflow.
 - Fixed-layout EPUB pages are detected through fixed-layout metadata / numeric viewport data, kept out of reader-theme reflow CSS, and centered as fixed-size pages during normal reading.
 - While fixed-layout EPUB Find is open, the fixed page is temporarily positioned below the Find overlay; closing Find removes the temporary offset and restores normal centered placement.
 - Stabilized EPUB/Word double-tap reset so the app reset does not fight WebView native double-tap zoom behavior.
 - PDF horizontal page-swipe mode now resets zoom to `1.0` when moving to another page; PDF vertical continuous scroll keeps the current zoom while scrolling between pages.
-- Rolled back PDF page-navigation scroll-offset clearing, so page movement no longer forces a top-left scroll snap.
+- PDF page navigation preserves the current scroll offset, so page movement no longer forces a top-left scroll snap.
 - Increased zoomed PDF in-page pan acceleration for both horizontal and vertical panning in horizontal swipe mode, while keeping the existing horizontal page-turn threshold unchanged.
 - Updated Android version metadata to `versionCode 2122` and `versionName "2.1.2b"`.
 
 ## What changed in 2.1.1 from 2.1.0
 
-- Reworked large TXT active rendering around fixed **4,000-logical-line partitions** with lookahead, in-place partition switching, a bounded partition cache, and direction-aware neighbor prefetch.
+- Reworked large TXT active rendering around selected fixed-line partitions with mode-dependent lookahead, in-place partition switching, a bounded partition cache, and direction-aware neighbor prefetch.
 - Added a background exact large-TXT page-anchor index so page labels, toolbar slider jumps, Go to Page, page turns, and bookmark jumps can resolve against real page anchors after indexing completes.
-- Hardened large-TXT partition seams so page movement continues from the correct next-page anchor, respects the configured page-overlap setting, and avoids extra duplicated or skipped displayed content at 4,000-line boundaries.
+- Hardened large-TXT partition seams so page movement continues from the correct next-page anchor, respects the configured page-overlap setting, and avoids extra duplicated or skipped displayed content at selected partition boundaries.
 - Stabilized large-TXT page status during fast forward/backward partition changes so temporary partition estimates do not make the displayed page or total page count jump backward.
 - Made TXT pagination use a canonical status-bar-off content spacing model, so toggling Android status-bar visibility does not change TXT page counts. The page indicator is visually lowered by one reader text row.
 - Fixed TXT toolbar slider and Go to Page behavior so the selected target page does not snap back to the old page while an uncached large-TXT partition is loading.
+- Large-TXT exact-completed slider / Go to Page jumps now use the raw exact page anchor directly, without bookmark-style text-context re-anchoring, so repeated phrases on the same page cannot shift the landing position away from the page start.
 - Updated the TXT loading window to a compact rounded, theme-aware panel and reused it for uncached large-TXT slider, Go to Page, and bookmark jumps.
 - Changed backup bookmark PC editing from the old repeated `beginnerEditableBookmarks` tutorial format to a cleaner `bookmarkEdits.beginner` / `bookmarkEdits.developer` structure, while keeping backward-compatible import for old backups.
-- Added friendlier bilingual English/Korean backup-edit guidance for both beginner-safe edits and developer/internal recovery edits.
+- Added clear bilingual English/Korean backup-edit guidance for both beginner-safe edits and developer/internal recovery edits.
 - Improved TXT bookmark loading by carrying anchor context into bookmark jumps, making large-TXT and layout-change restoration more stable.
 - Made original-size PDF page swipes more sensitive while keeping zoomed PDF gestures conservative enough to pan first.
 - Removed the PDF loading spinner from fast page-turn and zoom redraws, while keeping it for initial PDF loading.
@@ -65,7 +82,7 @@ Current version: **2.1.2b**
 - Improved TXT bookmark save behavior so it anchors to the actual title-covered visual row and avoids off-by-one saves caused by row-boundary ambiguity.
 - Added robust TXT bookmark restore using saved character position plus surrounding anchor text, so bookmarks stay tied to the same text passage after font, boundary, or spacing changes.
 - Added portable bookmark identity metadata so imported bookmarks can rebind to the same file after the file is moved or restored on another device.
-- Expanded JSON backup/export with beginner-friendly bookmark editing sections, bilingual tutorial markers, detailed examples, and timestamped filenames such as `textview_backup_year_month_day_hour_minute_second.json`.
+- Expanded JSON backup/export with beginner-oriented bookmark editing sections, bilingual tutorial markers, detailed examples, and timestamped filenames such as `textview_backup_year_month_day_hour_minute_second.json`.
 
 > Package migration note: Android treats `com.textview.reader` as a different app from legacy package builds. Use the backup/export flow in the old app and import the backup in this build to migrate bookmarks, reading positions, settings, and custom themes.
 
@@ -93,6 +110,7 @@ Current version: **2.1.2b**
 - Page indicator alignment can be set to left, center, right, or hidden.
 - When the TXT control selector is open, the current file title appears under the top page indicator and hides again in full viewer mode.
 - TXT pagination uses line-boundary anchors to reduce duplicate/skipped lines and keep first/last page rows aligned.
+- TXT boundary controls move the readable viewport inward, but TXT rendering still snaps to complete line boundaries so text rows are never half-cut. Depending on font size, line spacing, and the current row position, even a range of several slider steps or tens of pixels may look unchanged until the next full-line boundary is crossed; page-count changes follow the same line-sized steps.
 - Use **More > Add display rule** to create a TXT display rule from inside the reader. Long-pressing a visible word can prefill the find field.
 - Use **More > TXT Display Rules** to manage display rules for viewing-only masking/replacement. Rule changes are applied to the viewer after the rule window closes.
 - Use **Settings > Edit Actual TXT File** only when you want to permanently write enabled display-rule results into the current TXT file or a copied `*_edited.txt` file.
@@ -143,17 +161,19 @@ Current version: **2.1.2b**
 ### TXT reading
 
 - Encoding detection for UTF-8, EUC-KR/CP949/MS949, and UTF-16.
-- Large TXT handling with fixed 4,000-logical-line active partitions, lookahead rendering, neighbor prefetch, and generated page/index cache bookkeeping.
-- Large TXT exact page count is built in the background with partition-aware chunked indexing, so very high-line-count files can still finish indexing without requiring one giant full-file layout.
+- Large TXT handling with selected fixed-line active partitions with mode-dependent lookahead rendering, neighbor prefetch, and generated page/index cache bookkeeping.
+- Large TXT exact page count is built in the background with the same selected canonical partition model used by the runtime reader, so page count and page jumps stay synchronized with the actual rendered view without requiring one giant full-file layout.
 - Large TXT exact indexing is gated by layout stability: the app waits for matching layout measurements before starting the background page-anchor build, and restarts the build if the layout signature changes before completion.
+- Exact large-TXT slider and Go to Page jumps use canonical body partitions; manual-scroll lookbehind buffers are kept in a separate cache and are not reused as page-jump targets.
+- Large TXT viewport-sensitive setting changes still use the debounced layout-stability rebuild path, so saved near-end page/total restore labels are not overwritten by a temporary local-partition estimate while the exact index rebuilds.
 - Large TXT page-count signatures use a stable font key instead of `Typeface.hashCode()`, avoiding false rebuild triggers caused by new Typeface object instances.
 - TXT page counting uses a canonical reader bottom band instead of live navigation-bar inset height, making the viewport used for pagination more repeatable across app launches and system-bar timing.
-- The exact large-TXT page map follows the same sequential 4,000-line partition path used by tap paging; seam lookahead text is used for continuity, not double-counted as extra independent pages.
+- The exact large-TXT page map follows the same selected runtime canonical partition path used by tap, slider, Go to Page, bookmark, and search movement; mode-dependent seam lookahead text is used for continuity, not as an independent full-file page model.
 - Manual finger scrolling in large TXT mode now re-anchors from lookahead text into the owning next partition after scrolling settles, reducing duplicated seam text during scroll-based reading.
 - Pulling downward at the top of a large-TXT partition can load the previous partition, so manual scroll navigation is safer in both directions.
 - Sequential TXT page turns now use a coverage guard: forward tap/volume/auto paging cannot start after the first row that was not fully visible on the previous page, and partition handoff uses the same guarded next-page anchor.
 - Large TXT Go to Page and slider movement can fall back to estimated logical-line/partition jumps before exact indexing finishes.
-- Large TXT search jumps to the result partition without waiting for exact page indexing. Previous/Next stops at the nearest match for responsiveness, and repeated Previous/Next taps can move instantly when the next match is already inside the loaded 4,000-line partition. Nth occurrence search scans the full file when needed.
+- Large TXT search jumps to the result partition without waiting for exact page indexing. Previous/Next stops at the nearest match for responsiveness, and repeated Previous/Next taps can move instantly when the next match is already inside the loaded selected-size partition. Nth occurrence search scans the full file when needed.
 - Search jumps place the matching line in a safe upper-middle reader area so newly loaded large-TXT partitions do not hide the result under the page title, toolbar overlay, or open Find popup.
 - TXT search includes an **Nth / n번째** occurrence option for direct match navigation.
 - Final-page jumps in partitioned TXT files use the real EOF partition's visual end to keep the document's last page reachable even when the file ends with blank lines.
@@ -217,7 +237,7 @@ Current version: **2.1.2b**
 - Search UI uses reader-style input, custom cursor/handle styling, match counter, Previous/Next, and wrap behavior.
 - EPUB/Word bottom toolbar stays fixed while the soft keyboard is open in Find/text-input dialogs.
 - EPUB and Word Find avoid JavaScript/DOM marker layout edits and rely on native WebView Find behavior.
-- Word same-page Find-follow correction is rolled back; same-page navigation uses WebView native `findNext()` / `FindListener` behavior only.
+- Word same-page navigation uses WebView native `findNext()` / `FindListener` behavior only.
 - EPUB/Word double-tap reset is stabilized so app reset handling does not conflict with WebView native double-tap zoom.
 - Font selector follows the TXT reader font-dialog structure.
 - EPUB file-declared fonts can be used as **Default font**.
@@ -248,7 +268,8 @@ Current version: **2.1.2b**
 - Portable bookmark identity metadata allows imported bookmarks to rebind to the same file after the file is moved or restored on another device.
 - Export/import support for bookmarks, reading positions, app settings, layout settings, and custom reading themes.
 - Backup filenames use the timestamped form `textview_backup_year_month_day_hour_minute_second.json`.
-- Exported backups include friendly bilingual backup-edit guidance and separated `bookmarkEdits.beginner` / `bookmarkEdits.developer` areas for PC editing.
+- Exported backups include clear bilingual backup-edit guidance and separated `bookmarkEdits.beginner` / `bookmarkEdits.developer` areas for PC editing.
+- Bookmark backup-edit guidance now explains that TXT `pageNumber` / `totalPages` are cached page-model metadata: they can differ between Standard `4000/400` and High-buffer `12000/600`, so normal TXT bookmark edits should use `setLine`, `moveByLines`, or `findText`.
 - Import remains compatible with older backups that use `beginnerEditableBookmarks`, `pcEditPosition`, or older memo/position edit fields.
 - Reading-position persistence per file.
 - Bookmark cleanup and cache cleanup are separate.
@@ -343,3 +364,4 @@ Do not upload duplicate root-level Android folders such as `java/`, `res/`, or r
 ## Release notes
 
 See [`CHANGELOG.md`](CHANGELOG.md) and [`PATCHNOTES.md`](PATCHNOTES.md).
+
