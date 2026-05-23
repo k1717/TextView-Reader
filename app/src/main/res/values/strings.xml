@@ -40,6 +40,7 @@
     <string name="delete_bookmark_folder_message">Delete all %1$d bookmarks in this folder?</string>
     <string name="delete_bookmark_folder_note">Only the saved bookmarks will be removed. The document file will not be deleted.</string>
     <string name="delete_failed">Delete failed</string>
+    <string name="delete_file_confirm_detail">This removes the item from storage. This cannot be undone.</string>
     <string name="delete_file_confirm">Delete “%1$s”?</string>
     <string name="delete_this_bookmark">Delete this bookmark?</string>
     <string name="deleted">Deleted</string>
