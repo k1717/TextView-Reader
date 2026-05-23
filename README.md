@@ -2,8 +2,24 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.1.4**
+Current version: **2.1.5**
 
+
+## 2.1.5 release summary
+
+- Updated Android version metadata to `versionCode 2150` and `versionName "2.1.5"`.
+- The main file-browser long-press Delete action now uses a narrower compact rounded reconfirmation dialog before physically deleting a file or folder from storage.
+- The delete confirmation uses stacked actions instead of side-by-side buttons: **Delete** on top and **Cancel** below.
+- After deletion, the visible main-screen state is refreshed: Recent/home reloads recent files, search results rerun the active query, folder browsing reloads the current directory, and drawer/recent-folder state is rebuilt.
+- Deleted folders are also removed from recent-folder, folder-shortcut, and last-directory state where applicable.
+- Backup export now includes a large-TXT bookmark page-model summary count. It does not open every TXT file to recalculate page totals after a partition-mode change; stale or unknown cached `Page X / Y` labels are marked and refresh when that file is opened and exact anchors rebuild.
+- TXT bookmark edit rows include page-model status fields such as `cachedPageModelMatchesCurrentPartitionMode` and `requiresOpenFileRebuildForCurrentPageModel`, while bookmark position remains preserved through `charPosition`, line, and surrounding anchor text.
+- Added delayed background memory trimming for TXT and PDF viewers. The app does not immediately discard reader memory when it is briefly sent to the background.
+- Added a 420-second grace delay for short app switches, Settings visits, or quick Home/app-switcher returns. Returning within the grace window cancels the pending trim and keeps the current view warm.
+- If the app remains hidden beyond the grace window, or Android sends stronger memory-pressure callbacks such as `TRIM_MEMORY_BACKGROUND` or `TRIM_MEMORY_RUNNING_LOW`, the viewer trims heavy state more aggressively.
+- TXT background trimming saves the current character/page position and nearby anchor text, clears loaded text snapshots, large-TXT partition caches, exact page anchors, search/prefetch state, and in-flight generation tokens, then lazy-reloads the same file at the saved position on return.
+- PDF background trimming recycles the current single-page bitmap and clears vertical-continuous bitmap caches while keeping the PDF renderer itself available for faster redraw when the user returns.
+- Preserved the Android build toolchain metadata at **Android Gradle Plugin 9.1.1** and **Gradle wrapper 9.3.1**.
 
 ## 2.1.4 release summary
 
@@ -154,7 +170,7 @@ Current version: **2.1.4**
 - Fixed drawer storage shortcuts for common locations.
 - User-added folder shortcuts.
 - Recent folders separated from user shortcuts.
-- Rename, delete, new-folder, and file-info actions.
+- Rename, delete, new-folder, and file-info actions. Long-press delete uses a rounded reconfirmation dialog with Delete stacked above Cancel.
 - Hidden-file toggle.
 - Android Storage Access Framework support for files opened from other apps.
 

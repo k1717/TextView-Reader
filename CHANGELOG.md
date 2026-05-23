@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.1.5 - 2026-05-23
+
+This package uses Android metadata `versionCode 2150` and `versionName "2.1.5"`.
+
+### Main file browser
+
+- The main file-browser long-press Delete action now opens a narrower compact rounded reconfirmation dialog before physically deleting a file or folder from storage.
+- The confirmation dialog uses stacked buttons: **Delete** on top and **Cancel** below.
+- After a successful delete, the current main-screen state is refreshed: Recent/home reloads recent files, search results rerun the active query, folder browsing reloads the current directory, and drawer/recent-folder state is rebuilt.
+- Deleted folders are removed from recent-folder, folder-shortcut, and last-directory state where applicable.
+
+### Bookmark backup page-model summary
+
+- Backup export now includes a large-TXT bookmark page-model summary count for current, stale/unknown, and not-yet-recalculated TXT bookmark page labels.
+- Backup export does not open every TXT file after a partition-mode change; stale or unknown cached `Page X / Y` labels are marked and refresh when the relevant file is opened and exact anchors rebuild.
+- TXT bookmark edit rows keep page-model status fields such as `cachedPageModelMatchesCurrentPartitionMode` and `requiresOpenFileRebuildForCurrentPageModel`.
+- Bookmark position remains preserved through `charPosition`, line, and surrounding anchor text; `Page X / Y` remains display metadata that is trusted only when it matches the active partition page model.
+
+### Background memory handling
+
+- TXT and PDF viewers now use delayed background memory trimming instead of clearing heavy state immediately when the app is briefly switched away.
+- Short app switches, Settings visits, and quick Home/app-switcher returns are protected by a 420-second grace delay; returning before the delay cancels the trim and keeps the current view responsive.
+- If the app remains hidden beyond the grace window, or Android reports stronger memory pressure such as `TRIM_MEMORY_BACKGROUND` or `TRIM_MEMORY_RUNNING_LOW`, the viewers trim heavy state more aggressively.
+- TXT saves the current character/page position and nearby anchor text, releases loaded text snapshots, large-TXT partition caches, exact page anchors, prefetch/search cache state, and in-flight generation tokens, then lazy-reloads the same file at the saved position on return.
+- PDF recycles the current single-page bitmap and clears vertical-continuous bitmap caches after the same grace delay while keeping the PDF renderer itself available for faster redraw on return.
+
+### Build metadata
+
+- Updated Android app metadata to `versionCode 2150` and `versionName "2.1.5"`.
+- Kept documented build toolchain at Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
+
 ## 2.1.4 - 2026-05-21
 
 This package uses Android metadata `versionCode 2140` and `versionName "2.1.4"`.
