@@ -74,6 +74,8 @@ import java.util.concurrent.Executors;
  */
 public class PdfReaderActivity extends AppCompatActivity {
 
+    private static final long BACKGROUND_MEMORY_TRIM_DELAY_MS = 420_000L;
+
     public static final String EXTRA_FILE_PATH = ReaderActivity.EXTRA_FILE_PATH;
     public static final String EXTRA_FILE_URI = ReaderActivity.EXTRA_FILE_URI;
     public static final String EXTRA_JUMP_TO_PAGE = ReaderActivity.EXTRA_JUMP_TO_POSITION;
@@ -162,6 +164,8 @@ public class PdfReaderActivity extends AppCompatActivity {
     private float renderedZoom = 1.0f;
     private int pendingPageSlideDirection = 0;
     private int renderGeneration = 0;
+    private boolean backgroundPdfBitmapsReleased = false;
+    private final Runnable backgroundPdfMemoryTrimRunnable = () -> trimPdfBitmapsForBackground(false);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -726,11 +730,13 @@ public class PdfReaderActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        cancelPdfBackgroundMemoryTrim();
         ThemeManager.getInstance(this).reloadFromStorage();
         applyDocumentSystemBarColors();
         styleControls();
         Toolbar toolbar = findViewById(R.id.toolbar);
         if (toolbar != null) toolbar.setNavigationIcon(tintedBackIcon());
+        restorePdfBitmapsAfterBackgroundTrimIfNeeded();
     }
 
     private void resolveReaderThemeColors() {
@@ -2393,6 +2399,35 @@ public class PdfReaderActivity extends AppCompatActivity {
         return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
+    private void cancelPdfBackgroundMemoryTrim() {
+        handler.removeCallbacks(backgroundPdfMemoryTrimRunnable);
+    }
+
+    private void schedulePdfBackgroundMemoryTrim() {
+        if (activityDestroyed || backgroundPdfBitmapsReleased || pdfRenderer == null) return;
+        handler.removeCallbacks(backgroundPdfMemoryTrimRunnable);
+        handler.postDelayed(backgroundPdfMemoryTrimRunnable, BACKGROUND_MEMORY_TRIM_DELAY_MS);
+    }
+
+    private void trimPdfBitmapsForBackground(boolean force) {
+        if (activityDestroyed || backgroundPdfBitmapsReleased || pdfRenderer == null) return;
+        if (!force && !isFinishing() && !isChangingConfigurations() && hasWindowFocus()) return;
+        saveReadingState();
+        if (pdfContinuousList != null) pdfContinuousList.stopScroll();
+        releaseSinglePageBitmap();
+        if (pdfContinuousAdapter != null) {
+            pdfContinuousAdapter.clearBitmaps();
+        }
+        backgroundPdfBitmapsReleased = true;
+    }
+
+    private void restorePdfBitmapsAfterBackgroundTrimIfNeeded() {
+        if (!backgroundPdfBitmapsReleased) return;
+        backgroundPdfBitmapsReleased = false;
+        if (pdfRenderer == null || pageCount <= 0) return;
+        applyPdfDisplayMode();
+    }
+
     private void closeRenderer() {
         renderGeneration++;
         resetContinuousPageViews(false);
@@ -2419,6 +2454,24 @@ public class PdfReaderActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         saveReadingState();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        schedulePdfBackgroundMemoryTrim();
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level == android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            schedulePdfBackgroundMemoryTrim();
+        } else if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
+                || level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            cancelPdfBackgroundMemoryTrim();
+            trimPdfBitmapsForBackground(true);
+        }
     }
 
 
@@ -2875,6 +2928,7 @@ public class PdfReaderActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        cancelPdfBackgroundMemoryTrim();
         ViewerRegistry.unregister(this);
         activityDestroyed = true;
         ++renderGeneration;

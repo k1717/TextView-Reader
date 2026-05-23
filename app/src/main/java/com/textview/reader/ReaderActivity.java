@@ -131,6 +131,7 @@ public class ReaderActivity extends AppCompatActivity {
     public static final String EXTRA_JUMP_ANCHOR_AFTER = "jump_anchor_after";
 
     private static final String STATE_RESTORE_FROM_MEMORY = "restore_txt_from_memory";
+    private static final long BACKGROUND_MEMORY_TRIM_DELAY_MS = 420_000L;
     private static volatile LoadedTextSnapshot lastLoadedTextSnapshot;
 
     private static final class LoadedTextSnapshot {
@@ -307,6 +308,9 @@ public class ReaderActivity extends AppCompatActivity {
     private int appliedLargeTextPartitionMode = Integer.MIN_VALUE;
     private Typeface appliedTypeface = null;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private boolean backgroundTextMemoryReleased = false;
+    private Intent backgroundTextRestoreIntent = null;
+    private final Runnable backgroundMemoryTrimRunnable = () -> trimReaderMemoryForBackground(false);
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ExecutorService largeTextPartitionExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService largeTextSearchExecutor = Executors.newSingleThreadExecutor();
@@ -528,11 +532,13 @@ public class ReaderActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        cancelBackgroundMemoryTrim();
         if (themeManager != null) {
             themeManager.reloadFromStorage();
         }
         if (readerView != null && prefs != null && themeManager != null) {
             applyTheme();
+            if (restoreReaderAfterBackgroundMemoryTrimIfNeeded()) return;
             if (maybeReloadForPhysicallyEditedOriginalTxtFile()) return;
             if (maybeReloadForLargeTextPartitionModeChange()) return;
             maybeReloadForTextDisplayRuleChange();
@@ -9353,12 +9359,117 @@ public class ReaderActivity extends AppCompatActivity {
         showShortViewerBackToast();
     }
 
+    private void cancelBackgroundMemoryTrim() {
+        handler.removeCallbacks(backgroundMemoryTrimRunnable);
+    }
+
+    private void scheduleBackgroundMemoryTrim() {
+        if (activityDestroyed || filePath == null || readerView == null || backgroundTextMemoryReleased) return;
+        handler.removeCallbacks(backgroundMemoryTrimRunnable);
+        handler.postDelayed(backgroundMemoryTrimRunnable, BACKGROUND_MEMORY_TRIM_DELAY_MS);
+    }
+
+    private boolean restoreReaderAfterBackgroundMemoryTrimIfNeeded() {
+        cancelBackgroundMemoryTrim();
+        if (!backgroundTextMemoryReleased) return false;
+
+        Intent restoreIntent = backgroundTextRestoreIntent != null
+                ? new Intent(backgroundTextRestoreIntent)
+                : new Intent(getIntent());
+        backgroundTextMemoryReleased = false;
+        backgroundTextRestoreIntent = null;
+        clearLoadedTextSnapshot();
+        setIntent(restoreIntent);
+        loadFileFromIntent(restoreIntent);
+        return true;
+    }
+
+    private void trimReaderMemoryForBackground(boolean force) {
+        if (activityDestroyed || backgroundTextMemoryReleased || filePath == null || readerView == null) return;
+        if (!force && !isFinishing() && !isChangingConfigurations() && hasWindowFocus()) return;
+
+        int currentPosition = Math.max(0, getCurrentCharPosition());
+        int currentDisplayPage = Math.max(1, getDisplayedCurrentPageNumber());
+        int currentTotalPages = Math.max(1, getDisplayedTotalPageCount());
+        String anchorBefore = getAnchorTextBefore(currentPosition);
+        String anchorAfter = getAnchorTextAfter(currentPosition);
+
+        Intent restoreIntent = new Intent(getIntent());
+        restoreIntent.putExtra(EXTRA_FILE_PATH, filePath);
+        restoreIntent.removeExtra(EXTRA_FILE_URI);
+        restoreIntent.putExtra(EXTRA_JUMP_TO_POSITION, currentPosition);
+        restoreIntent.putExtra(EXTRA_JUMP_DISPLAY_PAGE, currentDisplayPage);
+        restoreIntent.putExtra(EXTRA_JUMP_TOTAL_PAGES, currentTotalPages);
+        if (largeTextEstimateActive) {
+            restoreIntent.putExtra(EXTRA_JUMP_PARTITION_START_BYTE, largeTextPartitionStartByte);
+            restoreIntent.putExtra(EXTRA_JUMP_PARTITION_START_LINE, largeTextPartitionStartLine);
+        }
+        if (!anchorBefore.isEmpty()) restoreIntent.putExtra(EXTRA_JUMP_ANCHOR_BEFORE, anchorBefore);
+        if (!anchorAfter.isEmpty()) restoreIntent.putExtra(EXTRA_JUMP_ANCHOR_AFTER, anchorAfter);
+        backgroundTextRestoreIntent = restoreIntent;
+
+        saveReadingState();
+        clearLoadedTextSnapshot();
+
+        // Cancel outstanding readers/indexers/searches before dropping their backing data.
+        loadGeneration.incrementAndGet();
+        largeTextPartitionSwitchGeneration.incrementAndGet();
+        largeTextExactPageIndexGeneration.incrementAndGet();
+        largeTextSearchGeneration.incrementAndGet();
+        largeTextSearchCountGeneration.incrementAndGet();
+        handler.removeCallbacks(largeTextRestartIndexingRunnable);
+        handler.removeCallbacks(largeTextManualScrollBoundaryHandoffRunnable);
+        handler.removeCallbacks(pendingToolbarSeekTimeoutRunnable);
+        clearLargeTextPartitionSwitchPending();
+        clearLargeTextQueuedPageDelta();
+        resetLargeTextPageDirectionTracking();
+        clearLargeTextPartitionCache();
+        resetLargeTextExactPageIndex();
+        clearLargeTextSearchTotalCache();
+
+        activeSearchQuery = "";
+        activeSearchIndex = -1;
+        activeSearchOrdinal = 0;
+        fileContent = "";
+        totalChars = 0;
+        totalLines = 0;
+        largeTextEstimateActive = false;
+        largeTextEstimatedTotalPages = 0;
+        pendingLargeTextRestorePosition = -1;
+        pendingLargeTextCachedDisplayPage = 0;
+        pendingLargeTextCachedTotalPages = 0;
+        hugeTextPreviewOnly = false;
+        largeTextPreviewBaseCharOffset = 0;
+        largeTextEstimatedBasePageOffset = 0;
+        largeTextEstimatedTotalChars = 0;
+        largeTextPartitionStartByte = 0L;
+        largeTextPartitionEndByte = 0L;
+        largeTextFileByteLength = 0L;
+        largeTextEstimatedBytesPerChar = 1f;
+        largeTextPartitionBodyStartCharCount = 0;
+        largeTextPartitionBodyCharCount = 0;
+        largeTextPartitionWindowStartLine = 1;
+        largeTextPartitionStartLine = 1;
+        largeTextPartitionEndLine = 1;
+        largeTextTotalLogicalLines = 1;
+
+        readerView.setLargeTextPartitionMode(false);
+        readerView.setTextContent("");
+        applySearchHighlight();
+        updatePositionLabel();
+        backgroundTextMemoryReleased = true;
+    }
+
     // --- Lifecycle ---
 
     @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
-        cacheLoadedTextSnapshot();
-        outState.putBoolean(STATE_RESTORE_FROM_MEMORY, true);
+        if (!backgroundTextMemoryReleased) {
+            cacheLoadedTextSnapshot();
+            outState.putBoolean(STATE_RESTORE_FROM_MEMORY, true);
+        } else {
+            outState.putBoolean(STATE_RESTORE_FROM_MEMORY, false);
+        }
         super.onSaveInstanceState(outState);
     }
 
@@ -9367,10 +9478,31 @@ public class ReaderActivity extends AppCompatActivity {
         super.onPause();
         stopAutoPageTurn(false);
         saveReadingState();
-        cacheLoadedTextSnapshot();
+        if (!backgroundTextMemoryReleased) {
+            cacheLoadedTextSnapshot();
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        scheduleBackgroundMemoryTrim();
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level == android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            scheduleBackgroundMemoryTrim();
+        } else if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
+                || level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            cancelBackgroundMemoryTrim();
+            trimReaderMemoryForBackground(true);
+        }
     }
 
     @Override protected void onDestroy() {
+        cancelBackgroundMemoryTrim();
         activityDestroyed = true;
         loadGeneration.incrementAndGet();
         largeTextExactPageIndexGeneration.incrementAndGet();
@@ -9381,7 +9513,9 @@ public class ReaderActivity extends AppCompatActivity {
             viewerBackToast = null;
         }
         saveReadingState();
-        cacheLoadedTextSnapshot();
+        if (!backgroundTextMemoryReleased) {
+            cacheLoadedTextSnapshot();
+        }
         if (notificationHelper != null) notificationHelper.dismiss();
         releaseReaderMemory();
         executor.shutdownNow();

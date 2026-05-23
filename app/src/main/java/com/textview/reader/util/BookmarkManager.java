@@ -232,8 +232,9 @@ public class BookmarkManager {
             root.put("exportedAt", System.currentTimeMillis());
             PrefsManager exportPrefs = PrefsManager.getInstance(context);
             root.put("largeTxtCurrentPartitionPageModel", buildCurrentLargeTextPartitionPageModelJson(exportPrefs));
-            root.put("_READ_ME_FIRST_EN", "This backup is safe to edit if you stay in bookmarkEdits.beginner. You do not need programming knowledge. Change only the values inside each edit object, then import this JSON back into TextView Reader. For TXT, edit by line or findText; cached page totals depend on the selected large-TXT partition page model.");
-            root.put("_읽으세요_KO", "bookmarkEdits.beginner 안에서만 수정하면 안전합니다. 프로그래밍 지식이 없어도 됩니다. 각 항목의 edit 안 값만 바꾼 뒤 이 JSON을 TextView Reader로 다시 가져오세요. TXT는 줄 번호나 findText로 수정하세요. 캐시된 페이지 총수는 선택된 대용량 TXT 파티션 페이지 모델에 따라 달라집니다.");
+            root.put("largeTxtBookmarkPageModelSummary", buildLargeTextBookmarkPageModelSummaryJson(exportPrefs));
+            root.put("_READ_ME_FIRST_EN", "This backup is safe to edit if you stay in bookmarkEdits.beginner. You do not need programming knowledge. Change only the values inside each edit object, then import this JSON back into TextView Reader. For TXT, edit by line or findText; cached page totals depend on the selected large-TXT partition page model. Export does not open every TXT file to recalculate page totals; stale or unknown cached totals are explicitly marked.");
+            root.put("_읽으세요_KO", "bookmarkEdits.beginner 안에서만 수정하면 안전합니다. 프로그래밍 지식이 없어도 됩니다. 각 항목의 edit 안 값만 바꾼 뒤 이 JSON을 TextView Reader로 다시 가져오세요. TXT는 줄 번호나 findText로 수정하세요. 캐시된 페이지 총수는 선택된 대용량 TXT 파티션 페이지 모델에 따라 달라집니다. 백업 내보내기는 모든 TXT 파일을 열어 페이지 총수를 다시 계산하지 않으며, 오래되었거나 알 수 없는 캐시 총수는 명시적으로 표시됩니다.");
 
             JSONObject editGuide = new JSONObject();
             editGuide.put("purpose_EN", "This guide explains the two editable bookmark areas. The beginner area is for normal use. The developer area is for careful repair or migration.");
@@ -246,7 +247,7 @@ public class BookmarkManager {
             beginnerGuideEn.put("moveBy", "Use moveBy for small corrections. Positive numbers move later; negative numbers move earlier.");
             beginnerGuideEn.put("txtFindText", "For TXT files, use findText when you know a sentence but do not know the line number. Leave findText empty when you are not using text search.");
             beginnerGuideEn.put("txtPageModel", "TXT pageNumber/totalPages are cached display metadata from the selected large-TXT partition mode. They may differ between Standard 4000/400 and High-buffer 12000/600, so normal bookmark edits should use setLine, moveByLines, or findText instead.");
-            beginnerGuideEn.put("txtCachedPageStatus", "Each TXT edit row includes largeTxtPartitionPageModelState. If cachedPageModelMatchesCurrentPartitionMode is false, the cached Page X/Y was made under another or unknown partition mode and will be refreshed after the file is opened and the exact page anchors are rebuilt.");
+            beginnerGuideEn.put("txtCachedPageStatus", "Each TXT edit row includes largeTxtPartitionPageModelState. If cachedPageModelMatchesCurrentPartitionMode is false, the cached Page X/Y was made under another or unknown partition mode, or has not yet been recalculated for the export mode. The bookmark location is still preserved by character/line/anchor data and Page X/Y refreshes after that file is opened and exact page anchors rebuild.");
             beginnerGuideEn.put("simpleRule", "Usually change only one thing: memo, lineOrPage, moveBy, or findText. Keeping the rest unchanged is safest.");
             editGuide.put("beginnerGuide_EN", beginnerGuideEn);
 
@@ -257,7 +258,7 @@ public class BookmarkManager {
             beginnerGuideKo.put("moveBy", "조금만 위치를 보정하려면 moveBy를 쓰세요. 양수는 뒤쪽, 음수는 앞쪽으로 이동합니다.");
             beginnerGuideKo.put("txtFindText", "TXT 파일에서 줄 번호는 모르지만 문장을 알고 있으면 findText를 쓰세요. 문장 검색을 쓰지 않을 때는 findText를 빈칸으로 두면 됩니다.");
             beginnerGuideKo.put("txtPageModel", "TXT pageNumber/totalPages는 선택된 대용량 TXT 파티션 모드에서 나온 표시용 캐시입니다. 기본 4000/400과 고버퍼 12000/600 사이에서 달라질 수 있으므로, 일반 북마크 수정은 setLine, moveByLines, findText를 사용하세요.");
-            beginnerGuideKo.put("txtCachedPageStatus", "각 TXT 수정 행에는 largeTxtPartitionPageModelState가 포함됩니다. cachedPageModelMatchesCurrentPartitionMode가 false이면 캐시된 Page X/Y가 다른 모드 또는 알 수 없는 모드에서 만들어진 값이며, 파일을 열고 exact page anchor가 다시 만들어지면 갱신됩니다.");
+            beginnerGuideKo.put("txtCachedPageStatus", "각 TXT 수정 행에는 largeTxtPartitionPageModelState가 포함됩니다. cachedPageModelMatchesCurrentPartitionMode가 false이면 캐시된 Page X/Y가 다른 모드 또는 알 수 없는 모드에서 만들어졌거나, 백업 시점의 모드로 아직 재계산되지 않은 값입니다. 북마크 위치 자체는 문자/줄/앵커 정보로 유지되고, 해당 파일을 열어 exact page anchor가 다시 만들어지면 Page X/Y가 갱신됩니다.");
             beginnerGuideKo.put("simpleRule", "보통은 memo, lineOrPage, moveBy, findText 중 하나만 바꾸는 것이 가장 안전합니다. 나머지는 그대로 두세요.");
             editGuide.put("beginnerGuide_KO", beginnerGuideKo);
 
@@ -355,12 +356,36 @@ public class BookmarkManager {
         return obj;
     }
 
+    private JSONObject buildLargeTextBookmarkPageModelSummaryJson(PrefsManager prefs) throws JSONException {
+        JSONObject summary = new JSONObject();
+        int txtTotal = 0;
+        int currentModeCached = 0;
+        int staleOrUnknown = 0;
+        int noCachedPage = 0;
+        for (Bookmark b : bookmarks) {
+            if (!"TXT".equals(bookmarkFileType(b))) continue;
+            txtTotal++;
+            if (largeTextCachedPageMatchesCurrentMode(b, prefs)) {
+                currentModeCached++;
+            } else if (hasLargeTextCachedPage(b)) {
+                staleOrUnknown++;
+            } else {
+                noCachedPage++;
+            }
+        }
+        summary.put("txtBookmarksTotal", txtTotal);
+        summary.put("cachedForCurrentPartitionMode", currentModeCached);
+        summary.put("cachedForOtherOrUnknownPartitionMode", staleOrUnknown);
+        summary.put("notYetCalculatedForCurrentPartitionMode", staleOrUnknown + noCachedPage);
+        summary.put("withoutCachedPageNumber", noCachedPage);
+        summary.put("meaning_EN", "Backup export does not open every TXT file to rebuild page totals after a partition-mode change. Bookmarks remain position-safe through charPosition, logical line, and anchor text. Only cachedForCurrentPartitionMode rows have Page X/Y known to match this export's selected partition mode.");
+        summary.put("meaning_KO", "백업 내보내기는 파티션 모드 변경 후 모든 TXT 파일을 열어 페이지 총수를 다시 계산하지 않습니다. 북마크 위치는 charPosition, 논리 줄, 앵커 텍스트로 유지됩니다. cachedForCurrentPartitionMode에 해당하는 항목만 이 백업의 선택 모드와 Page X/Y가 일치한다고 볼 수 있습니다.");
+        return summary;
+    }
+
     private void decorateLargeTextPartitionPageModelState(JSONObject row, Bookmark bookmark, PrefsManager prefs) throws JSONException {
         if (row == null || bookmark == null || !"TXT".equals(bookmarkFileType(bookmark))) return;
 
-        int mode = prefs != null
-                ? prefs.getLargeTextPartitionMode()
-                : PrefsManager.LARGE_TEXT_PARTITION_MODE_STANDARD;
         int lines = prefs != null
                 ? prefs.getLargeTextPartitionLines()
                 : PrefsManager.LARGE_TEXT_PARTITION_LINES_STANDARD;
@@ -370,18 +395,11 @@ public class BookmarkManager {
         String savedSignature = bookmark.getPageLayoutSignature() != null
                 ? bookmark.getPageLayoutSignature()
                 : "";
-        boolean hasCachedPage = bookmark.getPageNumber() > 0
-                && bookmark.getTotalPages() > 0
-                && !savedSignature.isEmpty();
-        boolean matchesCurrentPartitionMode = hasCachedPage
-                && savedSignature.contains("|partitionMode=" + mode)
-                && savedSignature.contains("|partitionLines=" + lines)
-                && savedSignature.contains("|partitionBuffer=" + buffer);
+        boolean hasCachedPage = hasLargeTextCachedPage(bookmark);
+        boolean matchesCurrentPartitionMode = largeTextCachedPageMatchesCurrentMode(bookmark, prefs);
 
         JSONObject state = new JSONObject();
-        state.put("currentMode", mode == PrefsManager.LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
-                ? "highBuffer"
-                : "standard");
+        state.put("currentMode", currentLargeTextPartitionModeName(prefs));
         state.put("currentPartitionLines", lines);
         state.put("currentLookaheadLines", buffer);
         state.put("currentLookbehindLines", buffer);
@@ -390,12 +408,13 @@ public class BookmarkManager {
         state.put("cachedPageNumber", bookmark.getPageNumber());
         state.put("cachedTotalPages", bookmark.getTotalPages());
         state.put("cachedPageModel", savedSignature);
+        state.put("requiresOpenFileRebuildForCurrentPageModel", !matchesCurrentPartitionMode);
         state.put("note_EN", matchesCurrentPartitionMode
                 ? "The cached TXT Page X/Y was produced with the same partition mode as the current export setting."
-                : "Do not treat the cached TXT Page X/Y as current for this export setting. The bookmark location remains anchored by charPosition/line/anchor text, and Page X/Y will refresh after the file is opened and exact anchors rebuild.");
+                : "Do not treat the cached TXT Page X/Y as current for this export setting. Backup export does not open every TXT file to recalculate totals. The bookmark location remains anchored by charPosition/line/anchor text, and Page X/Y will refresh after this file is opened and exact anchors rebuild.");
         state.put("note_KO", matchesCurrentPartitionMode
                 ? "캐시된 TXT Page X/Y가 현재 백업 설정과 같은 파티션 모드에서 만들어진 값입니다."
-                : "캐시된 TXT Page X/Y를 현재 백업 설정 기준으로 보지 마세요. 북마크 위치 자체는 charPosition/line/anchor text 기준으로 유지되며, 파일을 열고 exact anchor가 다시 만들어지면 Page X/Y가 갱신됩니다.");
+                : "캐시된 TXT Page X/Y를 현재 백업 설정 기준으로 보지 마세요. 백업 내보내기는 모든 TXT 파일을 열어 총수를 다시 계산하지 않습니다. 북마크 위치 자체는 charPosition/line/anchor text 기준으로 유지되며, 이 파일을 열고 exact anchor가 다시 만들어지면 Page X/Y가 갱신됩니다.");
         row.put("largeTxtPartitionPageModelState", state);
 
         JSONObject current = row.optJSONObject("current");
@@ -403,8 +422,45 @@ public class BookmarkManager {
             current.put("cachedPageModelMatchesCurrentPartitionMode", matchesCurrentPartitionMode);
             current.put("cachedPageStatus", matchesCurrentPartitionMode
                     ? "current partition mode"
-                    : "stale or not yet rebuilt for current partition mode");
+                    : "stale, unknown, or not yet rebuilt for current partition mode");
         }
+    }
+
+    private boolean hasLargeTextCachedPage(Bookmark bookmark) {
+        if (bookmark == null) return false;
+        String savedSignature = bookmark.getPageLayoutSignature() != null
+                ? bookmark.getPageLayoutSignature()
+                : "";
+        return bookmark.getPageNumber() > 0
+                && bookmark.getTotalPages() > 0
+                && !savedSignature.isEmpty();
+    }
+
+    private boolean largeTextCachedPageMatchesCurrentMode(Bookmark bookmark, PrefsManager prefs) {
+        if (!hasLargeTextCachedPage(bookmark)) return false;
+        int mode = prefs != null
+                ? prefs.getLargeTextPartitionMode()
+                : PrefsManager.LARGE_TEXT_PARTITION_MODE_STANDARD;
+        int lines = prefs != null
+                ? prefs.getLargeTextPartitionLines()
+                : PrefsManager.LARGE_TEXT_PARTITION_LINES_STANDARD;
+        int buffer = prefs != null
+                ? prefs.getLargeTextPartitionBufferLines()
+                : PrefsManager.LARGE_TEXT_PARTITION_BUFFER_LINES_STANDARD;
+        String savedSignature = bookmark.getPageLayoutSignature();
+        return savedSignature != null
+                && savedSignature.contains("|partitionMode=" + mode)
+                && savedSignature.contains("|partitionLines=" + lines)
+                && savedSignature.contains("|partitionBuffer=" + buffer);
+    }
+
+    private String currentLargeTextPartitionModeName(PrefsManager prefs) {
+        int mode = prefs != null
+                ? prefs.getLargeTextPartitionMode()
+                : PrefsManager.LARGE_TEXT_PARTITION_MODE_STANDARD;
+        return mode == PrefsManager.LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
+                ? "highBuffer"
+                : "standard";
     }
 
     /**

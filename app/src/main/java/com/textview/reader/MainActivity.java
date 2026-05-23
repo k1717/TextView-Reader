@@ -65,6 +65,7 @@ import com.textview.reader.util.FileUtils;
 import com.textview.reader.util.PrefsManager;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -1328,6 +1329,20 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         return Math.max(dpToPx(220), Math.min(Math.round(screenWidth * 0.85f), dpToPx(460)));
     }
 
+    private int compactDeleteConfirmDialogWidthPx() {
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        return Math.max(dpToPx(220), Math.min(Math.round(screenWidth * 0.75f), dpToPx(400)));
+    }
+
+    private void overrideDialogWidth(@NonNull android.app.Dialog dialog, int widthPx) {
+        android.view.Window window = dialog.getWindow();
+        if (window == null) return;
+        android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
+        lp.copyFrom(window.getAttributes());
+        lp.width = widthPx;
+        window.setAttributes(lp);
+    }
+
     private android.app.Dialog createStablePositionedDialog(@NonNull View content, int gravity, int yPx, float dimAmount) {
         android.app.Dialog dialog = new android.app.Dialog(this);
         dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
@@ -2370,14 +2385,15 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         final int fg = dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36);
         final int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104);
         final int danger = dark ? Color.rgb(255, 170, 170) : Color.rgb(176, 0, 32);
+        final int dangerBg = dark ? Color.rgb(96, 42, 42) : Color.rgb(255, 235, 238);
         final int line = dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210);
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dpToPx(18), dpToPx(16), dpToPx(18), dpToPx(10));
+        box.setPadding(dpToPx(18), dpToPx(16), dpToPx(18), dpToPx(12));
         GradientDrawable bgShape = new GradientDrawable();
         bgShape.setColor(bg);
-        bgShape.setCornerRadius(dpToPx(18));
+        bgShape.setCornerRadius(dpToPx(20));
         bgShape.setStroke(Math.max(1, dpToPx(1)), line);
         box.setBackground(bgShape);
 
@@ -2388,27 +2404,59 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         title.setGravity(Gravity.CENTER);
         title.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-        title.setPadding(dpToPx(6), 0, dpToPx(6), dpToPx(10));
-        box.addView(title, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        title.setPadding(dpToPx(6), 0, dpToPx(6), dpToPx(8));
+        box.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
         TextView message = new TextView(this);
         message.setText(getString(R.string.delete_file_confirm, file.getName()));
         message.setTextColor(fg);
-        message.setTextSize(15f);
+        message.setTextSize(16f);
+        message.setGravity(Gravity.CENTER);
+        message.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         message.setLineSpacing(dpToPx(2), 1.0f);
-        message.setPadding(dpToPx(6), 0, dpToPx(6), dpToPx(14));
-        box.addView(message, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        message.setPadding(dpToPx(8), 0, dpToPx(8), dpToPx(6));
+        box.addView(message, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        final android.app.Dialog[] ref = new android.app.Dialog[1];
-        addFileOpsRow(box, getString(R.string.delete), danger, panel, () -> {
-            if (deleteRecursive(file)) {
-                if (ref[0] != null) ref[0].dismiss();
-                loadDirectory(currentDirectory);
-                Toast.makeText(this, getString(R.string.deleted), Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, getString(R.string.delete_failed), Toast.LENGTH_SHORT).show();
-            }
-        });
+        TextView detail = new TextView(this);
+        detail.setText(getString(R.string.delete_file_confirm_detail));
+        detail.setTextColor(sub);
+        detail.setTextSize(13f);
+        detail.setGravity(Gravity.CENTER);
+        detail.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        detail.setLineSpacing(dpToPx(2), 1.0f);
+        detail.setPadding(dpToPx(8), 0, dpToPx(8), dpToPx(14));
+        box.addView(detail, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        actions.setGravity(Gravity.CENTER);
+        actions.setPadding(0, 0, 0, 0);
+        box.addView(actions, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(104)));
+
+        TextView delete = new TextView(this);
+        delete.setText(getString(R.string.delete));
+        delete.setTextColor(danger);
+        delete.setTextSize(16f);
+        delete.setGravity(Gravity.CENTER);
+        delete.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        GradientDrawable deleteBg = new GradientDrawable();
+        deleteBg.setColor(dangerBg);
+        deleteBg.setCornerRadius(dpToPx(14));
+        deleteBg.setStroke(Math.max(1, dpToPx(1)), danger);
+        delete.setBackground(deleteBg);
+        LinearLayout.LayoutParams deleteLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(48));
+        deleteLp.setMargins(0, 0, 0, dpToPx(8));
+        actions.addView(delete, deleteLp);
 
         TextView cancel = new TextView(this);
         cancel.setText(getString(R.string.cancel));
@@ -2416,12 +2464,89 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         cancel.setTextSize(16f);
         cancel.setGravity(Gravity.CENTER);
         cancel.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        box.addView(cancel, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(48)));
+        GradientDrawable cancelBg = new GradientDrawable();
+        cancelBg.setColor(panel);
+        cancelBg.setCornerRadius(dpToPx(14));
+        cancelBg.setStroke(Math.max(1, dpToPx(1)), line);
+        cancel.setBackground(cancelBg);
+        LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(48));
+        cancelLp.setMargins(0, 0, 0, 0);
+        actions.addView(cancel, cancelLp);
 
         android.app.Dialog dialog = createStableCenterDialog(box, dpToPx(34), 0.22f);
-        ref[0] = dialog;
+        overrideDialogWidth(dialog, compactDeleteConfirmDialogWidthPx());
         cancel.setOnClickListener(v -> dialog.dismiss());
+        delete.setOnClickListener(v -> {
+            String deletedPath = file.getAbsolutePath();
+            boolean deletedDirectory = file.isDirectory();
+            if (deleteRecursive(file)) {
+                dialog.dismiss();
+                if (bookmarkManager != null) {
+                    bookmarkManager.deleteReadingState(deletedPath);
+                }
+                cleanupNavigationStateAfterDelete(deletedPath, deletedDirectory);
+                refreshVisibleFileListAfterDelete();
+                Toast.makeText(this, getString(R.string.deleted), Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, getString(R.string.delete_failed), Toast.LENGTH_SHORT).show();
+            }
+        });
         dialog.show();
+    }
+
+    private void refreshVisibleFileListAfterDelete() {
+        if (homeMode) {
+            loadRecentFiles();
+        } else if (searchMode) {
+            runLiveFileSearchNow();
+        } else if (currentDirectory != null) {
+            loadDirectory(currentDirectory);
+        }
+        rebuildDrawerStorageEntries();
+    }
+
+    private void cleanupNavigationStateAfterDelete(String deletedPath, boolean deletedDirectory) {
+        if (prefs == null || deletedPath == null || deletedPath.trim().isEmpty()) return;
+
+        if (!deletedDirectory) return;
+
+        for (String recentFolder : new ArrayList<>(prefs.getRecentFolders(64))) {
+            if (isSameOrChildPath(recentFolder, deletedPath)) {
+                prefs.removeRecentFolder(recentFolder);
+            }
+        }
+
+        for (String shortcut : new ArrayList<>(prefs.getFolderShortcuts(64))) {
+            if (isSameOrChildPath(shortcut, deletedPath)) {
+                prefs.removeFolderShortcut(shortcut);
+            }
+        }
+
+        String lastDirectory = prefs.getLastDirectory();
+        if (isSameOrChildPath(lastDirectory, deletedPath)) {
+            prefs.setLastDirectory(null);
+        }
+    }
+
+    private boolean isSameOrChildPath(String candidatePath, String rootPath) {
+        if (candidatePath == null || rootPath == null) return false;
+        String candidate = candidatePath.trim();
+        String root = rootPath.trim();
+        if (candidate.isEmpty() || root.isEmpty()) return false;
+
+        try {
+            candidate = new File(candidate).getCanonicalPath();
+            root = new File(root).getCanonicalPath();
+        } catch (IOException ignored) {
+            candidate = new File(candidate).getAbsolutePath();
+            root = new File(root).getAbsolutePath();
+        }
+
+        if (candidate.equals(root)) return true;
+        String normalizedRoot = root.endsWith(File.separator) ? root : root + File.separator;
+        return candidate.startsWith(normalizedRoot);
     }
 
     private boolean deleteRecursive(File file) {

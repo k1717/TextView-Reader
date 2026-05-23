@@ -2356,8 +2356,7 @@ public class DocumentPageActivity extends AppCompatActivity {
 
     private void scheduleDocumentSearchReveal() {
         // Intentionally no-op. Word/EPUB document find now uses native WebView
-        // selection/scroll behavior only; the custom reveal/follow correction from
-        // the previous patch was rolled back because it did not improve Word search.
+        // selection/scroll behavior only, avoiding extra reveal/follow correction.
     }
 
     private void applyDocumentSearchHighlight(String query, boolean forward) {
