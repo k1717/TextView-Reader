@@ -10,8 +10,8 @@ android {
         applicationId "com.textview.reader"
         minSdk 24
         targetSdk 35
-        versionCode 2140
-        versionName "2.1.4"
+        versionCode 2150
+        versionName "2.1.5"
     }
 
     buildTypes {
