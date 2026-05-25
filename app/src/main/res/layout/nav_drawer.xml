@@ -92,6 +92,7 @@
 
     <!-- Bottom action buttons remain fixed. -->
     <LinearLayout
+        android:id="@+id/drawer_bottom_actions"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/colorSurface"

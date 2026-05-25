@@ -32,6 +32,7 @@
     <string name="create">만들기</string>
     <string name="create_custom_reading_theme">사용자 읽기 테마 만들기</string>
     <string name="create_new">새로 만들기</string>
+    <string name="dark_navy">다크 네이비</string>
     <string name="dark">어두운 테마</string>
     <string name="decrease_font">글자 작게</string>
     <string name="delete">삭제</string>

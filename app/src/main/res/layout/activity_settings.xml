@@ -110,6 +110,14 @@
                     android:text="@string/dark"
                     android:textColor="?attr/colorOnSurface"
                     android:textSize="16sp" />
+
+                <RadioButton
+                    android:id="@+id/radio_dark_navy"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:text="@string/dark_navy"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="16sp" />
             </RadioGroup>
 
             <TextView
