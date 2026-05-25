@@ -6677,7 +6677,7 @@ public class ReaderActivity extends AppCompatActivity {
         if (direction > 0) {
             readerView.pageForwardWithoutSkippingContent();
         } else {
-            readerView.pageBy(direction);
+            readerView.pageBackwardWithoutSkippingContent();
         }
         readerView.post(() -> {
             updatePositionLabel();
@@ -6750,6 +6750,15 @@ public class ReaderActivity extends AppCompatActivity {
         }
 
         int localPage = Math.max(1, readerView.getCurrentPageNumber());
+        if (readerView.isCurrentLinePastCurrentPageAnchor()) {
+            readerView.pageBackwardWithoutSkippingContent();
+            readerView.post(() -> {
+                updatePositionLabel();
+                prefetchNeighborLargeTextPartitions();
+            });
+            return true;
+        }
+
         if (localPage <= 1 && hasPreviousLargeTextPartition()) {
             int previousStart = getLargeTextPartitionStartLineForLine(
                     largeTextPartitionStartLine - getLargeTextPartitionLines());
@@ -6757,7 +6766,7 @@ public class ReaderActivity extends AppCompatActivity {
             return true;
         }
 
-        readerView.pageBy(direction);
+        readerView.pageBackwardWithoutSkippingContent();
         readerView.post(() -> {
             updatePositionLabel();
             prefetchNeighborLargeTextPartitions();

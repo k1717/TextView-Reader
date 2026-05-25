@@ -1063,6 +1063,53 @@ public class CustomReaderView extends View {
     }
 
     /**
+     * Previous tap/page navigation mirrors exact-anchor mode before the global
+     * exact index is ready.  If the top row is already inside the current page
+     * interval, the first previous tap snaps back to that page's own start.
+     * Only when the viewport is already on that start row does the next previous
+     * tap move to the previous page.  The comparison is line/char based rather
+     * than raw pixel based, so tiny pixel offsets inside the same top line do not
+     * create a false page transition.
+     */
+    public boolean pageBackwardWithoutSkippingContent() {
+        if (layout == null || text.isEmpty()) {
+            pageBy(-1);
+            return false;
+        }
+
+        int current = getCurrentPageNumber();
+        if (isCurrentLinePastCurrentPageAnchor()) {
+            scrollToPage(current);
+            return true;
+        }
+
+        if (current <= 1) {
+            scrollToPage(1);
+            return false;
+        }
+
+        scrollToPage(current - 1);
+        return false;
+    }
+
+    public boolean isCurrentLinePastCurrentPageAnchor() {
+        ensurePageAnchors();
+        if (layout == null || text.isEmpty() || pageAnchors.isEmpty()) return false;
+        int current = getCurrentPageNumber();
+        int anchorChar = getCharPositionForScrollYLineStart(getPageAnchorScrollY(current));
+        int currentChar = getCurrentPageStartCharPositionForCoverage();
+        return currentChar > anchorChar;
+    }
+
+    private int getCharPositionForScrollYLineStart(int scrollYValue) {
+        if (layout == null || text.isEmpty()) return 0;
+        int layoutY = Math.max(0, scrollYValue - marginVerticalPx);
+        int line = Math.max(0, Math.min(layout.getLineCount() - 1,
+                layout.getLineForVertical(layoutY)));
+        return Math.max(0, Math.min(text.length(), layout.getLineStart(line)));
+    }
+
+    /**
      * Forward tap/page navigation should never start after the first text row
      * that was not fully visible on the previous page.  Page anchors are already
      * built from that rule, but this guard makes the invariant explicit and
