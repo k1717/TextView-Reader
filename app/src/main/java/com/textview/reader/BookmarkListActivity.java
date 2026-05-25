@@ -54,17 +54,46 @@ public class BookmarkListActivity extends AppCompatActivity
 
 
     private boolean isDarkUi() {
-        int mask = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        return mask == Configuration.UI_MODE_NIGHT_YES;
+        return PrefsManager.getInstance(this).shouldUseDarkColors(this);
+    }
+
+    private int bookmarkPageBgColor() {
+        return PrefsManager.getInstance(this).getMainBgColor(this);
+    }
+
+    private int bookmarkBarColor() {
+        return PrefsManager.getInstance(this).getMainBarColor(this);
+    }
+
+    private int bookmarkTextColor() {
+        return PrefsManager.getInstance(this).getMainTextColor(this);
+    }
+
+    private int bookmarkSubTextColor() {
+        return PrefsManager.getInstance(this).getMainSubTextColor(this);
+    }
+
+    private int bookmarkPanelColor() {
+        return PrefsManager.getInstance(this).getMainPanelColor(this);
+    }
+
+    private int bookmarkOutlineColor() {
+        return PrefsManager.getInstance(this).getMainOutlineColor(this);
+    }
+
+    private int bookmarkDialogBgColor() {
+        int bg = bookmarkPageBgColor();
+        int fg = bookmarkTextColor();
+        return blendColors(bg, fg, isLightColor(bg) ? 0.060f : 0.120f);
     }
 
     private void applyBookmarkPageThemeAndInsets() {
         boolean dark = isDarkUi();
 
-        int bg = dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
-        int bar = dark ? Color.rgb(0, 0, 0) : Color.rgb(32, 33, 36);
-        int text = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
-        int sub = dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
+        int bg = bookmarkPageBgColor();
+        int bar = bookmarkBarColor();
+        int text = bookmarkTextColor();
+        int sub = bookmarkSubTextColor();
 
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().setStatusBarColor(bar);
@@ -78,10 +107,12 @@ public class BookmarkListActivity extends AppCompatActivity
         View root = findViewById(R.id.bookmark_root);
         View appbar = findViewById(R.id.bookmark_appbar);
         View content = findViewById(R.id.bookmark_content);
+        RecyclerView list = findViewById(R.id.bookmark_recycler);
 
         if (root != null) root.setBackgroundColor(bg);
         if (appbar != null) appbar.setBackgroundColor(bar);
         if (content != null) content.setBackgroundColor(bg);
+        if (list != null) list.setBackgroundColor(bg);
 
         if (emptyText != null) emptyText.setTextColor(sub);
 
@@ -164,12 +195,9 @@ public class BookmarkListActivity extends AppCompatActivity
     }
 
     private void showBookmarkDeleteConfirm(Bookmark bookmark) {
-        boolean dark = isDarkUi();
-
-        int baseBg = dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
-        int bg = blendColors(baseBg, dark ? Color.WHITE : Color.BLACK, dark ? 0.12f : 0.06f);
-        int fg = readableTextColorForBackground(bg);
-        int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(75, 75, 75);
+        int bg = bookmarkDialogBgColor();
+        int fg = bookmarkTextColor();
+        int sub = bookmarkSubTextColor();
         int deleteColor = isLightColor(bg) ? Color.rgb(125, 45, 45) : Color.rgb(255, 175, 175);
 
         LinearLayout dialogPanel = new LinearLayout(this);
@@ -233,12 +261,9 @@ public class BookmarkListActivity extends AppCompatActivity
                                                  String expansionKey,
                                                  String folderName,
                                                  int bookmarkCount) {
-        boolean dark = isDarkUi();
-
-        int baseBg = dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
-        int bg = blendColors(baseBg, dark ? Color.WHITE : Color.BLACK, dark ? 0.12f : 0.06f);
-        int fg = readableTextColorForBackground(bg);
-        int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(75, 75, 75);
+        int bg = bookmarkDialogBgColor();
+        int fg = bookmarkTextColor();
+        int sub = bookmarkSubTextColor();
         int deleteColor = isLightColor(bg) ? Color.rgb(125, 45, 45) : Color.rgb(255, 175, 175);
 
         LinearLayout dialogPanel = new LinearLayout(this);
@@ -310,7 +335,7 @@ public class BookmarkListActivity extends AppCompatActivity
         applyBookmarkPageThemeAndInsets();
 
         Toolbar toolbar = findViewById(R.id.toolbar);
-        toolbar.setBackgroundColor(isDarkUi() ? Color.rgb(0, 0, 0) : Color.rgb(32, 33, 36));
+        toolbar.setBackgroundColor(bookmarkBarColor());
         toolbar.setTitleTextColor(Color.WHITE);
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) {
@@ -333,12 +358,7 @@ public class BookmarkListActivity extends AppCompatActivity
         bookmarkManager = BookmarkManager.getInstance(this);
 
         adapter = new BookmarkFolderAdapter();
-        boolean dark = isDarkUi();
-        int bg = dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
-        int fg = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
-        int sub = dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
-        int panel = dark ? Color.rgb(24, 24, 24) : Color.rgb(245, 245, 245);
-        adapter.setThemeColors(bg, fg, sub, panel);
+        applyBookmarkAdapterThemeColors();
         adapter.setListener(this);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
@@ -349,10 +369,25 @@ public class BookmarkListActivity extends AppCompatActivity
     @Override
     protected void onResume() {
         super.onResume();
+        applyBookmarkPageThemeAndInsets();
+        applyBookmarkAdapterThemeColors();
         loadBookmarks();
     }
 
+    private void applyBookmarkAdapterThemeColors() {
+        if (adapter != null) {
+            adapter.setThemeColors(
+                    bookmarkPageBgColor(),
+                    bookmarkTextColor(),
+                    bookmarkSubTextColor(),
+                    bookmarkPanelColor());
+        }
+        if (recyclerView != null) recyclerView.setBackgroundColor(bookmarkPageBgColor());
+        if (emptyText != null) emptyText.setTextColor(bookmarkSubTextColor());
+    }
+
     private void loadBookmarks() {
+        applyBookmarkAdapterThemeColors();
         List<Bookmark> bookmarks = bookmarkManager.getAllBookmarks();
 
         if (bookmarks.isEmpty()) {
@@ -581,12 +616,11 @@ public class BookmarkListActivity extends AppCompatActivity
     public void onBookmarkEdit(Bookmark bookmark) {
         boolean dark = isDarkUi();
 
-        int baseBg = dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
-        int bg = blendColors(baseBg, dark ? Color.WHITE : Color.BLACK, dark ? 0.12f : 0.06f);
-        int fg = readableTextColorForBackground(bg);
-        int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(75, 75, 75);
-        int border = blendColors(bg, fg, 0.48f);
-        int panel = blendColors(bg, fg, dark ? 0.12f : 0.06f);
+        int bg = bookmarkDialogBgColor();
+        int fg = bookmarkTextColor();
+        int sub = bookmarkSubTextColor();
+        int border = bookmarkOutlineColor();
+        int panel = bookmarkPanelColor();
 
         LinearLayout dialogPanel = new LinearLayout(this);
         dialogPanel.setOrientation(LinearLayout.VERTICAL);

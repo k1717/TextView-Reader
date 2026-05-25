@@ -5,6 +5,8 @@ import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.EditText;
@@ -35,7 +37,9 @@ public class ThemeEditorActivity extends AppCompatActivity {
     private EditText nameInput;
     private View bgPreview, textPreview;
     private TextView previewText;
+    private EditText bgHexInput, textHexInput;
     private SeekBar bgR, bgG, bgB, txtR, txtG, txtB;
+    private boolean updatingHexFields = false;
 
     private int currentBgColor = 0xFFFAFAFA;
     private int currentTextColor = 0xFF212121;
@@ -67,6 +71,8 @@ public class ThemeEditorActivity extends AppCompatActivity {
         bgPreview = findViewById(R.id.bg_color_preview);
         textPreview = findViewById(R.id.text_color_preview);
         previewText = findViewById(R.id.preview_text);
+        bgHexInput = findViewById(R.id.bg_hex_input);
+        textHexInput = findViewById(R.id.text_hex_input);
 
         bgR = findViewById(R.id.bg_red);
         bgG = findViewById(R.id.bg_green);
@@ -121,6 +127,9 @@ public class ThemeEditorActivity extends AppCompatActivity {
         txtR.setOnSeekBarChangeListener(colorListener);
         txtG.setOnSeekBarChangeListener(colorListener);
         txtB.setOnSeekBarChangeListener(colorListener);
+
+        installHexInput(bgHexInput, true);
+        installHexInput(textHexInput, false);
 
         findViewById(R.id.btn_pick_bg_image).setOnClickListener(v ->
                 imagePicker.launch(new String[]{"image/*"}));
@@ -223,17 +232,97 @@ public class ThemeEditorActivity extends AppCompatActivity {
     private void updatePreview() {
         currentBgColor = Color.rgb(bgR.getProgress(), bgG.getProgress(), bgB.getProgress());
         currentTextColor = Color.rgb(txtR.getProgress(), txtG.getProgress(), txtB.getProgress());
+        renderPreview(true);
+    }
 
+    private void renderPreview(boolean syncHexFields) {
         bgPreview.setBackgroundColor(currentBgColor);
         textPreview.setBackgroundColor(currentTextColor);
         previewText.setBackgroundColor(currentBgColor);
         previewText.setTextColor(currentTextColor);
+        if (syncHexFields) {
+            updatingHexFields = true;
+            if (bgHexInput != null) bgHexInput.setText(colorToHex(currentBgColor));
+            if (textHexInput != null) textHexInput.setText(colorToHex(currentTextColor));
+            updatingHexFields = false;
+        }
+    }
+
+    private void installHexInput(EditText input, boolean backgroundColor) {
+        if (input == null) return;
+        input.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(Editable editable) {
+                if (updatingHexFields) return;
+                Integer color = parseHexColor(editable != null ? editable.toString() : null);
+                if (color == null) return;
+                if (backgroundColor) {
+                    currentBgColor = color;
+                    setSeekBarsFromColor(bgR, bgG, bgB, color);
+                } else {
+                    currentTextColor = color;
+                    setSeekBarsFromColor(txtR, txtG, txtB, color);
+                }
+                renderPreview(false);
+            }
+        });
+    }
+
+    private void setSeekBarsFromColor(SeekBar r, SeekBar g, SeekBar b, int color) {
+        updatingHexFields = true;
+        r.setProgress(Color.red(color));
+        g.setProgress(Color.green(color));
+        b.setProgress(Color.blue(color));
+        updatingHexFields = false;
+    }
+
+    private Integer parseHexColor(String raw) {
+        if (raw == null) return null;
+        String value = raw.trim();
+        if (value.startsWith("#")) value = value.substring(1);
+        if (value.length() == 3) {
+            value = "" + value.charAt(0) + value.charAt(0)
+                    + value.charAt(1) + value.charAt(1)
+                    + value.charAt(2) + value.charAt(2);
+        }
+        if (value.length() == 8) value = value.substring(2);
+        if (value.length() != 6 || !value.matches("[0-9a-fA-F]{6}")) return null;
+        try {
+            return Color.rgb(
+                    Integer.parseInt(value.substring(0, 2), 16),
+                    Integer.parseInt(value.substring(2, 4), 16),
+                    Integer.parseInt(value.substring(4, 6), 16));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private String colorToHex(int color) {
+        return String.format(java.util.Locale.US, "#%02X%02X%02X", Color.red(color), Color.green(color), Color.blue(color));
+    }
+
+    private boolean validateHexInputs() {
+        boolean ok = true;
+        if (bgHexInput != null && parseHexColor(bgHexInput.getText().toString()) == null) {
+            bgHexInput.setError("Invalid HEX color");
+            ok = false;
+        }
+        if (textHexInput != null && parseHexColor(textHexInput.getText().toString()) == null) {
+            textHexInput.setError("Invalid HEX color");
+            ok = false;
+        }
+        return ok;
     }
 
     private void saveTheme() {
         String name = nameInput.getText().toString().trim();
         if (name.isEmpty()) {
             nameInput.setError("Name required");
+            return;
+        }
+        if (!validateHexInputs()) {
+            Toast.makeText(this, "Invalid HEX color", Toast.LENGTH_SHORT).show();
             return;
         }
 

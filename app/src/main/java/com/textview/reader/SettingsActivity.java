@@ -15,15 +15,18 @@ import android.os.Handler;
 import android.os.Looper;
 import android.system.ErrnoException;
 import android.system.Os;
+import android.text.Editable;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 import android.view.Gravity;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.*;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -113,6 +116,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         setupLanguage();
         setupDarkMode();
+        setupCustomMainThemeColors();
         setupFontSize();
         setupLineSpacing();
         setupTextZoneTuning();
@@ -131,6 +135,7 @@ public class SettingsActivity extends AppCompatActivity {
         // Force readable colors for every control after Android/Material defaults are applied.
         applySettingsReadableTheme();
         renderReadingThemeRows();
+        refreshMainCustomHexFieldPreviews();
     }
 
     @Override
@@ -142,6 +147,7 @@ public class SettingsActivity extends AppCompatActivity {
         if (prefs != null && themeManager != null) {
             applySettingsReadableTheme();
             renderReadingThemeRows();
+            refreshMainCustomHexFieldPreviews();
         }
     }
 
@@ -195,6 +201,7 @@ public class SettingsActivity extends AppCompatActivity {
         if (current == PrefsManager.DARK_MODE_OFF) ((RadioButton) findViewById(R.id.radio_light)).setChecked(true);
         else if (current == PrefsManager.DARK_MODE_ON) ((RadioButton) findViewById(R.id.radio_dark)).setChecked(true);
         else if (current == PrefsManager.DARK_MODE_DARK_NAVY) ((RadioButton) findViewById(R.id.radio_dark_navy)).setChecked(true);
+        else if (current == PrefsManager.DARK_MODE_CUSTOM) ((RadioButton) findViewById(R.id.radio_custom_main)).setChecked(true);
         else ((RadioButton) findViewById(R.id.radio_system)).setChecked(true);
 
         group.setOnCheckedChangeListener((g, checkedId) -> {
@@ -202,12 +209,337 @@ public class SettingsActivity extends AppCompatActivity {
             if (checkedId == R.id.radio_light) mode = PrefsManager.DARK_MODE_OFF;
             else if (checkedId == R.id.radio_dark) mode = PrefsManager.DARK_MODE_ON;
             else if (checkedId == R.id.radio_dark_navy) mode = PrefsManager.DARK_MODE_DARK_NAVY;
+            else if (checkedId == R.id.radio_custom_main) mode = PrefsManager.DARK_MODE_CUSTOM;
             else mode = PrefsManager.DARK_MODE_FOLLOW_SYSTEM;
             if (prefs.getDarkMode() != mode) {
                 prefs.setDarkMode(mode);
+                updateCustomMainThemeSectionVisibility();
                 recreate();
             }
         });
+    }
+
+    private void setupCustomMainThemeColors() {
+        EditText bg = findViewById(R.id.main_custom_bg_hex);
+        EditText panel = findViewById(R.id.main_custom_panel_hex);
+        EditText bar = findViewById(R.id.main_custom_bar_hex);
+        EditText text = findViewById(R.id.main_custom_text_hex);
+        EditText sub = findViewById(R.id.main_custom_sub_hex);
+        EditText outline = findViewById(R.id.main_custom_outline_hex);
+        EditText readingCard = findViewById(R.id.main_custom_reading_card_hex);
+        MaterialButton apply = findViewById(R.id.btn_apply_custom_main_theme);
+        if (bg == null || panel == null || bar == null || text == null || sub == null || outline == null || readingCard == null || apply == null) return;
+
+        bg.setText(colorToHex(prefs.getMainCustomBgColor()));
+        panel.setText(colorToHex(prefs.getMainCustomPanelColor()));
+        bar.setText(colorToHex(prefs.getMainCustomBarColor()));
+        text.setText(colorToHex(prefs.getMainCustomTextColor()));
+        sub.setText(colorToHex(prefs.getMainCustomSubTextColor()));
+        outline.setText(colorToHex(prefs.getMainCustomOutlineColor()));
+        readingCard.setText(colorToHex(prefs.getMainCustomReadingThemeCardColor()));
+
+        attachMainCustomRgbSliders(bg, prefs.getMainCustomBgColor());
+        attachMainCustomRgbSliders(panel, prefs.getMainCustomPanelColor());
+        attachMainCustomRgbSliders(bar, prefs.getMainCustomBarColor());
+        attachMainCustomRgbSliders(text, prefs.getMainCustomTextColor());
+        attachMainCustomRgbSliders(sub, prefs.getMainCustomSubTextColor());
+        attachMainCustomRgbSliders(outline, prefs.getMainCustomOutlineColor());
+        attachMainCustomRgbSliders(readingCard, prefs.getMainCustomReadingThemeCardColor());
+
+        apply.setOnClickListener(v -> {
+            Integer bgColor = readHexColor(bg);
+            Integer panelColor = readHexColor(panel);
+            Integer barColor = readHexColor(bar);
+            Integer textColor = readHexColor(text);
+            Integer subColor = readHexColor(sub);
+            Integer outlineColor = readHexColor(outline);
+            Integer readingCardColor = readHexColor(readingCard);
+            if (bgColor == null || panelColor == null || barColor == null
+                    || textColor == null || subColor == null || outlineColor == null || readingCardColor == null) {
+                Toast.makeText(this, R.string.invalid_hex_color, Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            prefs.setMainCustomColors(bgColor, panelColor, barColor, textColor, subColor, outlineColor, readingCardColor);
+            if (prefs.getDarkMode() != PrefsManager.DARK_MODE_CUSTOM) {
+                prefs.setDarkMode(PrefsManager.DARK_MODE_CUSTOM);
+            } else {
+                prefs.applyDarkMode(PrefsManager.DARK_MODE_CUSTOM);
+            }
+            Toast.makeText(this, R.string.custom_main_theme_applied, Toast.LENGTH_SHORT).show();
+            recreate();
+        });
+
+        updateCustomMainThemeSectionVisibility();
+    }
+
+    private void attachMainCustomRgbSliders(@NonNull EditText field, int initialColor) {
+        ViewParent rawParent = field.getParent();
+        if (!(rawParent instanceof LinearLayout)) return;
+        LinearLayout parent = (LinearLayout) rawParent;
+        final boolean[] suppress = new boolean[]{false};
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dpToPx(10), dpToPx(2), dpToPx(10), dpToPx(12));
+
+        TextView sliderHint = new TextView(this);
+        sliderHint.setText(getString(R.string.main_custom_rgb_sliders));
+        sliderHint.setTextSize(12f);
+        sliderHint.setTextColor(prefs != null ? prefs.getMainSubTextColor(this) : Color.rgb(120, 120, 120));
+        sliderHint.setPadding(0, 0, 0, dpToPx(2));
+        box.addView(sliderHint, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        SeekBar red = new SeekBar(this);
+        SeekBar green = new SeekBar(this);
+        SeekBar blue = new SeekBar(this);
+        TextView redValue = new TextView(this);
+        TextView greenValue = new TextView(this);
+        TextView blueValue = new TextView(this);
+
+        addMainCustomColorSliderRow(box, "R", red, redValue);
+        addMainCustomColorSliderRow(box, "G", green, greenValue);
+        addMainCustomColorSliderRow(box, "B", blue, blueValue);
+
+        SeekBar[] bars = new SeekBar[]{red, green, blue};
+        TextView[] values = new TextView[]{redValue, greenValue, blueValue};
+        for (SeekBar bar : bars) {
+            bar.setMax(255);
+        }
+
+        Runnable updateHexFromSliders = () -> {
+            int color = Color.rgb(red.getProgress(), green.getProgress(), blue.getProgress());
+            suppress[0] = true;
+            field.setText(colorToHex(color));
+            field.setSelection(field.getText().length());
+            suppress[0] = false;
+            field.setError(null);
+            applyMainCustomHexFieldPreview(field, color);
+        };
+
+        SeekBar.OnSeekBarChangeListener listener = new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                updateMainCustomSliderValueLabels(bars, values);
+                if (fromUser && !suppress[0]) updateHexFromSliders.run();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        };
+        red.setOnSeekBarChangeListener(listener);
+        green.setOnSeekBarChangeListener(listener);
+        blue.setOnSeekBarChangeListener(listener);
+
+        setMainCustomSlidersFromColor(bars, values, initialColor, suppress);
+        applyMainCustomHexFieldPreview(field, initialColor);
+
+        field.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence text, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence text, int start, int before, int count) {
+                if (suppress[0]) return;
+                Integer parsed = parseHexColor(text != null ? text.toString() : null);
+                if (parsed != null) {
+                    setMainCustomSlidersFromColor(bars, values, parsed, suppress);
+                    applyMainCustomHexFieldPreview(field, parsed);
+                    field.setError(null);
+                } else {
+                    applyMainCustomHexFieldInvalidPreview(field);
+                }
+            }
+            @Override public void afterTextChanged(Editable editable) {}
+        });
+
+        field.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus) {
+                Integer parsed = parseHexColor(field.getText().toString());
+                if (parsed != null) {
+                    suppress[0] = true;
+                    field.setText(colorToHex(parsed));
+                    field.setSelection(field.getText().length());
+                    suppress[0] = false;
+                    setMainCustomSlidersFromColor(bars, values, parsed, suppress);
+                    applyMainCustomHexFieldPreview(field, parsed);
+                    field.setError(null);
+                }
+            }
+        });
+
+        int index = parent.indexOfChild(field);
+        if (index >= 0) {
+            parent.addView(box, index + 1);
+        }
+    }
+
+    private void applyMainCustomHexFieldPreview(@NonNull EditText field, int color) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(color);
+        bg.setCornerRadius(dpToPx(10));
+        int stroke = readableTextColorForMainCustomColor(color);
+        bg.setStroke(Math.max(1, dpToPx(1)), blendColorForMainPreview(color, stroke, 0.52f));
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            field.setBackgroundTintList(null);
+        }
+        field.setBackground(bg);
+
+        int textColor = readableTextColorForMainCustomColor(color);
+        field.setTextColor(textColor);
+        field.setHintTextColor(blendColorForMainPreview(color, textColor, 0.68f));
+        field.invalidate();
+    }
+
+    private void applyMainCustomHexFieldInvalidPreview(@NonNull EditText field) {
+        GradientDrawable bg = new GradientDrawable();
+        int base = prefs != null ? prefs.getMainPanelColor(this) : Color.rgb(245, 245, 245);
+        int fg = prefs != null ? prefs.getMainTextColor(this) : Color.rgb(32, 33, 36);
+        bg.setColor(base);
+        bg.setCornerRadius(dpToPx(10));
+        bg.setStroke(Math.max(1, dpToPx(1)), Color.rgb(190, 70, 70));
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            field.setBackgroundTintList(null);
+        }
+        field.setBackground(bg);
+        field.setTextColor(fg);
+        field.setHintTextColor(prefs != null ? prefs.getMainSubTextColor(this) : Color.rgb(120, 120, 120));
+        field.invalidate();
+    }
+
+    private boolean isMainCustomHexField(@NonNull EditText field) {
+        int id = field.getId();
+        return id == R.id.main_custom_bg_hex
+                || id == R.id.main_custom_panel_hex
+                || id == R.id.main_custom_bar_hex
+                || id == R.id.main_custom_text_hex
+                || id == R.id.main_custom_sub_hex
+                || id == R.id.main_custom_outline_hex
+                || id == R.id.main_custom_reading_card_hex;
+    }
+
+    private void refreshMainCustomHexFieldPreviews() {
+        int[] ids = new int[]{
+                R.id.main_custom_bg_hex,
+                R.id.main_custom_panel_hex,
+                R.id.main_custom_bar_hex,
+                R.id.main_custom_text_hex,
+                R.id.main_custom_sub_hex,
+                R.id.main_custom_outline_hex,
+                R.id.main_custom_reading_card_hex
+        };
+        for (int id : ids) {
+            EditText field = findViewById(id);
+            if (field == null) continue;
+            Integer parsed = parseHexColor(field.getText() != null ? field.getText().toString() : null);
+            if (parsed != null) {
+                applyMainCustomHexFieldPreview(field, parsed);
+            } else {
+                applyMainCustomHexFieldInvalidPreview(field);
+            }
+        }
+    }
+
+    private int readableTextColorForMainCustomColor(int color) {
+        double luminance = (0.299 * Color.red(color)
+                + 0.587 * Color.green(color)
+                + 0.114 * Color.blue(color)) / 255.0;
+        return luminance > 0.56 ? Color.rgb(24, 28, 34) : Color.rgb(238, 246, 255);
+    }
+
+    private int blendColorForMainPreview(int bottomColor, int topColor, float topAlpha) {
+        topAlpha = Math.max(0f, Math.min(1f, topAlpha));
+        float bottomAlpha = 1f - topAlpha;
+        int r = Math.round(Color.red(topColor) * topAlpha + Color.red(bottomColor) * bottomAlpha);
+        int g = Math.round(Color.green(topColor) * topAlpha + Color.green(bottomColor) * bottomAlpha);
+        int b = Math.round(Color.blue(topColor) * topAlpha + Color.blue(bottomColor) * bottomAlpha);
+        return Color.rgb(r, g, b);
+    }
+
+    private void addMainCustomColorSliderRow(@NonNull LinearLayout parent,
+                                             @NonNull String label,
+                                             @NonNull SeekBar seekBar,
+                                             @NonNull TextView value) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, 0, 0, dpToPx(1));
+
+        TextView labelView = new TextView(this);
+        labelView.setText(label);
+        labelView.setGravity(Gravity.CENTER);
+        labelView.setTextSize(12f);
+        labelView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        labelView.setTextColor(prefs != null ? prefs.getMainTextColor(this) : Color.rgb(32, 33, 36));
+        row.addView(labelView, new LinearLayout.LayoutParams(dpToPx(24), LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        row.addView(seekBar, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        value.setGravity(Gravity.CENTER);
+        value.setTextSize(12f);
+        value.setSingleLine(true);
+        value.setTextColor(prefs != null ? prefs.getMainSubTextColor(this) : Color.rgb(120, 120, 120));
+        row.addView(value, new LinearLayout.LayoutParams(dpToPx(42), LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        parent.addView(row, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+    }
+
+    private void setMainCustomSlidersFromColor(@NonNull SeekBar[] bars,
+                                               @NonNull TextView[] values,
+                                               int color,
+                                               @NonNull boolean[] suppress) {
+        suppress[0] = true;
+        bars[0].setProgress(Color.red(color));
+        bars[1].setProgress(Color.green(color));
+        bars[2].setProgress(Color.blue(color));
+        suppress[0] = false;
+        updateMainCustomSliderValueLabels(bars, values);
+    }
+
+    private void updateMainCustomSliderValueLabels(@NonNull SeekBar[] bars,
+                                                   @NonNull TextView[] values) {
+        for (int i = 0; i < bars.length && i < values.length; i++) {
+            values[i].setText(String.valueOf(bars[i].getProgress()));
+        }
+    }
+
+    private void updateCustomMainThemeSectionVisibility() {
+        View section = findViewById(R.id.main_custom_theme_section);
+        if (section != null) {
+            section.setVisibility(prefs != null && prefs.getDarkMode() == PrefsManager.DARK_MODE_CUSTOM
+                    ? View.VISIBLE
+                    : View.GONE);
+        }
+    }
+
+    private Integer readHexColor(EditText field) {
+        Integer color = parseHexColor(field != null ? field.getText().toString() : null);
+        if (field != null) field.setError(color == null ? getString(R.string.invalid_hex_color) : null);
+        return color;
+    }
+
+    private Integer parseHexColor(String raw) {
+        if (raw == null) return null;
+        String value = raw.trim();
+        if (value.startsWith("#")) value = value.substring(1);
+        if (value.length() == 3) {
+            value = "" + value.charAt(0) + value.charAt(0)
+                    + value.charAt(1) + value.charAt(1)
+                    + value.charAt(2) + value.charAt(2);
+        }
+        if (value.length() == 8) value = value.substring(2);
+        if (value.length() != 6 || !value.matches("[0-9a-fA-F]{6}")) return null;
+        try {
+            return Color.rgb(
+                    Integer.parseInt(value.substring(0, 2), 16),
+                    Integer.parseInt(value.substring(2, 4), 16),
+                    Integer.parseInt(value.substring(4, 6), 16));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private String colorToHex(int color) {
+        return String.format(Locale.US, "#%02X%02X%02X", Color.red(color), Color.green(color), Color.blue(color));
     }
 
     private void setupFontSize() {
@@ -1455,7 +1787,7 @@ public class SettingsActivity extends AppCompatActivity {
 
 
     private boolean isDarkUi() {
-        if (prefs != null && prefs.isDarkNavyMode()) return true;
+        if (prefs != null) return prefs.shouldUseDarkColors(this);
         int mask = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         return mask == Configuration.UI_MODE_NIGHT_YES;
     }
@@ -1589,11 +1921,20 @@ public class SettingsActivity extends AppCompatActivity {
 
         if (view instanceof EditText) {
             EditText et = (EditText) view;
-            et.setTextColor(text);
-            et.setHintTextColor(sub);
-            et.setBackgroundColor(bg);
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                et.setBackgroundTintList(outlineTint);
+            if (isMainCustomHexField(et)) {
+                Integer parsed = parseHexColor(et.getText() != null ? et.getText().toString() : null);
+                if (parsed != null) {
+                    applyMainCustomHexFieldPreview(et, parsed);
+                } else {
+                    applyMainCustomHexFieldInvalidPreview(et);
+                }
+            } else {
+                et.setTextColor(text);
+                et.setHintTextColor(sub);
+                et.setBackgroundColor(bg);
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    et.setBackgroundTintList(outlineTint);
+                }
             }
         } else if (view instanceof Switch) {
             Switch sw = (Switch) view;
@@ -1736,9 +2077,9 @@ public class SettingsActivity extends AppCompatActivity {
         String activeId = activeTheme != null ? activeTheme.getId() : "";
 
         boolean dark = isDarkUi();
-        int rowBg = prefs != null && prefs.isDarkNavyMode()
-                ? Color.rgb(7, 18, 32)
-                : (prefs != null ? prefs.getMainElevatedPanelColor(this) : (dark ? Color.rgb(10, 10, 10) : Color.rgb(255, 255, 255)));
+        int rowBg = prefs != null
+                ? prefs.getMainReadingThemeCardColor(this)
+                : (dark ? Color.rgb(10, 10, 10) : Color.rgb(255, 255, 255));
         int text = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36));
         int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104));
         int outline = prefs != null && prefs.isDarkNavyMode()

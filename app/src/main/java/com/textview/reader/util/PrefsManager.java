@@ -27,6 +27,7 @@ public class PrefsManager {
     public static final int DARK_MODE_OFF = 1;
     public static final int DARK_MODE_ON = 2;
     public static final int DARK_MODE_DARK_NAVY = 3;
+    public static final int DARK_MODE_CUSTOM = 4;
     public static final int SORT_RECENT_READ = -1;
     public static final int SORT_NAME_ASC = 0;
     public static final int SORT_NAME_DESC = 1;
@@ -207,7 +208,14 @@ public class PrefsManager {
                 "tap_trailing_zone_percent",
                 "paging_overlap_lines",
                 "active_theme_id",
-                "large_text_partition_mode"
+                "large_text_partition_mode",
+                "main_custom_bg",
+                "main_custom_panel",
+                "main_custom_bar",
+                "main_custom_text",
+                "main_custom_sub_text",
+                "main_custom_outline",
+                "main_custom_reading_card"
         };
         for (String key : keys) editor.remove(key);
         editor.commit();
@@ -298,6 +306,11 @@ public class PrefsManager {
             case DARK_MODE_DARK_NAVY:
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
                 break;
+            case DARK_MODE_CUSTOM:
+                AppCompatDelegate.setDefaultNightMode(isCustomMainDark()
+                        ? AppCompatDelegate.MODE_NIGHT_YES
+                        : AppCompatDelegate.MODE_NIGHT_NO);
+                break;
             default:
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
                 break;
@@ -308,61 +321,132 @@ public class PrefsManager {
         return getDarkMode() == DARK_MODE_DARK_NAVY;
     }
 
+    public boolean isMainCustomMode() {
+        return getDarkMode() == DARK_MODE_CUSTOM;
+    }
+
     public boolean shouldUseDarkColors(Context context) {
         int mode = getDarkMode();
         if (mode == DARK_MODE_ON || mode == DARK_MODE_DARK_NAVY) return true;
+        if (mode == DARK_MODE_CUSTOM) return isCustomMainDark();
         if (mode == DARK_MODE_OFF) return false;
         int mask = context.getResources().getConfiguration().uiMode
                 & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
         return mask == android.content.res.Configuration.UI_MODE_NIGHT_YES;
     }
 
+    private static final int DEFAULT_MAIN_CUSTOM_BG = Color.rgb(5, 13, 26);
+    private static final int DEFAULT_MAIN_CUSTOM_PANEL = Color.rgb(12, 27, 45);
+    private static final int DEFAULT_MAIN_CUSTOM_BAR = Color.rgb(3, 10, 22);
+    private static final int DEFAULT_MAIN_CUSTOM_TEXT = Color.rgb(234, 242, 255);
+    private static final int DEFAULT_MAIN_CUSTOM_SUB = Color.rgb(180, 200, 226);
+    private static final int DEFAULT_MAIN_CUSTOM_OUTLINE = Color.rgb(55, 82, 115);
+    private static final int DEFAULT_MAIN_CUSTOM_READING_CARD = Color.rgb(7, 18, 32);
+
+    public int getMainCustomBgColor() { return prefs.getInt("main_custom_bg", DEFAULT_MAIN_CUSTOM_BG); }
+    public int getMainCustomPanelColor() { return prefs.getInt("main_custom_panel", DEFAULT_MAIN_CUSTOM_PANEL); }
+    public int getMainCustomBarColor() { return prefs.getInt("main_custom_bar", DEFAULT_MAIN_CUSTOM_BAR); }
+    public int getMainCustomTextColor() { return prefs.getInt("main_custom_text", DEFAULT_MAIN_CUSTOM_TEXT); }
+    public int getMainCustomSubTextColor() { return prefs.getInt("main_custom_sub_text", DEFAULT_MAIN_CUSTOM_SUB); }
+    public int getMainCustomOutlineColor() { return prefs.getInt("main_custom_outline", DEFAULT_MAIN_CUSTOM_OUTLINE); }
+    public int getMainCustomReadingThemeCardColor() { return prefs.getInt("main_custom_reading_card", DEFAULT_MAIN_CUSTOM_READING_CARD); }
+
+    public void setMainCustomColors(int bg, int panel, int bar, int text, int subText, int outline, int readingThemeCard) {
+        prefs.edit()
+                .putInt("main_custom_bg", forceOpaque(bg))
+                .putInt("main_custom_panel", forceOpaque(panel))
+                .putInt("main_custom_bar", forceOpaque(bar))
+                .putInt("main_custom_text", forceOpaque(text))
+                .putInt("main_custom_sub_text", forceOpaque(subText))
+                .putInt("main_custom_outline", forceOpaque(outline))
+                .putInt("main_custom_reading_card", forceOpaque(readingThemeCard))
+                .apply();
+    }
+
+    private int forceOpaque(int color) {
+        return Color.rgb(Color.red(color), Color.green(color), Color.blue(color));
+    }
+
+    private boolean isCustomMainDark() {
+        return !isLightColor(getMainCustomBgColor());
+    }
+
+    private boolean isLightColor(int color) {
+        double luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color));
+        return luminance > 160;
+    }
+
+    private int blendColors(int bottomColor, int topColor, float topAlpha) {
+        topAlpha = Math.max(0f, Math.min(1f, topAlpha));
+        float bottomAlpha = 1f - topAlpha;
+        int r = Math.round(Color.red(topColor) * topAlpha + Color.red(bottomColor) * bottomAlpha);
+        int g = Math.round(Color.green(topColor) * topAlpha + Color.green(bottomColor) * bottomAlpha);
+        int b = Math.round(Color.blue(topColor) * topAlpha + Color.blue(bottomColor) * bottomAlpha);
+        return Color.rgb(r, g, b);
+    }
+
     public int getMainBgColor(Context context) {
+        if (isMainCustomMode()) return getMainCustomBgColor();
         if (isDarkNavyMode()) return Color.rgb(5, 13, 26);
         return shouldUseDarkColors(context) ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
     }
 
     public int getMainPanelColor(Context context) {
+        if (isMainCustomMode()) return getMainCustomPanelColor();
         if (isDarkNavyMode()) return Color.rgb(12, 27, 45);
         return shouldUseDarkColors(context) ? Color.rgb(17, 17, 17) : Color.rgb(248, 249, 250);
     }
 
     public int getMainElevatedPanelColor(Context context) {
+        if (isMainCustomMode()) return blendColors(getMainCustomPanelColor(), getMainCustomTextColor(), isCustomMainDark() ? 0.10f : 0.055f);
         if (isDarkNavyMode()) return Color.rgb(16, 35, 58);
         return shouldUseDarkColors(context) ? Color.rgb(30, 30, 30) : Color.rgb(238, 238, 238);
     }
 
+    public int getMainReadingThemeCardColor(Context context) {
+        if (isMainCustomMode()) return getMainCustomReadingThemeCardColor();
+        if (isDarkNavyMode()) return Color.rgb(7, 18, 32);
+        return getMainElevatedPanelColor(context);
+    }
+
     public int getMainTextColor(Context context) {
+        if (isMainCustomMode()) return getMainCustomTextColor();
         if (isDarkNavyMode()) return Color.rgb(234, 242, 255);
         return shouldUseDarkColors(context) ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
     }
 
     public int getMainSubTextColor(Context context) {
+        if (isMainCustomMode()) return getMainCustomSubTextColor();
         if (isDarkNavyMode()) return Color.rgb(180, 200, 226);
         return shouldUseDarkColors(context) ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
     }
 
     public int getMainMutedTextColor(Context context) {
+        if (isMainCustomMode()) return blendColors(getMainCustomBgColor(), getMainCustomSubTextColor(), 0.82f);
         if (isDarkNavyMode()) return Color.rgb(142, 165, 196);
         return shouldUseDarkColors(context) ? Color.rgb(154, 160, 166) : Color.rgb(95, 99, 104);
     }
 
     public int getMainBarColor(Context context) {
+        if (isMainCustomMode()) return getMainCustomBarColor();
         if (isDarkNavyMode()) return Color.rgb(3, 10, 22);
         return shouldUseDarkColors(context) ? Color.rgb(0, 0, 0) : Color.rgb(32, 33, 36);
     }
 
     public int getMainOutlineColor(Context context) {
+        if (isMainCustomMode()) return getMainCustomOutlineColor();
         if (isDarkNavyMode()) return Color.rgb(55, 82, 115);
         return shouldUseDarkColors(context) ? Color.rgb(70, 70, 70) : Color.rgb(210, 210, 210);
     }
 
     public int getMainSelectedColor(Context context) {
+        if (isMainCustomMode()) return blendColors(getMainCustomPanelColor(), getMainCustomTextColor(), isCustomMainDark() ? 0.22f : 0.16f);
         if (isDarkNavyMode()) return Color.rgb(42, 69, 108);
         return shouldUseDarkColors(context) ? Color.rgb(72, 72, 72) : Color.rgb(32, 33, 36);
     }
 
     public int getMainControlColor(Context context) {
+        if (isMainCustomMode()) return getMainCustomTextColor();
         if (isDarkNavyMode()) return Color.rgb(206, 222, 246);
         return shouldUseDarkColors(context) ? Color.rgb(210, 210, 210) : Color.rgb(80, 80, 80);
     }
