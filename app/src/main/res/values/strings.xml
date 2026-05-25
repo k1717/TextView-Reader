@@ -33,6 +33,20 @@
     <string name="create_custom_reading_theme">Create Custom Reading Theme</string>
     <string name="create_new">Create New</string>
     <string name="dark_navy">Dark Navy</string>
+    <string name="custom_main_theme">Custom</string>
+    <string name="main_custom_theme_colors">Custom main theme colors</string>
+    <string name="main_custom_theme_description">Each HEX box previews its own color. Background controls the main page and drawer base; Panel controls general cards, search fields, drawer headers, and dialog panels; App bar controls top bars; Text controls primary labels/icons; Secondary text controls metadata/hints; Outline controls borders/dividers/selected outlines; Reading theme card controls the card rows in the reading-theme list. Use HEX or the RGB sliders below each box.</string>
+    <string name="main_custom_bg_hex">Background HEX, e.g. #050D1A</string>
+    <string name="main_custom_panel_hex">Panel HEX, e.g. #0C1B2D</string>
+    <string name="main_custom_bar_hex">App bar HEX, e.g. #030A16</string>
+    <string name="main_custom_text_hex">Text HEX, e.g. #EAF2FF</string>
+    <string name="main_custom_sub_hex">Secondary text HEX, e.g. #B4C8E2</string>
+    <string name="main_custom_outline_hex">Outline HEX, e.g. #375273</string>
+    <string name="apply_custom_main_theme">Apply Custom Main Theme</string>
+    <string name="custom_main_theme_applied">Custom main theme applied</string>
+    <string name="invalid_hex_color">Invalid HEX color</string>
+    <string name="reading_background_hex">Background HEX, e.g. #FAFAFA</string>
+    <string name="reading_text_hex">Text HEX, e.g. #212121</string>
     <string name="dark">Dark</string>
     <string name="decrease_font">Decrease Font</string>
     <string name="delete">Delete</string>
@@ -360,4 +374,13 @@ Rules: %2$d enabled rules</string>
     <string name="settings_reset_confirm_title">Reset settings</string>
     <string name="settings_reset_confirm_message">Reset reader and app settings to defaults? Bookmarks, reading positions, recent files, folder shortcuts, TXT display rules, custom themes, and PIN lock will be kept.</string>
     <string name="settings_reset_done">Settings reset</string>
+    <string name="main_custom_rgb_sliders">RGB sliders for this box</string>
+    <string name="main_custom_bg_label">Background — main screen, drawer base, Settings and All Bookmarks page surface</string>
+    <string name="main_custom_panel_label">Panel — cards, search field, drawer headers, bookmark cards, dialog panels</string>
+    <string name="main_custom_bar_label">App bar — top toolbar/app bar and status-bar color</string>
+    <string name="main_custom_text_label">Text — primary labels, file names, buttons, and major icons</string>
+    <string name="main_custom_sub_label">Secondary text — paths, metadata, hints, section labels</string>
+    <string name="main_custom_outline_label">Outline — borders, dividers, selected-chip/card outlines</string>
+    <string name="main_custom_reading_card_hex">Reading theme card HEX, e.g. #071220</string>
+    <string name="main_custom_reading_card_label">Reading theme card — rows/cards in the Settings reading-theme list</string>
 </resources>

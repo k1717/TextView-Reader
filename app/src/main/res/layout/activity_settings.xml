@@ -118,7 +118,177 @@
                     android:text="@string/dark_navy"
                     android:textColor="?attr/colorOnSurface"
                     android:textSize="16sp" />
+
+                <RadioButton
+                    android:id="@+id/radio_custom_main"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:text="@string/custom_main_theme"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="16sp" />
             </RadioGroup>
+
+
+            <LinearLayout
+                android:id="@+id/main_custom_theme_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="24dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="6dp"
+                    android:text="@string/main_custom_theme_colors"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="@string/main_custom_theme_description"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="3dp"
+                    android:text="@string/main_custom_bg_label"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/main_custom_bg_hex"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:hint="@string/main_custom_bg_hex"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="3dp"
+                    android:text="@string/main_custom_panel_label"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/main_custom_panel_hex"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:hint="@string/main_custom_panel_hex"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="3dp"
+                    android:text="@string/main_custom_bar_label"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/main_custom_bar_hex"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:hint="@string/main_custom_bar_hex"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="3dp"
+                    android:text="@string/main_custom_text_label"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/main_custom_text_hex"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:hint="@string/main_custom_text_hex"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="3dp"
+                    android:text="@string/main_custom_sub_label"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/main_custom_sub_hex"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:hint="@string/main_custom_sub_hex"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="3dp"
+                    android:text="@string/main_custom_outline_label"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/main_custom_outline_hex"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:hint="@string/main_custom_outline_hex"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="3dp"
+                    android:text="@string/main_custom_reading_card_label"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/main_custom_reading_card_hex"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:hint="@string/main_custom_reading_card_hex"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:singleLine="true" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_apply_custom_main_theme"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/apply_custom_main_theme" />
+            </LinearLayout>
 
             <TextView
                 android:layout_width="match_parent"

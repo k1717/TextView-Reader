@@ -35,6 +35,11 @@
             <View android:id="@+id/bg_color_preview"
                 android:layout_width="match_parent" android:layout_height="24dp"
                 android:layout_marginBottom="4dp" />
+            <EditText android:id="@+id/bg_hex_input"
+                android:layout_width="match_parent" android:layout_height="48dp"
+                android:hint="@string/reading_background_hex"
+                android:inputType="text" android:maxLines="1" android:singleLine="true"
+                android:layout_marginBottom="6dp" />
             <TextView android:text="R" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" />
             <SeekBar android:id="@+id/bg_red" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="255" />
             <TextView android:text="G" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" />
@@ -50,6 +55,11 @@
             <View android:id="@+id/text_color_preview"
                 android:layout_width="match_parent" android:layout_height="24dp"
                 android:layout_marginBottom="4dp" />
+            <EditText android:id="@+id/text_hex_input"
+                android:layout_width="match_parent" android:layout_height="48dp"
+                android:hint="@string/reading_text_hex"
+                android:inputType="text" android:maxLines="1" android:singleLine="true"
+                android:layout_marginBottom="6dp" />
             <TextView android:text="R" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" />
             <SeekBar android:id="@+id/txt_red" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="255" />
             <TextView android:text="G" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" />

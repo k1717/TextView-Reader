@@ -23,7 +23,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@android:color/white"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="15sp"
             android:textStyle="bold" />
 
@@ -34,7 +34,7 @@
             android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:maxLines="2"
-            android:textColor="@android:color/white"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="13sp" />
 
         <TextView
@@ -42,7 +42,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:textColor="@android:color/darker_gray"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="11sp" />
 
     </LinearLayout>
@@ -54,6 +54,6 @@
         android:background="@android:color/transparent"
         android:contentDescription="Delete bookmark"
         android:src="@drawable/ic_delete"
-        android:tint="@android:color/darker_gray" />
+        android:tint="?attr/colorOnSurfaceVariant" />
 
 </LinearLayout>
