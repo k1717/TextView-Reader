@@ -19,6 +19,8 @@ import android.widget.OverScroller;
 
 import androidx.annotation.Nullable;
 
+import com.textview.reader.util.FileUtils;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -181,13 +183,14 @@ public class CustomReaderView extends View {
         int lastChar = -1;
         while (startLine < lineCount) {
             int charPos = Math.max(0, Math.min(fullText.length(), localLayout.getLineStart(startLine)));
+            charPos = FileUtils.clampToSurrogateSafeStart(fullText, charPos);
             if (charPos != lastChar) {
                 int beforeStart = Math.max(0, charPos - 80);
                 int afterEnd = Math.min(fullText.length(), charPos + 120);
                 result.add(new PageTextAnchor(
                         charPos,
-                        fullText.substring(beforeStart, charPos),
-                        fullText.substring(charPos, afterEnd)));
+                        FileUtils.safeSubstring(fullText, beforeStart, charPos),
+                        FileUtils.safeSubstring(fullText, charPos, afterEnd)));
                 lastChar = charPos;
             }
 
@@ -213,7 +216,7 @@ public class CustomReaderView extends View {
         }
 
         if (result.isEmpty()) {
-            result.add(new PageTextAnchor(0, "", fullText.substring(0, Math.min(fullText.length(), 120))));
+            result.add(new PageTextAnchor(0, "", FileUtils.safeSubstring(fullText, 0, Math.min(fullText.length(), 120))));
         }
         return result;
     }
@@ -659,7 +662,7 @@ public class CustomReaderView extends View {
         int end = seed + 1;
         while (start > 0 && isWordChar(text.charAt(start - 1))) start--;
         while (end < text.length() && isWordChar(text.charAt(end))) end++;
-        String word = text.substring(start, end).trim();
+        String word = FileUtils.safeSubstring(text, start, end).trim();
         if (word.isEmpty()) return null;
         return new TextHit(word, start);
     }

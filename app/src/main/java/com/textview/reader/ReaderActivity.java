@@ -4470,12 +4470,13 @@ public class ReaderActivity extends AppCompatActivity {
             return;
         }
         int localPos = Math.max(0, Math.min(partitionContent.length(), globalPos - Math.max(0, baseCharOffset)));
+        localPos = FileUtils.clampToSurrogateSafeStart(partitionContent, localPos);
         int beforeStart = Math.max(0, localPos - 80);
         int afterEnd = Math.min(partitionContent.length(), localPos + 120);
         result.add(new CustomReaderView.PageTextAnchor(
                 globalPos,
-                partitionContent.substring(beforeStart, localPos),
-                partitionContent.substring(localPos, afterEnd)));
+                FileUtils.safeSubstring(partitionContent, beforeStart, localPos),
+                FileUtils.safeSubstring(partitionContent, localPos, afterEnd)));
     }
 
     private String joinLargeTextPartitionWindow(@NonNull ArrayList<String> lines) {
@@ -6544,34 +6545,51 @@ public class ReaderActivity extends AppCompatActivity {
                                               int direction) {
         if (anchors == null || anchors.isEmpty() || direction == 0) return -1;
 
-        if (direction > 0) {
-            int threshold = Math.max(0, currentAbs + LARGE_TEXT_EXACT_TAP_EPS_CHARS);
-            int lo = 0;
-            int hi = anchors.size();
-            while (lo < hi) {
-                int mid = (lo + hi) >>> 1;
-                if (anchors.get(mid).charPosition > threshold) {
-                    hi = mid;
-                } else {
-                    lo = mid + 1;
-                }
-            }
-            return lo < anchors.size() ? lo : -1;
+        int currentIndex = findExactAnchorIndexAtOrBefore(anchors, Math.max(0, currentAbs));
+        if (currentIndex < 0) {
+            return direction > 0 ? 0 : -1;
         }
 
-        int threshold = Math.max(0, currentAbs - LARGE_TEXT_EXACT_TAP_EPS_CHARS);
+        if (direction > 0) {
+            // Forward tap should advance to the immediate next exact page anchor.
+            // Do not add an epsilon to currentAbs before searching: when the user
+            // manually scrolls close to the next anchor, that epsilon can jump over
+            // the next page and create a one-page skip.  The current interval already
+            // tells us which exact page owns the top row.
+            int target = currentIndex + 1;
+            return target < anchors.size() ? target : -1;
+        }
+
+        int currentAnchor = Math.max(0, anchors.get(currentIndex).charPosition);
+        if (Math.max(0, currentAbs) > currentAnchor + LARGE_TEXT_EXACT_TAP_EPS_CHARS) {
+            // If the user is inside the current page, previous tap first snaps back
+            // to that page's exact start.  Only a second previous tap moves to the
+            // previous page.  This prevents skipping page N when the viewport is a
+            // few characters/one line below page N's anchor.
+            return currentIndex;
+        }
+
+        int target = currentIndex - 1;
+        return target >= 0 ? target : -1;
+    }
+
+    private int findExactAnchorIndexAtOrBefore(ArrayList<CustomReaderView.PageTextAnchor> anchors, int charPosition) {
+        if (anchors == null || anchors.isEmpty()) return -1;
+        int target = Math.max(0, charPosition);
         int lo = 0;
-        int hi = anchors.size();
-        while (lo < hi) {
+        int hi = anchors.size() - 1;
+        int best = -1;
+        while (lo <= hi) {
             int mid = (lo + hi) >>> 1;
-            if (anchors.get(mid).charPosition < threshold) {
+            int anchor = Math.max(0, anchors.get(mid).charPosition);
+            if (anchor <= target) {
+                best = mid;
                 lo = mid + 1;
             } else {
-                hi = mid;
+                hi = mid - 1;
             }
         }
-        int idx = lo - 1;
-        return idx >= 0 ? idx : -1;
+        return best;
     }
     private void pageBy(int direction) {
         pageBy(direction, false);
@@ -6761,6 +6779,9 @@ public class ReaderActivity extends AppCompatActivity {
         // strip using the same visual coordinate system used for drawing.  This
         // avoids status-bar/font/boundary-related off-by-one saves from raw scrollY.
         int localPosition = readerView.getCharPositionAtTitleCoveredRow();
+        if (fileContent != null && !fileContent.isEmpty()) {
+            localPosition = FileUtils.clampToSurrogateSafeStart(fileContent, localPosition);
+        }
 
         return largeTextEstimateActive
                 ? Math.max(0, largeTextPreviewBaseCharOffset + localPosition)
@@ -6777,9 +6798,10 @@ public class ReaderActivity extends AppCompatActivity {
         int localPosition = largeTextEstimateActive
                 ? charPosition - largeTextPreviewBaseCharOffset
                 : charPosition;
-        int start = Math.max(0, Math.min(fileContent.length(), localPosition));
+        int start = FileUtils.clampToSurrogateSafeStart(fileContent,
+                Math.max(0, Math.min(fileContent.length(), localPosition)));
         int end = Math.min(fileContent.length(), start + 90);
-        return fileContent.substring(start, end).trim().replaceAll("[\\r\\n]+", " ");
+        return FileUtils.safeSubstring(fileContent, start, end).trim().replaceAll("[\\r\\n]+", " ");
     }
 
     private String getAnchorTextBefore(int charPosition) {
@@ -6787,9 +6809,10 @@ public class ReaderActivity extends AppCompatActivity {
         int localPosition = largeTextEstimateActive
                 ? charPosition - largeTextPreviewBaseCharOffset
                 : charPosition;
-        int pos = Math.max(0, Math.min(fileContent.length(), localPosition));
+        int pos = FileUtils.clampToSurrogateSafeStart(fileContent,
+                Math.max(0, Math.min(fileContent.length(), localPosition)));
         int start = Math.max(0, pos - 80);
-        return fileContent.substring(start, pos);
+        return FileUtils.safeSubstring(fileContent, start, pos);
     }
 
     private String getAnchorTextAfter(int charPosition) {
@@ -6797,9 +6820,10 @@ public class ReaderActivity extends AppCompatActivity {
         int localPosition = largeTextEstimateActive
                 ? charPosition - largeTextPreviewBaseCharOffset
                 : charPosition;
-        int pos = Math.max(0, Math.min(fileContent.length(), localPosition));
+        int pos = FileUtils.clampToSurrogateSafeStart(fileContent,
+                Math.max(0, Math.min(fileContent.length(), localPosition)));
         int end = Math.min(fileContent.length(), pos + 120);
-        return fileContent.substring(pos, end);
+        return FileUtils.safeSubstring(fileContent, pos, end);
     }
 
     private int resolveAnchoredAbsolutePosition(String content,
@@ -6843,7 +6867,7 @@ public class ReaderActivity extends AppCompatActivity {
                 int score = Math.abs(idx - fallbackLocalPosition);
                 if (!before.isEmpty()) {
                     int beforeStart = Math.max(0, idx - before.length());
-                    String actualBefore = content.substring(beforeStart, idx);
+                    String actualBefore = FileUtils.safeSubstring(content, beforeStart, idx);
                     if (actualBefore.equals(before)) {
                         score -= 1_000_000;
                     } else if (!actualBefore.endsWith(lastChars(before, Math.min(24, before.length())))) {
@@ -6887,7 +6911,7 @@ public class ReaderActivity extends AppCompatActivity {
     private String lastChars(String value, int count) {
         if (value == null || value.isEmpty() || count <= 0) return "";
         int start = Math.max(0, value.length() - count);
-        return value.substring(start);
+        return FileUtils.safeSubstring(value, start, value.length());
     }
 
     private int countLines(String s) {

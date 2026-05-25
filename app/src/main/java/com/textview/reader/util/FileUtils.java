@@ -40,10 +40,13 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 /**
- * File utilities including broad CJK encoding detection.
+ * File utilities including broad text encoding detection.
  *
  * Supported text families:
- * - Unicode: UTF-8, UTF-8 BOM, UTF-16LE/BE, UTF-16 BOM
+ * - Unicode: UTF-8, UTF-8 BOM, UTF-16LE/BE, UTF-16 BOM, BOM-less UTF-16LE/BE heuristic
+ * - Android ICU-assisted detection where available for broad legacy text encodings
+ * - Western/Central European/Turkish/Baltic single-byte encodings: Windows-1252/1250/1254/1257 and ISO-8859 variants
+ * - Greek/Cyrillic/Hebrew/Arabic/Thai legacy encodings: Windows-1253/1251/1255/1256/874 and ISO/KOI8 variants
  * - Korean legacy: MS949 / windows-949 / CP949 / EUC-KR
  * - Japanese legacy: Shift_JIS / windows-31j, EUC-JP, ISO-2022-JP
  * - Chinese legacy: GB18030, GBK, Big5
@@ -59,8 +62,36 @@ public class FileUtils {
 
     private static final int SAMPLE_LIMIT = 256 * 1024;
 
-    private static final String[] CJK_CANDIDATES = new String[]{
+    private static final String[] TEXT_ENCODING_CANDIDATES = new String[]{
             "UTF-8",
+
+            // Broad alphabetic single-byte encodings. These cover most Latin, Greek,
+            // Cyrillic, Turkish, Baltic, Hebrew, Arabic, and Thai TXT files that are
+            // not Unicode but should not be forced through CJK-only detection.
+            "windows-1252", // Western European smart quotes / punctuation
+            "ISO-8859-1",
+            "ISO-8859-15",
+            "windows-1250", // Central/Eastern European Latin
+            "ISO-8859-2",
+            "windows-1251", // Cyrillic
+            "ISO-8859-5",
+            "KOI8-R",
+            "KOI8-U",
+            "windows-1253", // Greek
+            "ISO-8859-7",
+            "windows-1254", // Turkish
+            "ISO-8859-9",
+            "windows-1257", // Baltic
+            "ISO-8859-13",
+            "windows-1255", // Hebrew
+            "ISO-8859-8",
+            "windows-1256", // Arabic
+            "ISO-8859-6",
+            "windows-874", // Thai
+            "ISO-8859-11",
+            "x-MacRoman",
+
+            // CJK legacy encodings.
             "windows-949",
             "MS949",
             "EUC-KR",
@@ -82,6 +113,8 @@ public class FileUtils {
         final int cjkCount;
         final int kanaCount;
         final int hangulCount;
+        final int alphabeticScriptCount;
+        final int usefulPunctuationCount;
         final int asciiCount;
         final double score;
 
@@ -95,6 +128,14 @@ public class FileUtils {
             int cjk = 0;
             int kana = 0;
             int hangul = 0;
+            int alphabeticScripts = 0;
+            int latinExtended = 0;
+            int greek = 0;
+            int cyrillic = 0;
+            int hebrew = 0;
+            int arabic = 0;
+            int thai = 0;
+            int usefulPunctuation = 0;
             int ascii = 0;
 
             for (int i = 0; i < text.length(); i++) {
@@ -108,6 +149,14 @@ public class FileUtils {
                 if (isCjk(ch)) cjk++;
                 if (isKana(ch)) kana++;
                 if (isHangul(ch)) hangul++;
+                if (isBroadAlphabeticScript(ch)) alphabeticScripts++;
+                if (isLatinExtended(ch)) latinExtended++;
+                if (isGreek(ch)) greek++;
+                if (isCyrillic(ch)) cyrillic++;
+                if (isHebrew(ch)) hebrew++;
+                if (isArabic(ch)) arabic++;
+                if (isThai(ch)) thai++;
+                if (isUsefulTextPunctuation(ch)) usefulPunctuation++;
             }
 
             this.replacementCount = replacements;
@@ -116,10 +165,13 @@ public class FileUtils {
             this.cjkCount = cjk;
             this.kanaCount = kana;
             this.hangulCount = hangul;
+            this.alphabeticScriptCount = alphabeticScripts;
+            this.usefulPunctuationCount = usefulPunctuation;
             this.asciiCount = ascii;
 
             // Lower is better. Replacement/control/NUL are strong evidence of wrong encoding.
-            // CJK/Kana/Hangul presence is weak positive evidence for old novel text.
+            // Script-specific letters and common book punctuation are positive evidence.
+            // This makes detection less CJK-only and helps Latin/Greek/Cyrillic/etc. legacy TXT.
             this.score =
                     replacements * 1000.0
                             + badControls * 350.0
@@ -127,7 +179,10 @@ public class FileUtils {
                             - cjk * 0.8
                             - kana * 1.5
                             - hangul * 1.2
+                            - alphabeticScripts * 0.45
+                            - usefulPunctuation * 0.35
                             - Math.min(ascii, 2000) * 0.02
+                            - charsetScriptMatchBonus(charsetName, latinExtended, greek, cyrillic, hebrew, arabic, thai)
                             + charsetTieBreakerPenalty(charsetName);
         }
     }
@@ -174,11 +229,23 @@ public class FileUtils {
         // ISO-2022-JP has visible escape sequences and is cheap to identify.
         if (looksLikeIso2022Jp(data)) return "ISO-2022-JP";
 
-        // If it is strict-valid UTF-8 and contains meaningful multibyte data, prefer UTF-8.
+        // BOM-less UTF-16 text can look like valid UTF-8 when it is mostly ASCII
+        // because NUL bytes are legal control characters in a byte stream. Detect
+        // strong UTF-16 byte patterns before accepting strict UTF-8.
+        String bomlessUtf16 = detectBomlessUtf16(data);
+        if (bomlessUtf16 != null) return bomlessUtf16;
+
+        // If it is strict-valid UTF-8, prefer UTF-8.
         if (isStrictValidUtf8(data)) return "UTF-8";
 
+        // Android ICU covers many alphabetic legacy encodings better than a small
+        // hand-written candidate score can. Use it when confidence is meaningful,
+        // then fall back to the built-in broad candidate scorer below.
+        String icuDetected = detectWithAndroidIcu(data);
+        if (icuDetected != null) return icuDetected;
+
         DecodeResult best = null;
-        for (String candidate : CJK_CANDIDATES) {
+        for (String candidate : TEXT_ENCODING_CANDIDATES) {
             if (!Charset.isSupported(candidate)) continue;
             DecodeResult result = decodeCandidate(data, candidate);
 
@@ -188,6 +255,55 @@ public class FileUtils {
         }
 
         return best != null ? best.charsetName : "UTF-8";
+    }
+
+    private static String detectWithAndroidIcu(byte[] data) {
+        if (data == null || data.length == 0) return null;
+        try {
+            Class<?> detectorClass = Class.forName("android.icu.text.CharsetDetector");
+            Object detector = detectorClass.getConstructor().newInstance();
+            detectorClass.getMethod("setText", byte[].class).invoke(detector, (Object) data);
+            Object match = detectorClass.getMethod("detect").invoke(detector);
+            if (match == null) return null;
+
+            Class<?> matchClass = match.getClass();
+            Object nameObj = matchClass.getMethod("getName").invoke(match);
+            Object confidenceObj = matchClass.getMethod("getConfidence").invoke(match);
+            if (!(nameObj instanceof String) || !(confidenceObj instanceof Integer)) return null;
+
+            String name = normalizeDetectedCharset((String) nameObj);
+            int confidence = (Integer) confidenceObj;
+            if (name == null || confidence < 40 || !Charset.isSupported(name)) return null;
+
+            DecodeResult result = decodeCandidate(data, name);
+            int length = Math.max(1, result.text.length());
+            if (result.replacementCount > Math.max(2, length / 100)) return null;
+            if (result.nulCount > Math.max(1, length / 200)) return null;
+            if (result.badControlCount > Math.max(2, length / 80)) return null;
+            return name;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static String normalizeDetectedCharset(String name) {
+        if (name == null) return null;
+        String trimmed = name.trim();
+        if (trimmed.isEmpty()) return null;
+        String upper = trimmed.toUpperCase(Locale.ROOT).replace('_', '-');
+        if (upper.equals("ISO-8859-8-I")) return "ISO-8859-8";
+        if (upper.equals("MS949") || upper.equals("CP949")) return "windows-949";
+        if (upper.equals("WINDOWS-31J") || upper.equals("CP932")) return "windows-31j";
+        if (upper.equals("CP1250")) return "windows-1250";
+        if (upper.equals("CP1251")) return "windows-1251";
+        if (upper.equals("CP1252")) return "windows-1252";
+        if (upper.equals("CP1253")) return "windows-1253";
+        if (upper.equals("CP1254")) return "windows-1254";
+        if (upper.equals("CP1255")) return "windows-1255";
+        if (upper.equals("CP1256")) return "windows-1256";
+        if (upper.equals("CP1257")) return "windows-1257";
+        if (upper.equals("CP874")) return "windows-874";
+        return trimmed;
     }
 
     /**
@@ -222,9 +338,15 @@ public class FileUtils {
         }
 
         int chunkIndex = 0;
-        for (int start = 0; start < text.length(); start += chunkSize) {
+        int start = 0;
+        while (start < text.length()) {
             int end = Math.min(text.length(), start + chunkSize);
+            end = clampToSurrogateSafeEnd(text, end);
+            if (end <= start) {
+                end = Math.min(text.length(), start + chunkSize);
+            }
             chunks.add(new TextChunk(chunkIndex++, start, text.substring(start, end)));
+            start = end;
         }
         return chunks;
     }
@@ -249,7 +371,7 @@ public class FileUtils {
         if (bom != null) candidates.add(bom);
         if (encoding != null && !encoding.trim().isEmpty()) candidates.add(encoding);
 
-        for (String c : CJK_CANDIDATES) {
+        for (String c : TEXT_ENCODING_CANDIDATES) {
             if (!candidates.contains(c)) candidates.add(c);
         }
 
@@ -418,6 +540,92 @@ public class FileUtils {
         return false;
     }
 
+
+    private static String detectBomlessUtf16(byte[] data) {
+        if (data == null || data.length < 8) return null;
+
+        int limit = Math.min(data.length, SAMPLE_LIMIT);
+        int pairs = limit / 2;
+        if (pairs < 4) return null;
+
+        int zeroEven = 0;
+        int zeroOdd = 0;
+        int leAsciiPairs = 0;
+        int beAsciiPairs = 0;
+        int leNewlinePairs = 0;
+        int beNewlinePairs = 0;
+
+        for (int i = 0; i + 1 < limit; i += 2) {
+            int b0 = data[i] & 0xFF;
+            int b1 = data[i + 1] & 0xFF;
+
+            if (b0 == 0) zeroEven++;
+            if (b1 == 0) zeroOdd++;
+
+            if (b1 == 0 && isLikelySingleByteText(b0)) leAsciiPairs++;
+            if (b0 == 0 && isLikelySingleByteText(b1)) beAsciiPairs++;
+
+            if (b1 == 0 && (b0 == '\n' || b0 == '\r')) leNewlinePairs++;
+            if (b0 == 0 && (b1 == '\n' || b1 == '\r')) beNewlinePairs++;
+        }
+
+        double zeroEvenRatio = zeroEven / (double) pairs;
+        double zeroOddRatio = zeroOdd / (double) pairs;
+        double leAsciiRatio = leAsciiPairs / (double) pairs;
+        double beAsciiRatio = beAsciiPairs / (double) pairs;
+
+        // Strong ASCII/newline evidence. This covers the common no-BOM UTF-16
+        // files that previously looked like strict-valid UTF-8 with embedded NULs.
+        if ((zeroOddRatio >= 0.30 && leAsciiRatio >= 0.25 && leAsciiPairs >= beAsciiPairs * 2)
+                || (leNewlinePairs >= 2 && leNewlinePairs > beNewlinePairs)) {
+            return "UTF-16LE";
+        }
+        if ((zeroEvenRatio >= 0.30 && beAsciiRatio >= 0.25 && beAsciiPairs >= leAsciiPairs * 2)
+                || (beNewlinePairs >= 2 && beNewlinePairs > leNewlinePairs)) {
+            return "UTF-16BE";
+        }
+
+        // CJK UTF-16 may not have much ASCII, but one byte lane often still shows
+        // a meaningful amount of zeroes. Decode both endiannesses and choose the
+        // more plausible text result only when there is enough UTF-16-like evidence.
+        if (Math.max(zeroEvenRatio, zeroOddRatio) < 0.18) {
+            return null;
+        }
+
+        DecodeResult le = decodeCandidate(data, "UTF-16LE");
+        DecodeResult be = decodeCandidate(data, "UTF-16BE");
+        boolean lePlausible = isPlausibleUtf16Text(le);
+        boolean bePlausible = isPlausibleUtf16Text(be);
+
+        if (lePlausible && !bePlausible) return "UTF-16LE";
+        if (bePlausible && !lePlausible) return "UTF-16BE";
+        if (!lePlausible && !bePlausible) return null;
+
+        int leSignal = le.asciiCount + le.cjkCount + le.kanaCount + le.hangulCount + le.alphabeticScriptCount;
+        int beSignal = be.asciiCount + be.cjkCount + be.kanaCount + be.hangulCount + be.alphabeticScriptCount;
+        if (leSignal >= beSignal + Math.max(4, pairs / 20)) return "UTF-16LE";
+        if (beSignal >= leSignal + Math.max(4, pairs / 20)) return "UTF-16BE";
+
+        if (zeroOddRatio >= zeroEvenRatio * 1.35) return "UTF-16LE";
+        if (zeroEvenRatio >= zeroOddRatio * 1.35) return "UTF-16BE";
+
+        return le.score <= be.score ? "UTF-16LE" : "UTF-16BE";
+    }
+
+    private static boolean isPlausibleUtf16Text(DecodeResult result) {
+        if (result == null || result.text == null || result.text.isEmpty()) return false;
+        int length = Math.max(1, result.text.length());
+        if (result.replacementCount > Math.max(2, length / 100)) return false;
+        if (result.nulCount > Math.max(1, length / 200)) return false;
+        if (result.badControlCount > Math.max(2, length / 80)) return false;
+        int textSignal = result.asciiCount + result.cjkCount + result.kanaCount + result.hangulCount + result.alphabeticScriptCount;
+        return textSignal >= Math.max(2, length / 8);
+    }
+
+    private static boolean isLikelySingleByteText(int b) {
+        return b == '\t' || b == '\n' || b == '\r' || (b >= 0x20 && b <= 0x7E);
+    }
+
     private static boolean isBadControl(char ch) {
         if (ch == '\n' || ch == '\r' || ch == '\t') return false;
         return ch < 0x20 || (ch >= 0x7F && ch <= 0x9F);
@@ -441,19 +649,168 @@ public class FileUtils {
                 || (ch >= 0x3130 && ch <= 0x318F);
     }
 
+    private static boolean isBroadAlphabeticScript(char ch) {
+        if (ch <= 0x7F) return false;
+        if (isCjk(ch) || isKana(ch) || isHangul(ch)) return false;
+        return Character.isLetterOrDigit(ch);
+    }
+
+    private static boolean isLatinExtended(char ch) {
+        return (ch >= 0x00C0 && ch <= 0x024F)
+                || (ch >= 0x1E00 && ch <= 0x1EFF);
+    }
+
+    private static boolean isGreek(char ch) {
+        return (ch >= 0x0370 && ch <= 0x03FF)
+                || (ch >= 0x1F00 && ch <= 0x1FFF);
+    }
+
+    private static boolean isCyrillic(char ch) {
+        return (ch >= 0x0400 && ch <= 0x052F)
+                || (ch >= 0x2DE0 && ch <= 0x2DFF)
+                || (ch >= 0xA640 && ch <= 0xA69F);
+    }
+
+    private static boolean isHebrew(char ch) {
+        return ch >= 0x0590 && ch <= 0x05FF;
+    }
+
+    private static boolean isArabic(char ch) {
+        return (ch >= 0x0600 && ch <= 0x06FF)
+                || (ch >= 0x0750 && ch <= 0x077F)
+                || (ch >= 0x08A0 && ch <= 0x08FF)
+                || (ch >= 0xFB50 && ch <= 0xFDFF)
+                || (ch >= 0xFE70 && ch <= 0xFEFF);
+    }
+
+    private static boolean isThai(char ch) {
+        return ch >= 0x0E00 && ch <= 0x0E7F;
+    }
+
+    private static boolean isUsefulTextPunctuation(char ch) {
+        switch (ch) {
+            case '‘': // ‘
+            case '’': // ’
+            case '‚': // ‚
+            case '“': // “
+            case '”': // ”
+            case '„': // „
+            case '‹': // ‹
+            case '›': // ›
+            case '–': // –
+            case '—': // —
+            case '…': // …
+            case '•': // •
+            case ' ': // non-breaking space
+            case '«': // «
+            case '»': // »
+            case '¡': // ¡
+            case '¿': // ¿
+            case '£': // £
+            case '€': // €
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static double charsetScriptMatchBonus(String charsetName,
+                                                    int latinExtended,
+                                                    int greek,
+                                                    int cyrillic,
+                                                    int hebrew,
+                                                    int arabic,
+                                                    int thai) {
+        if (charsetName == null) return 0.0;
+        String n = charsetName.toUpperCase(Locale.ROOT);
+
+        // Non-Latin legacy encodings are highly ambiguous at the byte level, so
+        // only grant a strong script bonus when enough characters decoded into
+        // the script. This avoids stealing short Western European accent text.
+        if ((n.equals("WINDOWS-1251") || n.equals("ISO-8859-5") || n.startsWith("KOI8")) && cyrillic >= 6) {
+            return cyrillic * 4.0;
+        }
+        if ((n.equals("WINDOWS-1253") || n.equals("ISO-8859-7")) && greek >= 6) {
+            return greek * 4.0;
+        }
+        if ((n.equals("WINDOWS-1255") || n.equals("ISO-8859-8")) && hebrew >= 5) {
+            return hebrew * 4.0;
+        }
+        if ((n.equals("WINDOWS-1256") || n.equals("ISO-8859-6")) && arabic >= 5) {
+            return arabic * 4.0;
+        }
+        if ((n.equals("WINDOWS-874") || n.equals("ISO-8859-11")) && thai >= 5) {
+            return thai * 4.0;
+        }
+        if ((n.equals("WINDOWS-1252") || n.equals("ISO-8859-1") || n.equals("ISO-8859-15")
+                || n.equals("WINDOWS-1250") || n.equals("ISO-8859-2")
+                || n.equals("WINDOWS-1254") || n.equals("ISO-8859-9")
+                || n.equals("WINDOWS-1257") || n.equals("ISO-8859-13")
+                || n.contains("MACROMAN")) && latinExtended > 0) {
+            return latinExtended * 1.4;
+        }
+        return 0.0;
+    }
+
     private static double charsetTieBreakerPenalty(String charsetName) {
         if (charsetName == null) return 50.0;
-        String n = charsetName.toUpperCase();
+        String n = charsetName.toUpperCase(Locale.ROOT);
 
-        // Prefer common encodings if scores are otherwise close.
+        // Prefer common encodings if scores are otherwise close. Windows code pages
+        // are slightly preferred over ISO siblings because they preserve smart quotes
+        // and other book punctuation in many old TXT files.
         if (n.equals("UTF-8")) return 0.0;
-        if (n.contains("949") || n.equals("MS949") || n.equals("EUC-KR")) return 5.0;
-        if (n.contains("SHIFT") || n.contains("31J")) return 7.0;
-        if (n.contains("EUC-JP")) return 9.0;
-        if (n.contains("GB")) return 12.0;
-        if (n.contains("BIG5")) return 14.0;
+        if (n.equals("WINDOWS-1252")) return 3.0;
+        if (n.equals("ISO-8859-1") || n.equals("ISO-8859-15")) return 7.0;
+        if (n.equals("WINDOWS-1250") || n.equals("WINDOWS-1251") || n.equals("WINDOWS-1253")
+                || n.equals("WINDOWS-1254") || n.equals("WINDOWS-1255") || n.equals("WINDOWS-1256")
+                || n.equals("WINDOWS-1257") || n.equals("WINDOWS-874")) return 8.0;
+        if (n.startsWith("ISO-8859-") || n.startsWith("KOI8")) return 11.0;
+        if (n.contains("949") || n.equals("MS949") || n.equals("EUC-KR")) return 12.0;
+        if (n.contains("SHIFT") || n.contains("31J")) return 14.0;
+        if (n.contains("EUC-JP")) return 16.0;
+        if (n.contains("GB")) return 18.0;
+        if (n.contains("BIG5")) return 20.0;
+        if (n.contains("MACROMAN")) return 22.0;
 
-        return 20.0;
+        return 25.0;
+    }
+
+
+    public static int clampToSurrogateSafeStart(String text, int index) {
+        if (text == null || text.isEmpty()) return 0;
+        int safe = Math.max(0, Math.min(text.length(), index));
+        if (safe > 0 && safe < text.length()
+                && Character.isLowSurrogate(text.charAt(safe))
+                && Character.isHighSurrogate(text.charAt(safe - 1))) {
+            return safe - 1;
+        }
+        return safe;
+    }
+
+    public static int clampToSurrogateSafeEnd(String text, int index) {
+        if (text == null || text.isEmpty()) return 0;
+        int safe = Math.max(0, Math.min(text.length(), index));
+        if (safe > 0 && safe < text.length()
+                && Character.isLowSurrogate(text.charAt(safe))
+                && Character.isHighSurrogate(text.charAt(safe - 1))) {
+            return safe + 1;
+        }
+        return safe;
+    }
+
+    public static String safeSubstring(String text, int start, int end) {
+        if (text == null || text.isEmpty()) return "";
+        int safeStart = clampToSurrogateSafeStart(text, start);
+        int safeEnd = clampToSurrogateSafeEnd(text, end);
+        safeStart = Math.max(0, Math.min(text.length(), safeStart));
+        safeEnd = Math.max(0, Math.min(text.length(), safeEnd));
+        if (safeEnd < safeStart) {
+            int tmp = safeStart;
+            safeStart = safeEnd;
+            safeEnd = tmp;
+        }
+        return text.substring(safeStart, safeEnd);
     }
 
     private static String sanitizeDecodedText(String text) {

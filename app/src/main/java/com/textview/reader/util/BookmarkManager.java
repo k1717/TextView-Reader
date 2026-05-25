@@ -1133,23 +1133,26 @@ public class BookmarkManager {
 
     private String makeBookmarkExcerpt(String text, int charPosition) {
         if (text == null || text.isEmpty()) return "";
-        int start = Math.max(0, Math.min(text.length(), charPosition));
+        int start = FileUtils.clampToSurrogateSafeStart(text,
+                Math.max(0, Math.min(text.length(), charPosition)));
         int end = Math.min(text.length(), start + 90);
-        return text.substring(start, end).trim().replaceAll("[\r\n]+", " ");
+        return FileUtils.safeSubstring(text, start, end).trim().replaceAll("[\r\n]+", " ");
     }
 
     private String makeAnchorTextBefore(String text, int charPosition) {
         if (text == null || text.isEmpty()) return "";
-        int pos = Math.max(0, Math.min(text.length(), charPosition));
+        int pos = FileUtils.clampToSurrogateSafeStart(text,
+                Math.max(0, Math.min(text.length(), charPosition)));
         int start = Math.max(0, pos - 80);
-        return text.substring(start, pos);
+        return FileUtils.safeSubstring(text, start, pos);
     }
 
     private String makeAnchorTextAfter(String text, int charPosition) {
         if (text == null || text.isEmpty()) return "";
-        int pos = Math.max(0, Math.min(text.length(), charPosition));
+        int pos = FileUtils.clampToSurrogateSafeStart(text,
+                Math.max(0, Math.min(text.length(), charPosition)));
         int end = Math.min(text.length(), pos + 120);
-        return text.substring(pos, end);
+        return FileUtils.safeSubstring(text, pos, end);
     }
 
     private boolean isPdfBookmark(Bookmark bookmark) {
