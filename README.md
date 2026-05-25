@@ -12,6 +12,7 @@ Current version: **2.1.6**
 - Android ICU-assisted detection and fallback scoring now consider broad alphabetic scripts and common book punctuation, so old TXT files in more alphabet systems are less likely to be forced through the wrong fallback charset.
 - TXT bookmark excerpts and anchor context now use surrogate-safe substring boundaries so emoji and supplementary Unicode characters are not split while saving, exporting, rebuilding, or resolving bookmarks.
 - Exact large-TXT tap navigation now derives the target from the current exact-anchor interval: forward tap moves to the immediate next anchor, while previous tap first snaps back to the current page start when the viewport is already inside that page. This avoids one-page skips near anchor boundaries.
+- The same previous-tap snap rule is now applied before exact indexing is ready, using the current local page-start line as the fallback anchor. This keeps line-overlap-0 paging behavior consistent before and after the background exact index completes.
 - Preserved the Android build toolchain metadata at **Android Gradle Plugin 9.1.1** and **Gradle wrapper 9.3.1**.
 
 ## 2.1.5 release summary

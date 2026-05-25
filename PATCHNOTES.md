@@ -20,6 +20,7 @@ This 2.1.6 package is prepared as the current release. It uses Android metadata 
 
 - Exact-completed tap paging now chooses the target from the current exact-anchor interval, not by applying tolerance directly to the current character position.
 - Forward tap moves to the immediate next exact anchor; previous tap snaps back to the current exact page start when the current top row is already inside that page, then moves to the previous page on the next tap.
+- The pre-exact fallback path now applies the same previous-tap rule with local page-start anchors, including the first-page case before a previous-partition handoff.
 - This keeps tap movement aligned with the same exact anchor table used by the toolbar slider and Go to Page while preventing anchor-nearby one-page skips.
 
 ### Build metadata

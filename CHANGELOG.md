@@ -19,6 +19,7 @@ This package uses Android metadata `versionCode 2160` and `versionName "2.1.6"`.
 ### Large TXT navigation guard
 
 - Exact-completed tap navigation now uses the current exact-anchor interval instead of searching past the current position with a forward/backward tolerance. Forward tap advances to the immediate next exact anchor, and previous tap first returns to the current page start when the viewport is already inside that page.
+- The same previous-tap snap behavior now applies during the pre-exact fallback path, using the local page-start line before switching to the previous page or previous partition.
 - This prevents one-page skips when the user manually scrolls very close to the next page anchor or slightly below the current page anchor before tapping. Slider and Go to Page continue to use the raw exact page anchor table.
 
 ### Build metadata
