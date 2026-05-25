@@ -1,7 +1,6 @@
 # Changelog
 
 ## 2.1.6 - 2026-05-24
-
 This package uses Android metadata `versionCode 2160` and `versionName "2.1.6"`.
 
 ### TXT encoding coverage
@@ -23,13 +22,24 @@ This package uses Android metadata `versionCode 2160` and `versionName "2.1.6"`.
 - The same previous-tap snap behavior now applies during the pre-exact fallback path, using the local page-start line before switching to the previous page or previous partition.
 - This prevents one-page skips when the user manually scrolls very close to the next page anchor or slightly below the current page anchor before tapping. Slider and Go to Page continue to use the raw exact page anchor table.
 
+### Main dark navy theme and drawer polish
+
+- Added a **Dark Navy** main UI theme option alongside Follow system, Light, and Dark.
+- Dark Navy uses a separate high-contrast navy palette for the main file browser, drawer, search bar, chips, settings screen, and main rounded dialogs instead of simply tinting the existing black theme.
+- File names, secondary metadata, drawer labels, headers, icons, controls, outlines, and selected chips use explicit contrast-safe colors so text does not blend into the navy background.
+- Dark Navy reading-theme preview cards use a darker navy card surface while keeping preview text and selected outlines readable.
+- Drawer bottom actions, including File Open, Bookmarks, and Settings, use flat navy drawer rows instead of separate rounded card blocks.
+- Drawer swipes update the drawer offset proportionally during the drag, use a lower start threshold with a mild drag gain, and keep direction consistent: the left drawer follows rightward horizontal swipes only.
+- Drawer swipes are no longer limited to the left edge of the main screen. Releasing after pulling the drawer at least 30% open completes the open gesture; smaller partial pulls close cleanly back to the main screen.
+- Starting a drawer swipe cancels pending main-list long-press actions and clears visible pressed row states, preventing long-hold popups from appearing after the drawer opens.
+- Drawer item taps start navigation immediately while the drawer closes instead of waiting for the close animation to finish first.
+
 ### Build metadata
 
 - Updated Android app metadata to `versionCode 2160` and `versionName "2.1.6"`.
 - Kept documented build toolchain at Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
 
 ## 2.1.5 - 2026-05-22
-
 This package uses Android metadata `versionCode 2150` and `versionName "2.1.5"`.
 
 ### Main file browser
@@ -60,7 +70,6 @@ This package uses Android metadata `versionCode 2150` and `versionName "2.1.5"`.
 - Kept documented build toolchain at Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
 
 ## 2.1.4 - 2026-05-17
-
 This package uses Android metadata `versionCode 2140` and `versionName "2.1.4"`.
 
 ### Large TXT partition modes and page model
@@ -210,7 +219,6 @@ This package uses Android metadata `versionCode 2122` and `versionName "2.1.2b"`
 - Updated Android version metadata to `versionCode 2122` and `versionName "2.1.2b"`.
 
 ## 2.1.1 - 2026-05-16
-
 This entry shows the final functional difference from the uploaded **2.1.0** GitHub source package. It does not list every intermediate patch step, while older version entries remain below for full history.
 
 ### Large TXT paging and partitioning
@@ -294,7 +302,6 @@ This entry shows the final functional difference from the uploaded **2.1.0** Git
 - Cleared `CustomReaderView` page-anchor and search-highlight path state when text resources are released.
 
 ## 2.1.0 - 2026-05-15
-
 This release consolidates the post-2.0.9 UI, package-name, bookmark, and backup-editing work into a GitHub-ready source package.
 
 ### Package identity
@@ -340,7 +347,6 @@ This release consolidates the post-2.0.9 UI, package-name, bookmark, and backup-
 - Import regenerates excerpts and anchor fields after beginner edits are applied.
 
 ## 2.0.9 - 2026-05-11
-
 This entry lists the functional difference from **2.0.8** only. The 2.0.8 hardware-key, e-ink, toolbar animation, TXT reload, optimization, and Toast cleanup changes remain in the 2.0.8 entry below.
 
 ### TXT small-file row alignment
@@ -368,7 +374,6 @@ This entry lists the functional difference from **2.0.8** only. The 2.0.8 hardwa
 - Kept existing sorting options, file-opening behavior, drawer shortcuts, and viewer logic unchanged.
 
 ## 2.0.8 - 2026-05-11
-
 This entry lists the functional difference from **2.0.7** only. The full 2.0.7 UI/settings changes remain in the 2.0.7 entry below.
 
 ### E-ink and hardware page-turn support
@@ -401,7 +406,6 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 - Converted all remaining `Toast.LENGTH_LONG` messages to `Toast.LENGTH_SHORT`.
 
 ## 2.0.7 - 2026-05-11
-
 ### EPUB reader
 
 - Moved EPUB boundary control from the viewer **More** menu into **Settings**.
@@ -439,7 +443,6 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 - Added **Reset Font Size** to the TXT viewer **More** popup.
 
 ## 2.0.6 - 2026-05-11
-
 ### TXT Viewer
 
 - Added a file-title overlay under the top page indicator when the 5-button TXT control selector is visible.
@@ -480,7 +483,6 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 - Kept the slider/button area continuous without adding a horizontal separator between the middle control area and the bottom button row.
 
 ## 2.0.5 - 2026-05-10
-
 ### Bookmark UI
 
 - Added long-press bookmark-folder deletion in TXT, PDF, EPUB, and Word bookmark windows.
@@ -508,7 +510,6 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 - Reset font selection to default if the selected added font is removed.
 
 ## 2.0.4 - 2026-05-10
-
 ### Bookmark stability and UI polish
 
 - Main bookmark folders now default to collapsed/shrunk.
@@ -526,7 +527,6 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 - Active theme saving now uses synchronous preference commit to avoid immediate-return race conditions.
 
 ## 2.0.3 - 2026-05-10
-
 ### EPUB / Word viewer
 
 - Added a bottom-bar **Find/Search** button next to **Previous** / **Next**.
@@ -561,7 +561,6 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 - Improved the sort-window radio selection bubble placement so it sits more naturally inward.
 
 ## 2.0.2 - 2026-05-09
-
 ### Functional changes from 2.0.1
 
 - Increased the huge TXT preview-only threshold from **20 MB** to **32 MB**.
@@ -618,7 +617,6 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
   - Cancels stale render generations so old background work cannot reattach bitmaps after the viewer is closed or a new PDF is opened.
 
 ## 2.0.1 - 2026-05-07
-
 ### Main file browser
 
 - Home page recent files default to recently read first.

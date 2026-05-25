@@ -12,8 +12,14 @@ Current version: **2.1.6**
 - Fixed UTF-8 BOM / detected UTF-8 decode handling so broad fallback scoring cannot override explicit Unicode text and reopen Korean UTF-8 files as legacy-encoding mojibake.
 - Android ICU-assisted detection and fallback scoring now consider broad alphabetic scripts and common book punctuation, so old TXT files in more alphabet systems are less likely to be forced through the wrong fallback charset.
 - TXT bookmark excerpts and anchor context now use surrogate-safe substring boundaries so emoji and supplementary Unicode characters are not split while saving, exporting, rebuilding, or resolving bookmarks.
-- Exact large-TXT tap navigation now derives the target from the current exact-anchor interval: forward tap moves to the immediate next anchor, while previous tap first snaps back to the current page start when the viewport is already inside that page. This avoids one-page skips near anchor boundaries.
-- The same previous-tap snap rule is now applied before exact indexing is ready, using the current local page-start line as the fallback anchor. This keeps line-overlap-0 paging behavior consistent before and after the background exact index completes.
+- Exact large-TXT tap navigation now derives the target from the current exact-anchor interval: forward tap moves to the immediate next anchor, while previous tap first snaps back to the current page start when the viewport is already inside that page.
+- The same previous-tap snap rule is applied before exact indexing is ready, using the current local page-start line as the fallback anchor. This keeps line-overlap-0 paging behavior consistent before and after the background exact index completes.
+- Added a **Dark Navy** main UI theme option with a dedicated high-contrast navy palette for the main browser, drawer, search bar, chips, settings controls, and main rounded dialogs.
+- Dark Navy reading-theme preview cards use a darker navy card surface, and drawer bottom actions use flat navy drawer rows instead of separate rounded card blocks.
+- Drawer swipes now follow the finger proportionally, use a lower start threshold with mild drag gain, open when released at 30% or more, and close cleanly below that threshold.
+- Drawer swipes are available across the main screen but keep direction consistent: the left drawer follows rightward horizontal swipes only.
+- Drawer swipe start cancels pending main-list long-press actions and clears visible pressed row states, preventing Recent/file long-hold popups from appearing after the drawer opens.
+- Drawer item taps start navigation immediately while the drawer closes.
 - Preserved the Android build toolchain metadata at **Android Gradle Plugin 9.1.1** and **Gradle wrapper 9.3.1**.
 
 ## 2.1.5 release summary

@@ -1,6 +1,6 @@
 # TextView Reader Patch Notes
 
-## 2.1.6 Unicode and encoding coverage patch
+## 2.1.6
 
 This 2.1.6 package is prepared as the current release. It uses Android metadata `versionCode 2160` and `versionName "2.1.6"`.
 
@@ -19,17 +19,28 @@ This 2.1.6 package is prepared as the current release. It uses Android metadata 
 
 ### Large TXT tap/slider skip guard
 
-- Exact-completed tap paging now chooses the target from the current exact-anchor interval, not by applying tolerance directly to the current character position.
+- Exact-completed tap paging chooses the target from the current exact-anchor interval, not by applying tolerance directly to the current character position.
 - Forward tap moves to the immediate next exact anchor; previous tap snaps back to the current exact page start when the current top row is already inside that page, then moves to the previous page on the next tap.
-- The pre-exact fallback path now applies the same previous-tap rule with local page-start anchors, including the first-page case before a previous-partition handoff.
+- The pre-exact fallback path applies the same previous-tap rule with local page-start anchors, including the first-page case before a previous-partition handoff.
 - This keeps tap movement aligned with the same exact anchor table used by the toolbar slider and Go to Page while preventing anchor-nearby one-page skips.
+
+### Main dark navy theme and drawer polish
+
+- Added a **Dark Navy** app/main UI theme option to the Settings theme radio group.
+- The theme uses a dedicated navy palette for background, app bar, panels, search field, file type chips, drawer rows, file-list rows, settings controls, and main rounded dialogs.
+- Text, secondary text, headers, strokes, icons, and selected controls are assigned explicit contrast-safe colors so labels remain readable and do not visually merge into the navy surfaces.
+- Dark Navy reading-theme preview cards use a darker navy card surface, and drawer bottom actions use flat navy drawer rows instead of separate rounded card blocks.
+- Drawer swipes update the drawer offset proportionally during the drag, use a lower start threshold with mild drag gain, and keep direction consistent: the left drawer follows rightward horizontal swipes only.
+- Drawer swipes are no longer limited to the left edge of the main screen. Releasing after pulling the drawer at least 30% open completes the open gesture; smaller partial pulls close cleanly back to the main screen.
+- Starting a drawer swipe cancels pending main-list long-press actions and clears visible pressed row states.
+- Drawer item taps start navigation immediately while the drawer closes.
 
 ### Build metadata
 
 - README, changelog, and patch notes match the project build files: Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
 - Android app metadata is `versionCode 2160` and `versionName "2.1.6"`.
 
-## 2.1.5 GitHub upload patch
+## 2.1.5
 
 This 2.1.5 package is prepared for GitHub upload. It uses Android metadata `versionCode 2150` and `versionName "2.1.5"`.
 
@@ -63,7 +74,7 @@ This 2.1.5 package is prepared for GitHub upload. It uses Android metadata `vers
 - README, changelog, and patch notes match the project build files: Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
 - Android app metadata is `versionCode 2150` and `versionName "2.1.5"`.
 
-## 2.1.4 large-TXT page-model patch
+## 2.1.4
 
 This section remains the 2.1.4 release history. It is not folded into later release sections.
 
