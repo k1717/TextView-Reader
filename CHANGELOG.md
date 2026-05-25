@@ -1,6 +1,32 @@
 # Changelog
 
-## 2.1.5 - 2026-05-23
+## 2.1.6 - 2026-05-24
+
+This package uses Android metadata `versionCode 2160` and `versionName "2.1.6"`.
+
+### TXT encoding coverage
+
+- Expanded TXT encoding detection beyond CJK-focused legacy encodings to include Android ICU-assisted detection plus common Latin, Greek, Cyrillic, Turkish, Baltic, Hebrew, Arabic, and Thai single-byte encodings.
+- Added BOM-less UTF-16LE/UTF-16BE detection before strict UTF-8 acceptance so no-BOM UTF-16 TXT files with many embedded NUL bytes no longer open as broken UTF-8 text.
+- Updated fallback encoding scoring to consider broad alphabetic-script characters and common book punctuation, improving fallback selection for old TXT files across more writing systems.
+- Retained strict UTF-8 preference for valid Unicode text and BOM-based UTF-8/UTF-16 handling for explicit Unicode files.
+
+### TXT Unicode safety
+
+- TXT bookmark excerpts, before/after anchor text, large-TXT exact anchors, generated page-anchor context, chunk boundaries, and long-press word extraction now use surrogate-safe substring boundaries.
+- This prevents emoji and supplementary Unicode characters from being split into invalid UTF-16 halves while saving, exporting, rebuilding, or resolving bookmarks.
+
+### Large TXT navigation guard
+
+- Exact-completed tap navigation now uses the current exact-anchor interval instead of searching past the current position with a forward/backward tolerance. Forward tap advances to the immediate next exact anchor, and previous tap first returns to the current page start when the viewport is already inside that page.
+- This prevents one-page skips when the user manually scrolls very close to the next page anchor or slightly below the current page anchor before tapping. Slider and Go to Page continue to use the raw exact page anchor table.
+
+### Build metadata
+
+- Updated Android app metadata to `versionCode 2160` and `versionName "2.1.6"`.
+- Kept documented build toolchain at Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
+
+## 2.1.5 - 2026-05-22
 
 This package uses Android metadata `versionCode 2150` and `versionName "2.1.5"`.
 
@@ -31,7 +57,7 @@ This package uses Android metadata `versionCode 2150` and `versionName "2.1.5"`.
 - Updated Android app metadata to `versionCode 2150` and `versionName "2.1.5"`.
 - Kept documented build toolchain at Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
 
-## 2.1.4 - 2026-05-21
+## 2.1.4 - 2026-05-17
 
 This package uses Android metadata `versionCode 2140` and `versionName "2.1.4"`.
 

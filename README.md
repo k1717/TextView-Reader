@@ -2,8 +2,17 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
 
-Current version: **2.1.5**
+Current version: **2.1.6**
 
+## 2.1.6 release summary
+
+- Updated Android version metadata to `versionCode 2160` and `versionName "2.1.6"`.
+- Expanded TXT encoding detection beyond CJK-focused legacy encodings to include Android ICU-assisted detection plus common Latin, Greek, Cyrillic, Turkish, Baltic, Hebrew, Arabic, and Thai single-byte encodings.
+- Added heuristic detection for BOM-less UTF-16LE/UTF-16BE before accepting strict-valid UTF-8, reducing broken output for no-BOM UTF-16 text.
+- Android ICU-assisted detection and fallback scoring now consider broad alphabetic scripts and common book punctuation, so old TXT files in more alphabet systems are less likely to be forced through the wrong fallback charset.
+- TXT bookmark excerpts and anchor context now use surrogate-safe substring boundaries so emoji and supplementary Unicode characters are not split while saving, exporting, rebuilding, or resolving bookmarks.
+- Exact large-TXT tap navigation now derives the target from the current exact-anchor interval: forward tap moves to the immediate next anchor, while previous tap first snaps back to the current page start when the viewport is already inside that page. This avoids one-page skips near anchor boundaries.
+- Preserved the Android build toolchain metadata at **Android Gradle Plugin 9.1.1** and **Gradle wrapper 9.3.1**.
 
 ## 2.1.5 release summary
 
@@ -176,7 +185,7 @@ Current version: **2.1.5**
 
 ### TXT reading
 
-- Encoding detection for UTF-8, EUC-KR/CP949/MS949, and UTF-16.
+- Encoding detection for UTF-8, EUC-KR/CP949/MS949, UTF-16 with BOM, and BOM-less UTF-16LE/UTF-16BE heuristic detection.
 - Large TXT handling with selected fixed-line active partitions with mode-dependent lookahead rendering, neighbor prefetch, and generated page/index cache bookkeeping.
 - Large TXT exact page count is built in the background with the same selected canonical partition model used by the runtime reader, so page count and page jumps stay synchronized with the actual rendered view without requiring one giant full-file layout.
 - Large TXT exact indexing is gated by layout stability: the app waits for matching layout measurements before starting the background page-anchor build, and restarts the build if the layout signature changes before completion.
