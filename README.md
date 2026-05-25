@@ -15,11 +15,19 @@ Current version: **2.1.6**
 - Exact large-TXT tap navigation now derives the target from the current exact-anchor interval: forward tap moves to the immediate next anchor, while previous tap first snaps back to the current page start when the viewport is already inside that page.
 - The same previous-tap snap rule is applied before exact indexing is ready, using the current local page-start line as the fallback anchor. This keeps line-overlap-0 paging behavior consistent before and after the background exact index completes.
 - Added a **Dark Navy** main UI theme option with a dedicated high-contrast navy palette for the main browser, drawer, search bar, chips, settings controls, and main rounded dialogs.
-- Dark Navy reading-theme preview cards use a darker navy card surface, and drawer bottom actions use flat navy drawer rows instead of separate rounded card blocks.
+- Added a **Custom** main UI theme option with HEX color fields for background, panel, app bar, text, secondary text, and outline colors.
+- Custom reading themes now accept direct HEX color input in addition to RGB sliders.
+- Dark Navy reading-theme preview cards use a darker navy card surface. Drawer bottom actions use flat drawer rows across all main themes instead of separate rounded card blocks.
 - Drawer swipes now follow the finger proportionally, use a lower start threshold with mild drag gain, open when released at 30% or more, and close cleanly below that threshold.
 - Drawer swipes are available across the main screen but keep direction consistent: the left drawer follows rightward horizontal swipes only.
 - Drawer swipe start cancels pending main-list long-press actions and clears visible pressed row states, preventing Recent/file long-hold popups from appearing after the drawer opens.
 - Drawer item taps start navigation immediately while the drawer closes.
+- All Bookmarks page now follows the selected main theme palette, including Dark Navy, instead of staying on the old black surface.
+- Restored the full PrefsManager API surface while keeping Custom main theme HEX/RGB color support, fixing missing-method Java compile errors.
+- Removed duplicate PrefsManager reader/layout/lock/sort/gesture preference methods from the restored API merge, fixing the duplicate-method Java compile errors.
+- Custom main theme HEX fields now preview their own color directly, and the Settings text explains which UI surfaces each color controls.
+- Custom main theme now has a separate Reading theme card color option for the Settings reading-theme list rows/cards.
+- Custom main theme HEX field previews now survive the global Settings recolor pass by excluding those six fields from generic EditText background tinting.
 - Preserved the Android build toolchain metadata at **Android Gradle Plugin 9.1.1** and **Gradle wrapper 9.3.1**.
 
 ## 2.1.5 release summary

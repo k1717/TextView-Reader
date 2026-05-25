@@ -27,13 +27,25 @@ This 2.1.6 package is prepared as the current release. It uses Android metadata 
 ### Main dark navy theme and drawer polish
 
 - Added a **Dark Navy** app/main UI theme option to the Settings theme radio group.
+- Added a **Custom** main UI theme option with HEX color fields for background, panel, app bar, text, secondary text, and outline colors.
+- Custom reading themes now accept direct HEX color input in addition to RGB sliders for background and text colors.
 - The theme uses a dedicated navy palette for background, app bar, panels, search field, file type chips, drawer rows, file-list rows, settings controls, and main rounded dialogs.
 - Text, secondary text, headers, strokes, icons, and selected controls are assigned explicit contrast-safe colors so labels remain readable and do not visually merge into the navy surfaces.
-- Dark Navy reading-theme preview cards use a darker navy card surface, and drawer bottom actions use flat navy drawer rows instead of separate rounded card blocks.
+- Dark Navy reading-theme preview cards use a darker navy card surface. Drawer bottom actions use flat drawer rows across all main themes instead of separate rounded card blocks.
 - Drawer swipes update the drawer offset proportionally during the drag, use a lower start threshold with mild drag gain, and keep direction consistent: the left drawer follows rightward horizontal swipes only.
 - Drawer swipes are no longer limited to the left edge of the main screen. Releasing after pulling the drawer at least 30% open completes the open gesture; smaller partial pulls close cleanly back to the main screen.
 - Starting a drawer swipe cancels pending main-list long-press actions and clears visible pressed row states.
 - Drawer item taps start navigation immediately while the drawer closes.
+- All Bookmarks page now follows the selected main theme palette, including Dark Navy, instead of staying on the old black surface.
+
+### Build reliability
+
+- Custom main theme now has a separate Reading theme card color option for the Settings reading-theme list rows/cards.
+- Custom main theme HEX field previews now survive the global Settings recolor pass by excluding those six fields from generic EditText background tinting.
+- Removed duplicate PrefsManager reader/layout/lock/sort/gesture preference methods from the restored API merge, fixing the duplicate-method Java compile errors.
+- Restored the full PrefsManager API surface while keeping Custom main theme HEX/RGB color support, fixing missing-method Java compile errors.
+
+- Custom main theme HEX fields now preview their own color directly, and the Settings text explains which UI surfaces each color controls.
 
 ### Build metadata
 
