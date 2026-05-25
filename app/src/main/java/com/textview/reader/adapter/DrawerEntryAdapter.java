@@ -111,12 +111,12 @@ public class DrawerEntryAdapter extends RecyclerView.Adapter<DrawerEntryAdapter.
         }
 
         void bind(@NonNull DrawerEntry entry) {
-            boolean dark = PrefsManager.getInstance(itemView.getContext())
-                    .shouldUseDarkColors(itemView.getContext());
-            int titleColor = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
-            int subColor = dark ? Color.rgb(189, 193, 198) : Color.rgb(95, 99, 104);
-            int headerColor = dark ? Color.rgb(154, 160, 166) : Color.rgb(95, 99, 104);
-            int iconColor = Color.WHITE;
+            PrefsManager prefs = PrefsManager.getInstance(itemView.getContext());
+            boolean dark = prefs.shouldUseDarkColors(itemView.getContext());
+            int titleColor = prefs.getMainTextColor(itemView.getContext());
+            int subColor = prefs.getMainSubTextColor(itemView.getContext());
+            int headerColor = prefs.getMainMutedTextColor(itemView.getContext());
+            int iconColor = dark ? prefs.getMainTextColor(itemView.getContext()) : Color.WHITE;
 
             ViewGroup.LayoutParams lp = itemView.getLayoutParams();
             if (entry.isDivider()) {
@@ -130,7 +130,7 @@ public class DrawerEntryAdapter extends RecyclerView.Adapter<DrawerEntryAdapter.
                 title.setText("");
                 title.setTextSize(0);
                 title.setLetterSpacing(0f);
-                title.setBackgroundColor(dark ? Color.rgb(92, 92, 92) : Color.rgb(188, 188, 188));
+                title.setBackgroundColor(dark ? prefs.getMainOutlineColor(itemView.getContext()) : Color.rgb(188, 188, 188));
                 ViewGroup.LayoutParams titleLp = title.getLayoutParams();
                 titleLp.height = Math.max(1, dpToPx(1.5f));
                 title.setLayoutParams(titleLp);

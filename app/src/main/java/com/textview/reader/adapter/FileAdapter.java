@@ -35,9 +35,14 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
     private OnFileClickListener listener;
     private int sortMode = PrefsManager.SORT_NAME_ASC;
     private boolean sortEnabled = true;
+    private int touchCancelGeneration = 0;
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
 
     public void setListener(OnFileClickListener listener) { this.listener = listener; }
+
+    public void cancelPendingPresses() {
+        touchCancelGeneration++;
+    }
 
     public void setFiles(List<File> fileList) {
         replaceFiles(new ArrayList<>(fileList));
@@ -198,8 +203,11 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                             touchHandler.removeCallbacks(pendingLongPress);
                             pendingLongPress = null;
                         }
+                        final int longPressGeneration = touchCancelGeneration;
                         pendingLongPress = () -> {
-                            if (!tapCancelled && listener != null) {
+                            if (longPressGeneration == touchCancelGeneration
+                                    && !tapCancelled
+                                    && listener != null) {
                                 int pos = getBindingAdapterPosition();
                                 if (pos != RecyclerView.NO_POSITION) {
                                     longPressed = true;
@@ -267,11 +275,11 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
 
         void bind(File file) {
             cancelPendingPress();
-            boolean dark = PrefsManager.getInstance(itemView.getContext())
-                    .shouldUseDarkColors(itemView.getContext());
-            int primaryText = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
-            int secondaryText = dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
-            int iconTint = dark ? Color.rgb(232, 234, 237) : Color.rgb(72, 76, 82);
+            PrefsManager prefs = PrefsManager.getInstance(itemView.getContext());
+            boolean dark = prefs.shouldUseDarkColors(itemView.getContext());
+            int primaryText = prefs.getMainTextColor(itemView.getContext());
+            int secondaryText = prefs.getMainSubTextColor(itemView.getContext());
+            int iconTint = dark ? prefs.getMainTextColor(itemView.getContext()) : Color.rgb(72, 76, 82);
 
             name.setText(file.getName());
             name.setTextColor(primaryText);

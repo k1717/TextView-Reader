@@ -2,6 +2,7 @@ package com.textview.reader.util;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.os.LocaleListCompat;
 
@@ -25,6 +26,7 @@ public class PrefsManager {
     public static final int DARK_MODE_FOLLOW_SYSTEM = 0;
     public static final int DARK_MODE_OFF = 1;
     public static final int DARK_MODE_ON = 2;
+    public static final int DARK_MODE_DARK_NAVY = 3;
     public static final int SORT_RECENT_READ = -1;
     public static final int SORT_NAME_ASC = 0;
     public static final int SORT_NAME_DESC = 1;
@@ -289,19 +291,80 @@ public class PrefsManager {
     public void setDarkMode(int m) { prefs.edit().putInt("dark_mode", m).apply(); applyDarkMode(m); }
     public void applyDarkMode(int mode) {
         switch (mode) {
-            case DARK_MODE_OFF: AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO); break;
-            case DARK_MODE_ON: AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES); break;
-            default: AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM); break;
+            case DARK_MODE_OFF:
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+                break;
+            case DARK_MODE_ON:
+            case DARK_MODE_DARK_NAVY:
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+                break;
+            default:
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
+                break;
         }
+    }
+
+    public boolean isDarkNavyMode() {
+        return getDarkMode() == DARK_MODE_DARK_NAVY;
     }
 
     public boolean shouldUseDarkColors(Context context) {
         int mode = getDarkMode();
-        if (mode == DARK_MODE_ON) return true;
+        if (mode == DARK_MODE_ON || mode == DARK_MODE_DARK_NAVY) return true;
         if (mode == DARK_MODE_OFF) return false;
         int mask = context.getResources().getConfiguration().uiMode
                 & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
         return mask == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    public int getMainBgColor(Context context) {
+        if (isDarkNavyMode()) return Color.rgb(5, 13, 26);
+        return shouldUseDarkColors(context) ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
+    }
+
+    public int getMainPanelColor(Context context) {
+        if (isDarkNavyMode()) return Color.rgb(12, 27, 45);
+        return shouldUseDarkColors(context) ? Color.rgb(17, 17, 17) : Color.rgb(248, 249, 250);
+    }
+
+    public int getMainElevatedPanelColor(Context context) {
+        if (isDarkNavyMode()) return Color.rgb(16, 35, 58);
+        return shouldUseDarkColors(context) ? Color.rgb(30, 30, 30) : Color.rgb(238, 238, 238);
+    }
+
+    public int getMainTextColor(Context context) {
+        if (isDarkNavyMode()) return Color.rgb(234, 242, 255);
+        return shouldUseDarkColors(context) ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
+    }
+
+    public int getMainSubTextColor(Context context) {
+        if (isDarkNavyMode()) return Color.rgb(180, 200, 226);
+        return shouldUseDarkColors(context) ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
+    }
+
+    public int getMainMutedTextColor(Context context) {
+        if (isDarkNavyMode()) return Color.rgb(142, 165, 196);
+        return shouldUseDarkColors(context) ? Color.rgb(154, 160, 166) : Color.rgb(95, 99, 104);
+    }
+
+    public int getMainBarColor(Context context) {
+        if (isDarkNavyMode()) return Color.rgb(3, 10, 22);
+        return shouldUseDarkColors(context) ? Color.rgb(0, 0, 0) : Color.rgb(32, 33, 36);
+    }
+
+    public int getMainOutlineColor(Context context) {
+        if (isDarkNavyMode()) return Color.rgb(55, 82, 115);
+        return shouldUseDarkColors(context) ? Color.rgb(70, 70, 70) : Color.rgb(210, 210, 210);
+    }
+
+    public int getMainSelectedColor(Context context) {
+        if (isDarkNavyMode()) return Color.rgb(42, 69, 108);
+        return shouldUseDarkColors(context) ? Color.rgb(72, 72, 72) : Color.rgb(32, 33, 36);
+    }
+
+    public int getMainControlColor(Context context) {
+        if (isDarkNavyMode()) return Color.rgb(206, 222, 246);
+        return shouldUseDarkColors(context) ? Color.rgb(210, 210, 210) : Color.rgb(80, 80, 80);
     }
 
 

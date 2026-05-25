@@ -366,19 +366,28 @@ public class FileUtils {
     private static String decodeBestEffort(byte[] data, String encoding) {
         String bom = detectBom(data);
         int offset = bomOffset(data);
+        byte[] body = offset > 0 ? Arrays.copyOfRange(data, offset, data.length) : data;
 
-        ArrayList<String> candidates = new ArrayList<>();
-        if (bom != null) candidates.add(bom);
-        if (encoding != null && !encoding.trim().isEmpty()) candidates.add(encoding);
+        // A BOM is explicit metadata from the file. Do not let broad legacy
+        // candidate scoring override it, or UTF-8-BOM Korean/Unicode text can be
+        // misread as a single-byte/CJK legacy encoding when mojibake happens to
+        // receive a lower score.
+        if (bom != null && Charset.isSupported(bom)) {
+            return sanitizeDecodedText(decodeCandidate(body, bom).text);
+        }
 
-        for (String c : TEXT_ENCODING_CANDIDATES) {
-            if (!candidates.contains(c)) candidates.add(c);
+        // detectEncodingFromBytes() already performs BOM, UTF-16 heuristics,
+        // strict UTF-8 validation, ICU detection, and legacy fallback scoring.
+        // Once it selects an encoding, trust that selection here instead of
+        // rescoring every candidate on the full file and accidentally changing
+        // the result for later chunks or longer files.
+        String selected = normalizeDetectedCharset(encoding);
+        if (selected != null && Charset.isSupported(selected)) {
+            return sanitizeDecodedText(decodeCandidate(body, selected).text);
         }
 
         DecodeResult best = null;
-        byte[] body = offset > 0 ? Arrays.copyOfRange(data, offset, data.length) : data;
-
-        for (String candidate : candidates) {
+        for (String candidate : TEXT_ENCODING_CANDIDATES) {
             if (!Charset.isSupported(candidate)) continue;
             DecodeResult result = decodeCandidate(body, candidate);
             if (best == null || result.score < best.score) {

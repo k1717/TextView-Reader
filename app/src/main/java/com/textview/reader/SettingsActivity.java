@@ -194,12 +194,14 @@ public class SettingsActivity extends AppCompatActivity {
         int current = prefs.getDarkMode();
         if (current == PrefsManager.DARK_MODE_OFF) ((RadioButton) findViewById(R.id.radio_light)).setChecked(true);
         else if (current == PrefsManager.DARK_MODE_ON) ((RadioButton) findViewById(R.id.radio_dark)).setChecked(true);
+        else if (current == PrefsManager.DARK_MODE_DARK_NAVY) ((RadioButton) findViewById(R.id.radio_dark_navy)).setChecked(true);
         else ((RadioButton) findViewById(R.id.radio_system)).setChecked(true);
 
         group.setOnCheckedChangeListener((g, checkedId) -> {
             int mode;
             if (checkedId == R.id.radio_light) mode = PrefsManager.DARK_MODE_OFF;
             else if (checkedId == R.id.radio_dark) mode = PrefsManager.DARK_MODE_ON;
+            else if (checkedId == R.id.radio_dark_navy) mode = PrefsManager.DARK_MODE_DARK_NAVY;
             else mode = PrefsManager.DARK_MODE_FOLLOW_SYSTEM;
             if (prefs.getDarkMode() != mode) {
                 prefs.setDarkMode(mode);
@@ -1433,8 +1435,8 @@ public class SettingsActivity extends AppCompatActivity {
     private void styleSpinnerText(View view) {
         if (view instanceof TextView) {
             boolean dark = isDarkUi();
-            int bg = dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
-            int text = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
+            int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255));
+            int text = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36));
             TextView tv = (TextView) view;
             tv.setTextColor(text);
             tv.setBackgroundColor(bg);
@@ -1453,6 +1455,7 @@ public class SettingsActivity extends AppCompatActivity {
 
 
     private boolean isDarkUi() {
+        if (prefs != null && prefs.isDarkNavyMode()) return true;
         int mask = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         return mask == Configuration.UI_MODE_NIGHT_YES;
     }
@@ -1470,18 +1473,18 @@ public class SettingsActivity extends AppCompatActivity {
     private void applySettingsReadableTheme() {
         boolean dark = isDarkUi();
 
-        int bg = dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
-        int panel = dark ? Color.rgb(16, 16, 16) : Color.rgb(248, 249, 250);
-        int text = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
-        int sub = dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
-        int bar = dark ? Color.rgb(0, 0, 0) : Color.rgb(32, 33, 36);
-        int outline = dark ? Color.rgb(70, 70, 70) : Color.rgb(210, 210, 210);
+        int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255));
+        int panel = prefs != null ? prefs.getMainPanelColor(this) : (dark ? Color.rgb(16, 16, 16) : Color.rgb(248, 249, 250));
+        int text = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36));
+        int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104));
+        int bar = prefs != null ? prefs.getMainBarColor(this) : (dark ? Color.rgb(0, 0, 0) : Color.rgb(32, 33, 36));
+        int outline = prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(70, 70, 70) : Color.rgb(210, 210, 210));
 
-        // Monochrome / greyscale controls. No cyan/green accent.
-        int checked = dark ? Color.rgb(210, 210, 210) : Color.rgb(80, 80, 80);
-        int uncheckedThumb = dark ? Color.rgb(145, 145, 145) : Color.rgb(170, 170, 170);
-        int uncheckedTrack = dark ? Color.rgb(70, 70, 70) : Color.rgb(210, 210, 210);
-        int checkedTrack = dark ? Color.rgb(95, 95, 95) : Color.rgb(180, 180, 180);
+        // Monochrome / navy-safe controls. Keep checked/unchecked states visible on dark navy.
+        int checked = prefs != null ? prefs.getMainControlColor(this) : (dark ? Color.rgb(210, 210, 210) : Color.rgb(80, 80, 80));
+        int uncheckedThumb = prefs != null && prefs.isDarkNavyMode() ? Color.rgb(116, 143, 178) : (dark ? Color.rgb(145, 145, 145) : Color.rgb(170, 170, 170));
+        int uncheckedTrack = prefs != null && prefs.isDarkNavyMode() ? Color.rgb(34, 53, 78) : (dark ? Color.rgb(70, 70, 70) : Color.rgb(210, 210, 210));
+        int checkedTrack = prefs != null && prefs.isDarkNavyMode() ? Color.rgb(55, 82, 115) : (dark ? Color.rgb(95, 95, 95) : Color.rgb(180, 180, 180));
 
         View root = findViewById(R.id.settings_root);
         View appbar = findViewById(R.id.settings_appbar);
@@ -1733,11 +1736,15 @@ public class SettingsActivity extends AppCompatActivity {
         String activeId = activeTheme != null ? activeTheme.getId() : "";
 
         boolean dark = isDarkUi();
-        int rowBg = dark ? Color.rgb(10, 10, 10) : Color.rgb(255, 255, 255);
-        int text = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
-        int sub = dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
-        int outline = dark ? Color.rgb(70, 70, 70) : Color.rgb(218, 220, 224);
-        int selectedOutline = dark ? Color.rgb(210, 210, 210) : Color.rgb(80, 80, 80);
+        int rowBg = prefs != null && prefs.isDarkNavyMode()
+                ? Color.rgb(7, 18, 32)
+                : (prefs != null ? prefs.getMainElevatedPanelColor(this) : (dark ? Color.rgb(10, 10, 10) : Color.rgb(255, 255, 255)));
+        int text = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36));
+        int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104));
+        int outline = prefs != null && prefs.isDarkNavyMode()
+                ? Color.rgb(42, 64, 92)
+                : (prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(70, 70, 70) : Color.rgb(218, 220, 224)));
+        int selectedOutline = prefs != null ? prefs.getMainControlColor(this) : (dark ? Color.rgb(210, 210, 210) : Color.rgb(80, 80, 80));
 
         for (Theme theme : themes) {
             boolean selected = theme.getId().equals(activeId);

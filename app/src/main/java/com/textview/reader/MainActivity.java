@@ -67,6 +67,7 @@ import com.textview.reader.util.PrefsManager;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -144,8 +145,13 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private float drawerSwipeStartX;
     private float drawerSwipeStartY;
     private boolean drawerSwipeTracking = false;
+    private boolean drawerManualDragging = false;
     private boolean drawerSwipeOpened = false;
     private int drawerSwipeTouchSlop;
+    private float drawerSlideOffset = 0f;
+    private boolean drawerForceSettling = false;
+    private boolean drawerClosePartialOnRelease = false;
+    private Method drawerMoveToOffsetMethod;
 
     private File currentDirectory;
     /** True when the home (recent) view is active; false when browsing a folder. */
@@ -220,8 +226,30 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         drawerLayout.addDrawerListener(drawerToggle);
         drawerLayout.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
             @Override
+            public void onDrawerSlide(@NonNull View drawerView, float slideOffset) {
+                drawerSlideOffset = slideOffset;
+            }
+
+            @Override
+            public void onDrawerOpened(@NonNull View drawerView) {
+                drawerSlideOffset = 1f;
+                drawerClosePartialOnRelease = false;
+                drawerForceSettling = false;
+            }
+
+            @Override
             public void onDrawerClosed(@NonNull View drawerView) {
+                drawerSlideOffset = 0f;
+                drawerForceSettling = false;
+                drawerClosePartialOnRelease = false;
                 consumePendingDrawerNavigation();
+            }
+
+            @Override
+            public void onDrawerStateChanged(int newState) {
+                if (newState == DrawerLayout.STATE_IDLE) {
+                    settleHalfOpenedDrawer();
+                }
             }
         });
         drawerToggle.syncState();
@@ -287,15 +315,20 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
-        if (handleGlobalRightDragForDrawer(event)) {
+        if (handleProportionalDrawerEdgeDrag(event)) {
             return true;
         }
         return super.dispatchTouchEvent(event);
     }
 
-    private boolean handleGlobalRightDragForDrawer(@NonNull MotionEvent event) {
+    private boolean handleProportionalDrawerEdgeDrag(@NonNull MotionEvent event) {
         if (drawerLayout == null || drawerLayout.isDrawerOpen(GravityCompat.START)) {
             resetDrawerSwipeState();
+            return false;
+        }
+
+        View drawerView = findViewById(R.id.nav_drawer);
+        if (drawerView == null || drawerView.getWidth() <= 0) {
             return false;
         }
 
@@ -304,39 +337,111 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                 drawerSwipeStartX = event.getX();
                 drawerSwipeStartY = event.getY();
                 drawerSwipeOpened = false;
+                drawerManualDragging = false;
+                // No edge-only border: drawer gestures may start anywhere on the main screen.
                 drawerSwipeTracking = !isTouchInsideView(fileSearchInput, event);
                 return false;
 
             case MotionEvent.ACTION_MOVE:
                 if (!drawerSwipeTracking) return false;
+
                 float dx = event.getX() - drawerSwipeStartX;
                 float dy = event.getY() - drawerSwipeStartY;
                 float absDx = Math.abs(dx);
                 float absDy = Math.abs(dy);
 
-                if (absDy > drawerSwipeTouchSlop * 2f && absDy > absDx * 1.15f) {
-                    drawerSwipeTracking = false;
+                if (!drawerManualDragging) {
+                    if (absDy > drawerSwipeTouchSlop * 2.4f && absDy > absDx * 1.30f) {
+                        resetDrawerSwipeState();
+                        return false;
+                    }
+                    float startThreshold = Math.max(dpToPx(2), drawerSwipeTouchSlop * 0.45f);
+                    if (dx <= startThreshold || absDx <= absDy * 1.00f) {
+                        return false;
+                    }
+                    drawerManualDragging = true;
+                    cancelMainListPendingPresses();
+                    drawerForceSettling = false;
+                    drawerClosePartialOnRelease = false;
+                }
+
+                final float dragGain = 1.18f;
+                float offset = Math.max(0f, Math.min(1f,
+                        (dx * dragGain) / Math.max(1f, drawerView.getWidth())));
+                applyDrawerManualOffset(drawerView, offset);
+                return true;
+
+            case MotionEvent.ACTION_UP:
+                if (!drawerManualDragging) {
+                    resetDrawerSwipeState();
                     return false;
                 }
 
-                int threshold = Math.max(dpToPx(54), drawerSwipeTouchSlop * 4);
-                if (dx > threshold && absDx > absDy * 1.65f) {
-                    drawerSwipeOpened = true;
-                    drawerSwipeTracking = false;
+                boolean fullyPulled = drawerSlideOffset >= 0.30f;
+                resetDrawerSwipeState();
+                if (fullyPulled) {
+                    drawerView.setTranslationX(0f);
+                    drawerView.setVisibility(View.VISIBLE);
                     drawerLayout.openDrawer(GravityCompat.START);
+                } else {
+                    forceDrawerClosedVisualState(drawerView);
+                    drawerLayout.closeDrawer(GravityCompat.START);
+                }
+                return true;
+
+            case MotionEvent.ACTION_CANCEL:
+                if (drawerManualDragging) {
+                    forceDrawerClosedVisualState(drawerView);
+                    drawerLayout.closeDrawer(GravityCompat.START);
+                    resetDrawerSwipeState();
                     return true;
                 }
-                return false;
-
-            case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL:
-                boolean consume = drawerSwipeOpened;
                 resetDrawerSwipeState();
-                return consume;
+                return false;
 
             default:
                 return false;
         }
+    }
+
+    private void applyDrawerManualOffset(@NonNull View drawerView, float offset) {
+        drawerSlideOffset = offset;
+
+        if (offset > 0f) {
+            drawerView.setVisibility(View.VISIBLE);
+            drawerLayout.bringChildToFront(drawerView);
+        }
+
+        try {
+            Method method = drawerMoveToOffsetMethod;
+            if (method == null) {
+                method = DrawerLayout.class.getDeclaredMethod("moveDrawerToOffset", View.class, float.class);
+                method.setAccessible(true);
+                drawerMoveToOffsetMethod = method;
+            }
+            method.invoke(drawerLayout, drawerView, offset);
+            drawerView.setVisibility(offset > 0f ? View.VISIBLE : View.INVISIBLE);
+            drawerLayout.invalidate();
+        } catch (Throwable ignored) {
+            // Fallback path for AndroidX internals changes. DrawerLayout normally
+            // lays a closed left drawer at -drawerWidth; therefore positive
+            // translationX must be width * offset. The old negative translation
+            // pushed the drawer farther offscreen, leaving only the dark scrim.
+            int width = Math.max(1, drawerView.getWidth());
+            drawerView.setTranslationX(width * offset);
+            drawerView.setVisibility(offset > 0f ? View.VISIBLE : View.INVISIBLE);
+            drawerLayout.invalidate();
+        }
+    }
+
+    private void forceDrawerClosedVisualState(@NonNull View drawerView) {
+        drawerSlideOffset = 0f;
+        drawerClosePartialOnRelease = false;
+        drawerForceSettling = false;
+        applyDrawerManualOffset(drawerView, 0f);
+        drawerView.setTranslationX(0f);
+        drawerView.setVisibility(View.INVISIBLE);
+        drawerLayout.postInvalidateOnAnimation();
     }
 
     private boolean isTouchInsideView(View view, @NonNull MotionEvent event) {
@@ -351,7 +456,52 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     private void resetDrawerSwipeState() {
         drawerSwipeTracking = false;
+        drawerManualDragging = false;
         drawerSwipeOpened = false;
+    }
+
+    private void cancelMainListPendingPresses() {
+        if (fileAdapter != null) fileAdapter.cancelPendingPresses();
+        if (recentAdapter != null) recentAdapter.cancelPendingPresses();
+        cancelRecyclerTouchState(fileRecyclerView);
+        cancelRecyclerTouchState(recentRecyclerView);
+    }
+
+    private void cancelRecyclerTouchState(RecyclerView recyclerView) {
+        if (recyclerView == null) return;
+        recyclerView.cancelLongPress();
+        recyclerView.setPressed(false);
+        recyclerView.clearFocus();
+        clearPressedStateRecursive(recyclerView);
+        recyclerView.post(() -> clearPressedStateRecursive(recyclerView));
+    }
+
+    private void clearPressedStateRecursive(View view) {
+        if (view == null) return;
+        view.setPressed(false);
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                clearPressedStateRecursive(group.getChildAt(i));
+            }
+        }
+    }
+
+    private void settleHalfOpenedDrawer() {
+        if (drawerLayout == null || drawerForceSettling) return;
+
+        // Manual edge-drag release already decides open vs close. This remains as
+        // a safety net for any partial state left by the underlying DrawerLayout.
+        if (!drawerLayout.isDrawerOpen(GravityCompat.START)
+                && drawerLayout.isDrawerVisible(GravityCompat.START)
+                && drawerSlideOffset < 0.995f) {
+            View drawerView = findViewById(R.id.nav_drawer);
+            drawerForceSettling = true;
+            if (drawerView != null) {
+                forceDrawerClosedVisualState(drawerView);
+            }
+            drawerLayout.closeDrawer(GravityCompat.START);
+        }
     }
 
     @Override
@@ -675,14 +825,14 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (chip == null) return;
         boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
         int bg = selected
-                ? (dark ? Color.rgb(72, 72, 72) : Color.rgb(32, 33, 36))
-                : (dark ? Color.rgb(30, 30, 30) : Color.rgb(238, 238, 238));
+                ? (prefs != null ? prefs.getMainSelectedColor(this) : (dark ? Color.rgb(72, 72, 72) : Color.rgb(32, 33, 36)))
+                : (prefs != null ? prefs.getMainElevatedPanelColor(this) : (dark ? Color.rgb(30, 30, 30) : Color.rgb(238, 238, 238)));
         int stroke = selected
-                ? (dark ? Color.rgb(220, 220, 220) : Color.rgb(32, 33, 36))
-                : (dark ? Color.rgb(92, 92, 92) : Color.rgb(190, 190, 190));
+                ? (prefs != null ? prefs.getMainControlColor(this) : (dark ? Color.rgb(220, 220, 220) : Color.rgb(32, 33, 36)))
+                : (prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(92, 92, 92) : Color.rgb(190, 190, 190)));
         int fg = selected
                 ? Color.WHITE
-                : (dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36));
+                : (prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36)));
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(bg);
         shape.setCornerRadius(dpToPx(15));
@@ -1265,7 +1415,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (drawerLayout == null) return;
 
         drawerLayout.post(() -> {
-            widenDrawerEdgeDragArea(drawerLayout, dpToPx(32));
+            widenDrawerEdgeDragArea(drawerLayout, dpToPx(48));
             updateDrawerGestureExclusion();
         });
 
@@ -1441,16 +1591,15 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     }
 
     private void queueDrawerNavigation(@NonNull DrawerEntry entry) {
-        pendingDrawerNavigationEntry = entry;
-        drawerNavigationPending = true;
+        // Folder loading is asynchronous now, so navigation can start immediately.
+        // This makes drawer taps feel responsive instead of waiting for the close
+        // animation to finish before changing the main screen underneath.
+        pendingDrawerNavigationEntry = null;
+        drawerNavigationPending = false;
+        handleDrawerEntryClick(entry);
 
-        // Drawer navigation can be expensive, especially Downloads, because
-        // directory listing may touch many files. Close the drawer first so the
-        // tap response is immediate; run navigation only after the close animation.
         if (drawerLayout != null && drawerLayout.isDrawerOpen(GravityCompat.START)) {
             drawerLayout.closeDrawer(GravityCompat.START);
-        } else {
-            consumePendingDrawerNavigation();
         }
     }
 
@@ -1520,12 +1669,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     private void showShortcutRemoveDialog(@NonNull File folder) {
         final boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
-        final int bg = dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255);
-        final int panel = dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245);
-        final int fg = dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36);
-        final int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104);
+        final int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255));
+        final int panel = prefs != null ? prefs.getMainPanelColor(this) : (dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245));
+        final int fg = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36));
+        final int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104));
         final int danger = dark ? Color.rgb(255, 170, 170) : Color.rgb(176, 0, 32);
-        final int line = dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210);
+        final int line = prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -1665,12 +1814,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                                         @NonNull String actionText,
                                         @NonNull Runnable action) {
         final boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
-        final int bg = dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255);
-        final int panel = dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245);
-        final int fg = dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36);
-        final int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104);
+        final int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255));
+        final int panel = prefs != null ? prefs.getMainPanelColor(this) : (dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245));
+        final int fg = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36));
+        final int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104));
         final int danger = dark ? Color.rgb(255, 170, 170) : Color.rgb(176, 0, 32);
-        final int line = dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210);
+        final int line = prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -1796,18 +1945,24 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private void applyMainReadableTheme(Toolbar toolbar) {
         boolean dark = isDarkUi();
 
-        int bg = dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255);
-        int panel = dark ? Color.rgb(17, 17, 17) : Color.rgb(248, 249, 250);
-        int fg = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
-        int sub = dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
-        int bar = dark ? Color.rgb(0, 0, 0) : Color.rgb(32, 33, 36);
+        int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255));
+        int panel = prefs != null ? prefs.getMainPanelColor(this) : (dark ? Color.rgb(17, 17, 17) : Color.rgb(248, 249, 250));
+        int fg = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36));
+        int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104));
+        int bar = prefs != null ? prefs.getMainBarColor(this) : (dark ? Color.rgb(0, 0, 0) : Color.rgb(32, 33, 36));
 
         View root = findViewById(R.id.main_root);
         View appbar = findViewById(R.id.main_appbar);
         View navDrawer = findViewById(R.id.nav_drawer);
+        View recentHeaderRow = findViewById(R.id.recent_header_row);
         TextView recentTitle = findViewById(R.id.recent_section_title);
         View searchBar = findViewById(R.id.file_search_bar);
         View localPathBar = findViewById(R.id.path_bar);
+        View drawerRecentHeader = findViewById(R.id.drawer_recent_folders_header);
+        View drawerBottomActions = findViewById(R.id.drawer_bottom_actions);
+        View drawerOpenFile = findViewById(R.id.drawer_btn_open_file);
+        View drawerBookmarks = findViewById(R.id.drawer_btn_bookmarks);
+        View drawerSettings = findViewById(R.id.drawer_btn_settings);
 
         if (root != null) root.setBackgroundColor(bg);
         if (browserSection != null) browserSection.setBackgroundColor(bg);
@@ -1816,8 +1971,26 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             navDrawer.setBackgroundColor(bg);
             applyExplicitTextColors(navDrawer, fg, sub);
         }
+        if (drawerStorageList != null) drawerStorageList.setBackgroundColor(bg);
+        if (drawerShortcutList != null) drawerShortcutList.setBackgroundColor(bg);
+        if (drawerRecentHeader != null) drawerRecentHeader.setBackgroundColor(panel);
+        if (drawerRecentFoldersTitle != null) {
+            drawerRecentFoldersTitle.setBackgroundColor(Color.TRANSPARENT);
+            drawerRecentFoldersTitle.setTextColor(sub);
+        }
+        if (drawerRecentFoldersClearButton != null) {
+            drawerRecentFoldersClearButton.setBackgroundColor(Color.TRANSPARENT);
+        }
+        if (drawerBottomActions != null) {
+            drawerBottomActions.setBackgroundColor(bg);
+            applyExplicitTextColors(drawerBottomActions, fg, sub);
+        }
+        applyDrawerBottomActionFlatBackground(drawerOpenFile, bg);
+        applyDrawerBottomActionFlatBackground(drawerBookmarks, bg);
+        applyDrawerBottomActionFlatBackground(drawerSettings, bg);
+        if (recentHeaderRow != null) recentHeaderRow.setBackgroundColor(panel);
         if (recentTitle != null) {
-            recentTitle.setBackgroundColor(bg);
+            recentTitle.setBackgroundColor(Color.TRANSPARENT);
             recentTitle.setTextColor(fg);
         }
         if (recentClearAllButton != null) {
@@ -1877,6 +2050,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         controller.setAppearanceLightStatusBars(false);
         controller.setAppearanceLightNavigationBars(!dark);
         updateFileTypeChips();
+    }
+
+    private void applyDrawerBottomActionFlatBackground(View actionRow, int color) {
+        if (actionRow == null) return;
+        actionRow.setBackgroundColor(color);
+        actionRow.setPadding(dpToPx(20), 0, dpToPx(16), 0);
     }
 
     private void applyExplicitTextColors(@NonNull View view, int fg, int sub) {
@@ -2191,10 +2370,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     private void showFileOpsDialog(File file) {
         final boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
-        final int bg = dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255);
-        final int panel = dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245);
-        final int fg = dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36);
-        final int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104);
+        final int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255));
+        final int panel = prefs != null ? prefs.getMainPanelColor(this) : (dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245));
+        final int fg = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36));
+        final int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104));
         final int danger = dark ? Color.rgb(255, 170, 170) : Color.rgb(176, 0, 32);
 
         LinearLayout box = new LinearLayout(this);
@@ -2203,7 +2382,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         GradientDrawable bgShape = new GradientDrawable();
         bgShape.setColor(bg);
         bgShape.setCornerRadius(dpToPx(18));
-        bgShape.setStroke(Math.max(1, dpToPx(1)), dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210));
+        bgShape.setStroke(Math.max(1, dpToPx(1)), prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210)));
         box.setBackground(bgShape);
 
         TextView title = new TextView(this);
@@ -2283,11 +2462,11 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     private void showRenameDialog(File file) {
         final boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
-        final int bg = dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255);
-        final int panel = dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245);
-        final int fg = dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36);
-        final int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104);
-        final int line = dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210);
+        final int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255));
+        final int panel = prefs != null ? prefs.getMainPanelColor(this) : (dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245));
+        final int fg = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36));
+        final int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104));
+        final int line = prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -2380,13 +2559,13 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     private void showDeleteConfirm(File file) {
         final boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
-        final int bg = dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255);
-        final int panel = dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245);
-        final int fg = dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36);
-        final int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104);
+        final int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255));
+        final int panel = prefs != null ? prefs.getMainPanelColor(this) : (dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245));
+        final int fg = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36));
+        final int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104));
         final int danger = dark ? Color.rgb(255, 170, 170) : Color.rgb(176, 0, 32);
         final int dangerBg = dark ? Color.rgb(96, 42, 42) : Color.rgb(255, 235, 238);
-        final int line = dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210);
+        final int line = prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -2561,11 +2740,11 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     private void showFileInfo(File file) {
         final boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
-        final int bg = dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255);
-        final int panel = dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245);
-        final int fg = dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36);
+        final int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255));
+        final int panel = prefs != null ? prefs.getMainPanelColor(this) : (dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245));
+        final int fg = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36));
         final int sub = dark ? Color.rgb(205, 205, 205) : Color.rgb(78, 84, 92);
-        final int line = dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210);
+        final int line = prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -2683,11 +2862,11 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     private void showSortDialog() {
         final boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
-        final int bg = dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255);
-        final int panel = dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245);
-        final int fg = dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36);
-        final int sub = dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104);
-        final int line = dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210);
+        final int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255));
+        final int panel = prefs != null ? prefs.getMainPanelColor(this) : (dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245));
+        final int fg = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36));
+        final int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104));
+        final int line = prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
