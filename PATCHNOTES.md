@@ -10,6 +10,7 @@ This 2.1.6 package is prepared as the current release. It uses Android metadata 
 - Added heuristic detection for BOM-less UTF-16LE/UTF-16BE before accepting strict-valid UTF-8, reducing broken no-BOM UTF-16 output with embedded NUL bytes.
 - Android ICU-assisted detection is tried before fallback scoring; fallback scoring also counts broad alphabetic-script characters and common book punctuation for old TXT files across more writing systems.
 - Strict valid UTF-8 is still preferred for explicit Unicode text, and BOM-based Unicode detection remains first.
+- Decode-time fallback now trusts UTF-8 BOM and selected encoding results instead of rescoring the full file and accidentally reopening valid UTF-8 Korean text as legacy mojibake.
 
 ### TXT Unicode safety
 

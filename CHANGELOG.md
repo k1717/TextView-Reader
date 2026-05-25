@@ -10,6 +10,7 @@ This package uses Android metadata `versionCode 2160` and `versionName "2.1.6"`.
 - Added BOM-less UTF-16LE/UTF-16BE detection before strict UTF-8 acceptance so no-BOM UTF-16 TXT files with many embedded NUL bytes no longer open as broken UTF-8 text.
 - Updated fallback encoding scoring to consider broad alphabetic-script characters and common book punctuation, improving fallback selection for old TXT files across more writing systems.
 - Retained strict UTF-8 preference for valid Unicode text and BOM-based UTF-8/UTF-16 handling for explicit Unicode files.
+- Fixed decode-time fallback so UTF-8 BOM and selected UTF-8 results are authoritative; broad legacy candidate rescoring can no longer override them and produce mojibake in Korean UTF-8 text.
 
 ### TXT Unicode safety
 
