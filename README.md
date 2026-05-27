@@ -1,3 +1,9 @@
+# TextView Reader
+
+TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
+
+Current version: **2.1.7**
+
 ## 2.1.7 release summary
 
 - Updated Android version metadata to `versionCode 2170` and `versionName "2.1.7"`.
