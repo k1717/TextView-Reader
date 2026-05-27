@@ -5,3 +5,8 @@
 -keepclassmembers class com.textview.reader.model.** {
     public *;
 }
+
+# JUniversalChardet is invoked reflectively from FileUtils.
+-keep class org.mozilla.universalchardet.** { *; }
+-dontwarn org.mozilla.universalchardet.**
+
