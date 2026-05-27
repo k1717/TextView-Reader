@@ -36,12 +36,26 @@ public class DrawerEntryAdapter extends RecyclerView.Adapter<DrawerEntryAdapter.
     private final List<DrawerEntry> entries = new ArrayList<>();
     private OnEntryClickListener listener;
     private OnEntryLongClickListener longClickListener;
+    private boolean useShortcutBoxColor = false;
 
     public void setListener(OnEntryClickListener listener) { this.listener = listener; }
     public void setLongClickListener(OnEntryLongClickListener listener) { this.longClickListener = listener; }
 
+    /**
+     * True only for the bottom-adjacent shortcut list. Recent-folder rows must not
+     * inherit shortcut-box colors, because only their header strip is theme-offset.
+     */
+    public void setUseShortcutBoxColor(boolean useShortcutBoxColor) {
+        if (this.useShortcutBoxColor == useShortcutBoxColor) return;
+        this.useShortcutBoxColor = useShortcutBoxColor;
+        refreshTheme();
+    }
+
     public void setEntries(@NonNull List<DrawerEntry> newEntries) {
-        if (entries.equals(newEntries)) return;
+        if (entries.equals(newEntries)) {
+            notifyItemRangeChanged(0, entries.size());
+            return;
+        }
 
         List<DrawerEntry> old = new ArrayList<>(entries);
         List<DrawerEntry> next = new ArrayList<>(newEntries);
@@ -85,6 +99,10 @@ public class DrawerEntryAdapter extends RecyclerView.Adapter<DrawerEntryAdapter.
     @Override
     public int getItemCount() { return entries.size(); }
 
+    public void refreshTheme() {
+        notifyItemRangeChanged(0, entries.size());
+    }
+
     public class ViewHolder extends RecyclerView.ViewHolder {
         ImageView icon;
         TextView title;
@@ -116,7 +134,11 @@ public class DrawerEntryAdapter extends RecyclerView.Adapter<DrawerEntryAdapter.
             int titleColor = prefs.getMainTextColor(itemView.getContext());
             int subColor = prefs.getMainSubTextColor(itemView.getContext());
             int headerColor = prefs.getMainMutedTextColor(itemView.getContext());
-            int iconColor = dark ? prefs.getMainTextColor(itemView.getContext()) : Color.WHITE;
+            int iconBoxColor = prefs.getMainShortcutBoxColor(itemView.getContext());
+            int iconColor = readableTextColorForBackground(iconBoxColor);
+            int plainIconColor = prefs.shouldUseDarkColors(itemView.getContext())
+                    ? prefs.getMainTextColor(itemView.getContext())
+                    : Color.rgb(72, 76, 82);
 
             ViewGroup.LayoutParams lp = itemView.getLayoutParams();
             if (entry.isDivider()) {
@@ -130,7 +152,7 @@ public class DrawerEntryAdapter extends RecyclerView.Adapter<DrawerEntryAdapter.
                 title.setText("");
                 title.setTextSize(0);
                 title.setLetterSpacing(0f);
-                title.setBackgroundColor(dark ? prefs.getMainOutlineColor(itemView.getContext()) : Color.rgb(188, 188, 188));
+                title.setBackgroundColor(prefs.getMainOutlineColor(itemView.getContext()));
                 ViewGroup.LayoutParams titleLp = title.getLayoutParams();
                 titleLp.height = Math.max(1, dpToPx(1.5f));
                 title.setLayoutParams(titleLp);
@@ -166,7 +188,17 @@ public class DrawerEntryAdapter extends RecyclerView.Adapter<DrawerEntryAdapter.
             title.setTextSize(14);
             title.setLetterSpacing(0f);
             icon.setImageResource(entry.getIconRes());
-            icon.setImageTintList(ColorStateList.valueOf(iconColor));
+            if (useShortcutBoxColor) {
+                if (icon.getBackground() == null) {
+                    icon.setBackgroundResource(R.drawable.drawer_entry_icon_bg);
+                }
+                icon.setBackgroundTintList(ColorStateList.valueOf(iconBoxColor));
+                icon.setImageTintList(ColorStateList.valueOf(iconColor));
+            } else {
+                icon.setBackground(null);
+                icon.setBackgroundTintList(null);
+                icon.setImageTintList(ColorStateList.valueOf(plainIconColor));
+            }
             title.setText(entry.getTitle());
             title.setTextColor(titleColor);
             subtitle.setTextColor(subColor);
@@ -176,6 +208,11 @@ public class DrawerEntryAdapter extends RecyclerView.Adapter<DrawerEntryAdapter.
             } else {
                 subtitle.setVisibility(View.GONE);
             }
+        }
+
+        private int readableTextColorForBackground(int color) {
+            double luminance = 0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color);
+            return luminance > 150 ? Color.rgb(32, 33, 36) : Color.WHITE;
         }
 
         private int dpToPx(float dp) {

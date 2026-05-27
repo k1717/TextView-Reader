@@ -59,33 +59,7 @@ public class CustomReaderView extends View {
         }
     }
 
-    private static int getPagingTextEnd(String value) {
-        if (value == null || value.isEmpty()) return 0;
-        int end = value.length();
-        while (end > 0) {
-            char ch = value.charAt(end - 1);
-            if (ch == '\n' || ch == '\r') {
-                end--;
-            } else {
-                break;
-            }
-        }
-        return Math.max(0, end);
-    }
 
-    private static int getEffectivePagingLineCount(StaticLayout sourceLayout, String value) {
-        if (sourceLayout == null || sourceLayout.getLineCount() <= 0) return 0;
-        int layoutLineCount = sourceLayout.getLineCount();
-        int pagingEnd = getPagingTextEnd(value);
-        if (pagingEnd <= 0) return 1;
-
-        // Use the last meaningful character, not the terminal newline.  Otherwise
-        // TXT files that end with one or more line breaks can create a blank
-        // filler page at EOF and make large-TXT exact totals one page too high.
-        int lastContentOffset = Math.max(0, Math.min(pagingEnd - 1, value.length() - 1));
-        int lastContentLine = sourceLayout.getLineForOffset(lastContentOffset);
-        return Math.max(1, Math.min(layoutLineCount, lastContentLine + 1));
-    }
 
     private static int getContentHeightForPaging(StaticLayout sourceLayout,
                                                  String value,

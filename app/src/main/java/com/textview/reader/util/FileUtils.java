@@ -70,6 +70,48 @@ public class FileUtils {
     private static final int EXTENDED_SAMPLE_LIMIT = 256 * 1024;
     private static final int SAMPLE_LIMIT = PRIMARY_SAMPLE_LIMIT;
 
+    // Encoding scorer weights.  These names intentionally preserve the existing
+    // numeric behavior while making future detector tuning reviewable in diffs.
+    private static final double DETECTOR_ICU_EXACT_BONUS = 45.0;
+    private static final double DETECTOR_MOZILLA_EXACT_BONUS = 70.0;
+    private static final double DETECTOR_ICU_FAMILY_BONUS = 18.0;
+    private static final double DETECTOR_MOZILLA_FAMILY_BONUS = 32.0;
+    private static final double DETECTOR_AGREEING_FAMILY_BONUS = 45.0;
+    private static final double SCORE_REPLACEMENT_PENALTY = 900.0;
+    private static final double SCORE_BAD_CONTROL_PENALTY = 500.0;
+    private static final double SCORE_NUL_PENALTY = 1500.0;
+    private static final double KOREAN_HANGUL_BONUS = 6.7;
+    private static final double KOREAN_CJK_BONUS = 1.45;
+    private static final double KOREAN_SUSTAINED_SIGNAL_BONUS = 550.0;
+    private static final double KOREAN_STRONG_SIGNAL_BONUS = 3200.0;
+    private static final double KOREAN_WEAK_SIGNAL_PENALTY = 900.0;
+    private static final double KOREAN_SUPERSET_BONUS = 35.0;
+    private static final double KOREAN_EUC_KR_TIE_PENALTY = 10.0;
+    private static final double CYRILLIC_CHAR_BONUS = 1.8;
+    private static final double CYRILLIC_NATURALNESS_BONUS = 4.2;
+    private static final double CYRILLIC_ODD_CHAR_PENALTY = 45.0;
+    private static final double CYRILLIC_ODD_PATTERN_BASE_PENALTY = 1800.0;
+    private static final double CYRILLIC_ODD_PATTERN_EXTRA_PENALTY = 18.0;
+    private static final double CYRILLIC_SUSTAINED_SIGNAL_BONUS = 260.0;
+    private static final double CYRILLIC_WEAK_SIGNAL_PENALTY = 850.0;
+    private static final double CYRILLIC_BYTE_SHAPE_WEIGHT = 0.75;
+    private static final double KOI8_BOX_DRAWING_PENALTY = 8.0;
+    private static final double JAPANESE_KANA_BONUS = 3.5;
+    private static final double JAPANESE_CJK_BONUS = 0.75;
+    private static final double JAPANESE_SUSTAINED_SIGNAL_BONUS = 380.0;
+    private static final double JAPANESE_WEAK_SIGNAL_PENALTY = 700.0;
+    private static final double CHINESE_CJK_BONUS = 1.35;
+    private static final double CHINESE_SUSTAINED_SIGNAL_BONUS = 360.0;
+    private static final double CHINESE_WEAK_SIGNAL_PENALTY = 550.0;
+    private static final double SINGLE_SCRIPT_CHAR_BONUS = 2.1;
+    private static final double SINGLE_SCRIPT_SUSTAINED_SIGNAL_BONUS = 240.0;
+    private static final double SINGLE_SCRIPT_WEAK_SIGNAL_PENALTY = 450.0;
+    private static final double VIETNAMESE_SIGNAL_BONUS = 2.4;
+    private static final double VIETNAMESE_SUSTAINED_SIGNAL_BONUS = 260.0;
+    private static final double VIETNAMESE_WEAK_SIGNAL_PENALTY = 220.0;
+    private static final double WESTERN_ASCII_LIKE_BONUS = 150.0;
+    private static final double WESTERN_SCRIPT_MISMATCH_PENALTY = 400.0;
+
     private static final String[] TEXT_ENCODING_CANDIDATES = new String[]{
             "UTF-8",
 
@@ -283,7 +325,7 @@ public class FileUtils {
             }
 
             return result;
-        } catch (Throwable e) {
+        } catch (Exception e) {
             Log.e(TAG, "Encoding detection failed", e);
             return new EncodingResult("UTF-8", EncodingResult.LOW_CONFIDENCE, "fallback", "unicode");
         }
@@ -303,7 +345,7 @@ public class FileUtils {
             bis.reset();
 
             return detectEncodingResultFromBytes(data).charsetName;
-        } catch (Throwable e) {
+        } catch (Exception e) {
             Log.e(TAG, "Encoding detection from stream failed", e);
             return "UTF-8";
         }
@@ -433,30 +475,30 @@ public class FileUtils {
         String family = guessEncodingFamily(result.charsetName);
 
         if (icuDetected != null && result.charsetName.equalsIgnoreCase(icuDetected)) {
-            score -= 45.0;
+            score -= DETECTOR_ICU_EXACT_BONUS;
         }
         if (mozillaDetected != null && result.charsetName.equalsIgnoreCase(mozillaDetected)) {
-            score -= 70.0;
+            score -= DETECTOR_MOZILLA_EXACT_BONUS;
         }
 
         String resultFamily = guessEncodingFamily(result.charsetName);
         if (icuDetected != null && resultFamily.equals(guessEncodingFamily(icuDetected))) {
-            score -= 18.0;
+            score -= DETECTOR_ICU_FAMILY_BONUS;
         }
         if (mozillaDetected != null && resultFamily.equals(guessEncodingFamily(mozillaDetected))) {
-            score -= 32.0;
+            score -= DETECTOR_MOZILLA_FAMILY_BONUS;
         }
         if (icuDetected != null && mozillaDetected != null
                 && guessEncodingFamily(icuDetected).equals(guessEncodingFamily(mozillaDetected))
                 && resultFamily.equals(guessEncodingFamily(icuDetected))) {
-            score -= 45.0;
+            score -= DETECTOR_AGREEING_FAMILY_BONUS;
         }
 
         // Heavy penalties for decoded text that is technically valid Unicode but
         // structurally implausible.
-        score += Math.max(0, result.replacementCount - Math.max(2, length / 500)) * 900.0;
-        score += Math.max(0, result.badControlCount - Math.max(2, length / 350)) * 500.0;
-        score += result.nulCount * 1500.0;
+        score += Math.max(0, result.replacementCount - Math.max(2, length / 500)) * SCORE_REPLACEMENT_PENALTY;
+        score += Math.max(0, result.badControlCount - Math.max(2, length / 350)) * SCORE_BAD_CONTROL_PENALTY;
+        score += result.nulCount * SCORE_NUL_PENALTY;
 
         switch (family) {
             case "korean": {
@@ -464,23 +506,23 @@ public class FileUtils {
                 double density = signal / (double) length;
                 // Hangul is a very strong signal because random legacy
                 // mojibake rarely forms sustained valid Korean syllables.
-                score -= result.hangulCount * 6.7;
-                score -= result.cjkCount * 1.45;
-                if (result.hangulCount >= 8 && density >= 0.04) score -= 550.0;
-                if (result.hangulCount >= 80 && density >= 0.18) score -= 3200.0;
-                if (result.hangulCount == 0 && result.cjkCount < 4) score += 900.0;
+                score -= result.hangulCount * KOREAN_HANGUL_BONUS;
+                score -= result.cjkCount * KOREAN_CJK_BONUS;
+                if (result.hangulCount >= 8 && density >= 0.04) score -= KOREAN_SUSTAINED_SIGNAL_BONUS;
+                if (result.hangulCount >= 80 && density >= 0.18) score -= KOREAN_STRONG_SIGNAL_BONUS;
+                if (result.hangulCount == 0 && result.cjkCount < 4) score += KOREAN_WEAK_SIGNAL_PENALTY;
 
                 // CP949/MS949 is the practical superset for old Korean TXT. When
                 // EUC-KR and CP949 are near-tied, prefer the superset.
-                if (result.charsetName.equals("windows-949") || result.charsetName.equals("MS949")) score -= 35.0;
-                if (result.charsetName.equals("EUC-KR")) score += 10.0;
+                if (result.charsetName.equals("windows-949") || result.charsetName.equals("MS949")) score -= KOREAN_SUPERSET_BONUS;
+                if (result.charsetName.equals("EUC-KR")) score += KOREAN_EUC_KR_TIE_PENALTY;
                 break;
             }
 
             case "cyrillic": {
                 double density = result.cyrillicCount / (double) length;
-                score -= result.cyrillicCount * 1.8;
-                score -= result.cyrillicNaturalnessScore * 4.2;
+                score -= result.cyrillicCount * CYRILLIC_CHAR_BONUS;
+                score -= result.cyrillicNaturalnessScore * CYRILLIC_NATURALNESS_BONUS;
 
                 // Many non-Cyrillic legacy files, especially CP949 Korean text,
                 // can decode into "valid" Cyrillic under ISO-8859-5/CP1251.
@@ -488,21 +530,21 @@ public class FileUtils {
                 // Ukrainian/Macedonian-only letters in otherwise Russian-looking
                 // prose.  Penalize that pattern strongly so real Hangul/Hanja
                 // evidence can beat Cyrillic mojibake automatically.
-                score += result.cyrillicOddCount * 45.0;
+                score += result.cyrillicOddCount * CYRILLIC_ODD_CHAR_PENALTY;
                 if (result.cyrillicCount > 0
                         && result.cyrillicOddCount > Math.max(8, result.cyrillicCount / 50)) {
-                    score += 1800.0 + result.cyrillicOddCount * 18.0;
+                    score += CYRILLIC_ODD_PATTERN_BASE_PENALTY + result.cyrillicOddCount * CYRILLIC_ODD_PATTERN_EXTRA_PENALTY;
                 }
 
-                if (result.cyrillicCount >= 10 && density >= 0.04) score -= 260.0;
-                if (result.cyrillicCount < 8) score += 850.0;
+                if (result.cyrillicCount >= 10 && density >= 0.04) score -= CYRILLIC_SUSTAINED_SIGNAL_BONUS;
+                if (result.cyrillicCount < 8) score += CYRILLIC_WEAK_SIGNAL_PENALTY;
 
                 if (result.charsetName.equals("ISO-8859-5")) {
-                    score -= iso88595ByteShapeBonus(data) * 0.75;
+                    score -= iso88595ByteShapeBonus(data) * CYRILLIC_BYTE_SHAPE_WEIGHT;
                 } else if (result.charsetName.equals("windows-1251")) {
-                    score -= windows1251ByteShapeBonus(data) * 0.75;
+                    score -= windows1251ByteShapeBonus(data) * CYRILLIC_BYTE_SHAPE_WEIGHT;
                 } else if (result.charsetName.startsWith("KOI8")) {
-                    score += koi8BoxDrawingPenalty(result.text) * 8.0;
+                    score += koi8BoxDrawingPenalty(result.text) * KOI8_BOX_DRAWING_PENALTY;
                 }
                 break;
             }
@@ -510,71 +552,71 @@ public class FileUtils {
             case "japanese": {
                 int signal = result.kanaCount + result.cjkCount;
                 double density = signal / (double) length;
-                score -= result.kanaCount * 3.5;
-                score -= result.cjkCount * 0.75;
-                if (result.kanaCount >= 6 && density >= 0.03) score -= 380.0;
-                if (result.kanaCount == 0 && result.cjkCount < 8) score += 700.0;
+                score -= result.kanaCount * JAPANESE_KANA_BONUS;
+                score -= result.cjkCount * JAPANESE_CJK_BONUS;
+                if (result.kanaCount >= 6 && density >= 0.03) score -= JAPANESE_SUSTAINED_SIGNAL_BONUS;
+                if (result.kanaCount == 0 && result.cjkCount < 8) score += JAPANESE_WEAK_SIGNAL_PENALTY;
                 break;
             }
 
             case "chinese": {
                 double density = result.cjkCount / (double) length;
-                score -= result.cjkCount * 1.35;
-                if (result.cjkCount >= 16 && density >= 0.06) score -= 360.0;
-                if (result.cjkCount < 8) score += 550.0;
+                score -= result.cjkCount * CHINESE_CJK_BONUS;
+                if (result.cjkCount >= 16 && density >= 0.06) score -= CHINESE_SUSTAINED_SIGNAL_BONUS;
+                if (result.cjkCount < 8) score += CHINESE_WEAK_SIGNAL_PENALTY;
                 break;
             }
 
             case "greek": {
                 double density = result.greekCount / (double) length;
-                score -= result.greekCount * 2.1;
-                if (result.greekCount >= 8 && density >= 0.04) score -= 240.0;
-                if (result.greekCount < 6) score += 450.0;
+                score -= result.greekCount * SINGLE_SCRIPT_CHAR_BONUS;
+                if (result.greekCount >= 8 && density >= 0.04) score -= SINGLE_SCRIPT_SUSTAINED_SIGNAL_BONUS;
+                if (result.greekCount < 6) score += SINGLE_SCRIPT_WEAK_SIGNAL_PENALTY;
                 break;
             }
 
             case "hebrew": {
                 double density = result.hebrewCount / (double) length;
-                score -= result.hebrewCount * 2.1;
-                if (result.hebrewCount >= 8 && density >= 0.04) score -= 240.0;
-                if (result.hebrewCount < 6) score += 450.0;
+                score -= result.hebrewCount * SINGLE_SCRIPT_CHAR_BONUS;
+                if (result.hebrewCount >= 8 && density >= 0.04) score -= SINGLE_SCRIPT_SUSTAINED_SIGNAL_BONUS;
+                if (result.hebrewCount < 6) score += SINGLE_SCRIPT_WEAK_SIGNAL_PENALTY;
                 break;
             }
 
             case "arabic": {
                 double density = result.arabicCount / (double) length;
-                score -= result.arabicCount * 2.1;
-                if (result.arabicCount >= 8 && density >= 0.04) score -= 240.0;
-                if (result.arabicCount < 6) score += 450.0;
+                score -= result.arabicCount * SINGLE_SCRIPT_CHAR_BONUS;
+                if (result.arabicCount >= 8 && density >= 0.04) score -= SINGLE_SCRIPT_SUSTAINED_SIGNAL_BONUS;
+                if (result.arabicCount < 6) score += SINGLE_SCRIPT_WEAK_SIGNAL_PENALTY;
                 break;
             }
 
             case "thai": {
                 double density = result.thaiCount / (double) length;
-                score -= result.thaiCount * 2.1;
-                if (result.thaiCount >= 8 && density >= 0.04) score -= 240.0;
-                if (result.thaiCount < 6) score += 450.0;
+                score -= result.thaiCount * SINGLE_SCRIPT_CHAR_BONUS;
+                if (result.thaiCount >= 8 && density >= 0.04) score -= SINGLE_SCRIPT_SUSTAINED_SIGNAL_BONUS;
+                if (result.thaiCount < 6) score += SINGLE_SCRIPT_WEAK_SIGNAL_PENALTY;
                 break;
             }
 
             case "vietnamese": {
                 int signal = result.latinExtendedCount + countVietnameseToneMarks(result.text);
                 double density = signal / (double) length;
-                score -= signal * 2.4;
-                if (signal >= 8 && density >= 0.025) score -= 260.0;
-                if (signal < 4) score += 220.0;
+                score -= signal * VIETNAMESE_SIGNAL_BONUS;
+                if (signal >= 8 && density >= 0.025) score -= VIETNAMESE_SUSTAINED_SIGNAL_BONUS;
+                if (signal < 4) score += VIETNAMESE_WEAK_SIGNAL_PENALTY;
                 break;
             }
 
             case "western": {
                 int nonAscii = Math.max(0, length - result.asciiCount);
                 if (nonAscii < Math.max(4, length / 200) && result.badControlCount == 0) {
-                    score -= 150.0;
+                    score -= WESTERN_ASCII_LIKE_BONUS;
                 }
                 if (result.cjkCount + result.hangulCount + result.kanaCount
                         + result.cyrillicCount + result.greekCount
                         + result.hebrewCount + result.arabicCount + result.thaiCount > length / 8) {
-                    score += 400.0;
+                    score += WESTERN_SCRIPT_MISMATCH_PENALTY;
                 }
                 break;
             }
@@ -704,20 +746,6 @@ public class FileUtils {
         return result.confidence < EncodingResult.HIGH_CONFIDENCE;
     }
 
-    private static int fallbackConfidence(DecodeResult result) {
-        if (result == null) return EncodingResult.LOW_CONFIDENCE;
-        int length = Math.max(1, result.text.length());
-        if (result.replacementCount == 0
-                && result.nulCount == 0
-                && result.badControlCount <= Math.max(1, length / 500)) {
-            if (result.hangulCount + result.cjkCount >= 12
-                    || result.alphabeticScriptCount >= 16
-                    || result.asciiCount > length * 0.70) {
-                return EncodingResult.MEDIUM_CONFIDENCE;
-            }
-        }
-        return EncodingResult.LOW_CONFIDENCE;
-    }
 
     public static String[] getManualTextEncodingOptions() {
         return new String[]{
@@ -808,118 +836,7 @@ public class FileUtils {
     }
 
 
-    private static String detectKoreanLegacyEncoding(byte[] data) {
-        if (data == null || data.length == 0) return null;
 
-        int high = 0;
-        for (byte raw : data) {
-            if ((raw & 0xFF) >= 0x80) high++;
-        }
-        if (high < 8) return null;
-
-        String[] candidates = new String[]{"windows-949", "MS949", "EUC-KR"};
-        DecodeResult best = null;
-        int bestRank = Integer.MAX_VALUE;
-
-        for (int i = 0; i < candidates.length; i++) {
-            String candidate = candidates[i];
-            if (!Charset.isSupported(candidate)) continue;
-
-            DecodeResult result = decodeCandidate(data, candidate);
-            int length = Math.max(1, result.text.length());
-
-            // A Korean legacy file should produce substantial Hangul/Hanja and
-            // almost no replacement/control/NUL characters. This intentionally
-            // runs before Cyrillic scoring because Korean CP949 bytes can form
-            // valid-looking Cyrillic under ISO-8859-5.
-            if (result.nulCount > 0) continue;
-            if (result.badControlCount > Math.max(2, length / 200)) continue;
-            if (result.replacementCount > Math.max(2, length / 300)) continue;
-
-            int koreanSignal = result.hangulCount + result.cjkCount;
-            if (result.hangulCount < 8 && koreanSignal < 12) continue;
-
-            double koreanDensity = koreanSignal / (double) length;
-            if (koreanDensity < 0.08) continue;
-
-            // Prefer Windows-949/MS949 when results are effectively tied because
-            // CP949 is the superset normally used by old Korean TXT files.
-            int rank = i;
-            if (best == null
-                    || result.replacementCount < best.replacementCount
-                    || (result.replacementCount == best.replacementCount && result.score < best.score - 4.0)
-                    || (result.replacementCount == best.replacementCount
-                        && Math.abs(result.score - best.score) <= 4.0
-                        && rank < bestRank)) {
-                best = result;
-                bestRank = rank;
-            }
-        }
-
-        if (best == null) return null;
-        return best.charsetName.equals("MS949") ? "windows-949" : best.charsetName;
-    }
-
-    private static String detectCyrillicLegacyEncoding(byte[] data) {
-        if (data == null || data.length == 0) return null;
-
-        int high = 0;
-        int c1Controls = 0;
-        for (byte raw : data) {
-            int b = raw & 0xFF;
-            if (b >= 0x80) high++;
-            if (b >= 0x80 && b <= 0x9F) c1Controls++;
-        }
-
-        // Very small or mostly ASCII samples should stay with UTF-8/ICU/general scoring.
-        if (high < 8) return null;
-
-        String[] candidates = new String[]{"ISO-8859-5", "windows-1251", "KOI8-R", "KOI8-U"};
-        DecodeResult best = null;
-        double bestScore = Double.MAX_VALUE;
-        double secondScore = Double.MAX_VALUE;
-
-        for (String candidate : candidates) {
-            if (!Charset.isSupported(candidate)) continue;
-            DecodeResult result = decodeCandidate(data, candidate);
-            if (result.replacementCount > 0 || result.nulCount > 0) continue;
-            if (result.alphabeticScriptCount < 6) continue;
-
-            double adjusted = result.score;
-
-            // ISO-8859-5 Russian/Cyrillic text often has many bytes in B0-BF for
-            // capital/common letters and D0-EF for lowercase/common letters. When
-            // that file is read as Windows-1251 it may still be Unicode Cyrillic,
-            // but with unnatural uppercase/rare-letter patterns. Favor ISO only
-            // when the decoded text itself also looks more natural.
-            if (candidate.equals("ISO-8859-5")) {
-                adjusted -= iso88595ByteShapeBonus(data);
-                adjusted -= result.cyrillicNaturalnessScore * 1.4;
-                adjusted += Math.max(0, c1Controls - 2) * 1.5;
-            } else if (candidate.equals("windows-1251")) {
-                adjusted -= windows1251ByteShapeBonus(data);
-            } else if (candidate.startsWith("KOI8")) {
-                adjusted += koi8BoxDrawingPenalty(result.text) * 7.0;
-            }
-
-            if (best == null || adjusted < bestScore) {
-                secondScore = bestScore;
-                bestScore = adjusted;
-                best = result;
-            } else if (adjusted < secondScore) {
-                secondScore = adjusted;
-            }
-        }
-
-        if (best == null) return null;
-
-        // Require meaningful Cyrillic content and a real margin so Latin/Greek/CJK
-        // legacy files are not stolen by the Cyrillic pre-pass.
-        if (best.alphabeticScriptCount < 8) return null;
-        if (secondScore - bestScore < 6.0) return null;
-
-        return best.charsetName;
-    }
 
     private static double iso88595ByteShapeBonus(byte[] data) {
         int b0bf = 0;
@@ -996,7 +913,7 @@ public class FileUtils {
             if (result.nulCount > Math.max(1, length / 200)) return null;
             if (result.badControlCount > Math.max(2, length / 80)) return null;
             return name;
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
             return null;
         }
     }
@@ -1046,7 +963,7 @@ public class FileUtils {
 
             try {
                 detectorClass.getMethod("reset").invoke(detector);
-            } catch (Throwable ignored) {
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
                 // Some versions do not require explicit reset for a one-shot instance.
             }
 
@@ -1060,7 +977,7 @@ public class FileUtils {
             if (result.nulCount > Math.max(1, length / 240)) return null;
             if (result.badControlCount > Math.max(2, length / 90)) return null;
             return name;
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
             return null;
         }
     }

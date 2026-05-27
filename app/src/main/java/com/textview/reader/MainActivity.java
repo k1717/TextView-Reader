@@ -4,6 +4,7 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
@@ -31,6 +32,7 @@ import android.view.Gravity;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.RadioButton;
@@ -112,6 +114,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private View drawerRecentFoldersHeader;
     private TextView drawerRecentFoldersTitle;
     private TextView drawerRecentFoldersClearButton;
+    private int drawerTopInsetPx = 0;
+    private int drawerBottomInsetPx = 0;
     private DrawerEntryAdapter drawerFixedEntryAdapter;
     private DrawerEntryAdapter drawerShortcutEntryAdapter;
     private DrawerEntryAdapter drawerEntryAdapter;
@@ -825,13 +829,13 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (chip == null) return;
         boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
         int bg = selected
-                ? (prefs != null ? prefs.getMainSelectedColor(this) : (dark ? Color.rgb(72, 72, 72) : Color.rgb(32, 33, 36)))
-                : (prefs != null ? prefs.getMainElevatedPanelColor(this) : (dark ? Color.rgb(30, 30, 30) : Color.rgb(238, 238, 238)));
+                ? (prefs != null ? prefs.getMainFileTypeChipSelectedColor(this) : (dark ? Color.rgb(72, 72, 72) : Color.rgb(32, 33, 36)))
+                : (prefs != null ? prefs.getMainFileTypeChipColor(this) : (dark ? Color.rgb(30, 30, 30) : Color.rgb(238, 238, 238)));
         int stroke = selected
                 ? (prefs != null ? prefs.getMainControlColor(this) : (dark ? Color.rgb(220, 220, 220) : Color.rgb(32, 33, 36)))
                 : (prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(92, 92, 92) : Color.rgb(190, 190, 190)));
         int fg = selected
-                ? Color.WHITE
+                ? readableChipTextColorForBackground(bg)
                 : (prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36)));
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(bg);
@@ -839,6 +843,14 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         shape.setStroke(Math.max(1, dpToPx(1)), stroke);
         chip.setBackground(shape);
         chip.setTextColor(fg);
+    }
+
+
+    private int readableChipTextColorForBackground(int backgroundColor) {
+        double luminance = 0.299 * Color.red(backgroundColor)
+                + 0.587 * Color.green(backgroundColor)
+                + 0.114 * Color.blue(backgroundColor);
+        return luminance > 150 ? Color.rgb(32, 33, 36) : Color.WHITE;
     }
 
     private void scheduleLiveFileSearch() {
@@ -1065,10 +1077,14 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         drawerRecentFoldersHeader = findViewById(R.id.drawer_recent_folders_header);
         drawerRecentFoldersTitle = findViewById(R.id.drawer_recent_folders_title);
         drawerRecentFoldersClearButton = findViewById(R.id.drawer_recent_folders_clear);
+        setupDrawerSystemInsets();
 
         drawerFixedEntryAdapter = new DrawerEntryAdapter();
         drawerShortcutEntryAdapter = new DrawerEntryAdapter();
         drawerEntryAdapter = new DrawerEntryAdapter();
+        drawerFixedEntryAdapter.setUseShortcutBoxColor(false);
+        drawerEntryAdapter.setUseShortcutBoxColor(false);
+        drawerShortcutEntryAdapter.setUseShortcutBoxColor(true);
 
         if (drawerFixedList != null) {
             drawerFixedList.setLayoutManager(new LinearLayoutManager(this));
@@ -1099,6 +1115,33 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         }
 
         rebuildDrawerStorageEntries();
+    }
+
+    private void setupDrawerSystemInsets() {
+        View navDrawer = findViewById(R.id.nav_drawer);
+        if (navDrawer == null) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            navDrawer.setOnApplyWindowInsetsListener((v, insets) -> {
+                int topInset = insets != null ? insets.getSystemWindowInsetTop() : 0;
+                int bottomInset = insets != null ? insets.getSystemWindowInsetBottom() : 0;
+                boolean changed = drawerTopInsetPx != topInset || drawerBottomInsetPx != bottomInset;
+                drawerTopInsetPx = topInset;
+                drawerBottomInsetPx = bottomInset;
+                if (v.getPaddingTop() != topInset || v.getPaddingBottom() != bottomInset) {
+                    v.setPadding(v.getPaddingLeft(), topInset, v.getPaddingRight(), bottomInset);
+                }
+                if (changed) {
+                    Toolbar toolbar = findViewById(R.id.toolbar);
+                    if (toolbar != null) {
+                        applyMainReadableTheme(toolbar);
+                    }
+                }
+                return insets;
+            });
+            navDrawer.requestApplyInsets();
+        }
     }
 
     private void rebuildDrawerStorageEntries() {
@@ -1586,6 +1629,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         return createStablePositionedDialog(content, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, yPx, dimAmount);
     }
 
+    private int mainFileTypeAlignedDialogYOffsetPx() {
+        return dpToPx(92);
+    }
+
     private android.app.Dialog createStableCenterDialog(@NonNull View content, int yPx, float dimAmount) {
         return createStablePositionedDialog(content, Gravity.CENTER, yPx, dimAmount);
     }
@@ -1726,7 +1773,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         cancelLp.setMargins(0, dpToPx(4), 0, 0);
         box.addView(cancel, cancelLp);
 
-        android.app.Dialog dialog = createStableBottomDialog(box, dpToPx(74), 0.22f);
+        android.app.Dialog dialog = createStableBottomDialog(box, mainFileTypeAlignedDialogYOffsetPx(), 0.22f);
         ref[0] = dialog;
         cancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
@@ -1870,7 +1917,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         cancelLp.setMargins(0, dpToPx(4), 0, 0);
         box.addView(cancel, cancelLp);
 
-        android.app.Dialog dialog = createStableBottomDialog(box, dpToPx(74), 0.22f);
+        android.app.Dialog dialog = createStableBottomDialog(box, mainFileTypeAlignedDialogYOffsetPx(), 0.22f);
         ref[0] = dialog;
         cancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
@@ -1942,6 +1989,17 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         return prefs != null && prefs.shouldUseDarkColors(this);
     }
 
+    private Drawable createDrawerInsetBackground(int normalColor, int topInsetColor) {
+        ColorDrawable normalLayer = new ColorDrawable(normalColor);
+        ColorDrawable topLayer = new ColorDrawable(topInsetColor);
+        LayerDrawable background = new LayerDrawable(new Drawable[]{normalLayer, topLayer});
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            background.setLayerHeight(1, Math.max(0, drawerTopInsetPx));
+            background.setLayerGravity(1, Gravity.TOP);
+        }
+        return background;
+    }
+
     private void applyMainReadableTheme(Toolbar toolbar) {
         boolean dark = isDarkUi();
 
@@ -1950,6 +2008,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         int fg = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36));
         int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104));
         int bar = prefs != null ? prefs.getMainBarColor(this) : (dark ? Color.rgb(0, 0, 0) : Color.rgb(32, 33, 36));
+        int control = prefs != null ? prefs.getMainControlColor(this) : (dark ? Color.rgb(210, 210, 210) : Color.rgb(80, 80, 80));
+        int drawerActionIcon = prefs != null ? prefs.getMainDrawerActionIconColor(this) : control;
 
         View root = findViewById(R.id.main_root);
         View appbar = findViewById(R.id.main_appbar);
@@ -1968,15 +2028,28 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (browserSection != null) browserSection.setBackgroundColor(bg);
         if (recentSection != null) recentSection.setBackgroundColor(bg);
         if (navDrawer != null) {
-            navDrawer.setBackgroundColor(bg);
+            // Keep the drawer content and bottom inset on the normal drawer background,
+            // while only the top status/inset padding above the Recent folders header
+            // uses the main app-bar color. This prevents header overlap without
+            // pushing the bottom drawer actions into the navigation bar.
+            navDrawer.setBackground(createDrawerInsetBackground(bg, bar));
             applyExplicitTextColors(navDrawer, fg, sub);
         }
+        if (drawerLayout != null) {
+            drawerLayout.setStatusBarBackgroundColor(bar);
+        }
+        // Recent-folder rows stay on the normal drawer background, matching the
+        // recent-file row surface. The Recent folders header itself matches the
+        // main Recent files header surface, while the status inset above it uses
+        // the main app bar color through DrawerLayout's status-bar background.
         if (drawerStorageList != null) drawerStorageList.setBackgroundColor(bg);
         if (drawerShortcutList != null) drawerShortcutList.setBackgroundColor(bg);
-        if (drawerRecentHeader != null) drawerRecentHeader.setBackgroundColor(panel);
+        int drawerRecentHeaderBg = panel;
+        int drawerRecentHeaderFg = readableChipTextColorForBackground(drawerRecentHeaderBg);
+        if (drawerRecentHeader != null) drawerRecentHeader.setBackgroundColor(drawerRecentHeaderBg);
         if (drawerRecentFoldersTitle != null) {
             drawerRecentFoldersTitle.setBackgroundColor(Color.TRANSPARENT);
-            drawerRecentFoldersTitle.setTextColor(sub);
+            drawerRecentFoldersTitle.setTextColor(drawerRecentHeaderFg);
         }
         if (drawerRecentFoldersClearButton != null) {
             drawerRecentFoldersClearButton.setBackgroundColor(Color.TRANSPARENT);
@@ -1985,9 +2058,9 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             drawerBottomActions.setBackgroundColor(bg);
             applyExplicitTextColors(drawerBottomActions, fg, sub);
         }
-        applyDrawerBottomActionFlatBackground(drawerOpenFile, bg);
-        applyDrawerBottomActionFlatBackground(drawerBookmarks, bg);
-        applyDrawerBottomActionFlatBackground(drawerSettings, bg);
+        applyDrawerBottomActionTheme(drawerOpenFile, bg, fg, drawerActionIcon);
+        applyDrawerBottomActionTheme(drawerBookmarks, bg, fg, drawerActionIcon);
+        applyDrawerBottomActionTheme(drawerSettings, bg, fg, drawerActionIcon);
         if (recentHeaderRow != null) recentHeaderRow.setBackgroundColor(panel);
         if (recentTitle != null) {
             recentTitle.setBackgroundColor(Color.TRANSPARENT);
@@ -1997,7 +2070,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             recentClearAllButton.setTextColor(sub);
         }
         if (drawerRecentFoldersClearButton != null) {
-            drawerRecentFoldersClearButton.setTextColor(sub);
+            drawerRecentFoldersClearButton.setTextColor(drawerRecentHeaderFg);
         }
         if (searchBar != null) {
             searchBar.setBackgroundColor(bg);
@@ -2049,13 +2122,33 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                 androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         controller.setAppearanceLightStatusBars(false);
         controller.setAppearanceLightNavigationBars(!dark);
+        if (drawerEntryAdapter != null) drawerEntryAdapter.refreshTheme();
+        if (drawerFixedEntryAdapter != null) drawerFixedEntryAdapter.refreshTheme();
+        if (drawerShortcutEntryAdapter != null) drawerShortcutEntryAdapter.refreshTheme();
+        if (fileAdapter != null) fileAdapter.refreshTheme();
+        if (recentAdapter != null) recentAdapter.refreshTheme();
         updateFileTypeChips();
     }
 
-    private void applyDrawerBottomActionFlatBackground(View actionRow, int color) {
+    private void applyDrawerBottomActionTheme(View actionRow, int bgColor, int textColor, int iconColor) {
         if (actionRow == null) return;
-        actionRow.setBackgroundColor(color);
+        actionRow.setBackgroundColor(bgColor);
         actionRow.setPadding(dpToPx(20), 0, dpToPx(16), 0);
+        applyDrawerBottomActionColors(actionRow, textColor, iconColor);
+    }
+
+    private void applyDrawerBottomActionColors(@NonNull View view, int textColor, int iconColor) {
+        if (view instanceof TextView) {
+            ((TextView) view).setTextColor(textColor);
+        } else if (view instanceof ImageView) {
+            ((ImageView) view).setImageTintList(android.content.res.ColorStateList.valueOf(iconColor));
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                applyDrawerBottomActionColors(group.getChildAt(i), textColor, iconColor);
+            }
+        }
     }
 
     private void applyExplicitTextColors(@NonNull View view, int fg, int sub) {
@@ -2436,7 +2529,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         cancelLp.setMargins(0, dpToPx(4), 0, 0);
         box.addView(cancel, cancelLp);
 
-        android.app.Dialog dialog = createStableBottomDialog(box, dpToPx(74), 0.22f);
+        android.app.Dialog dialog = createStableBottomDialog(box, mainFileTypeAlignedDialogYOffsetPx(), 0.22f);
         ref[0] = dialog;
         cancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
@@ -2802,7 +2895,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         closeLp.setMargins(0, dpToPx(4), 0, 0);
         box.addView(close, closeLp);
 
-        android.app.Dialog dialog = createStableBottomDialog(box, dpToPx(74), 0.22f);
+        android.app.Dialog dialog = createStableBottomDialog(box, mainFileTypeAlignedDialogYOffsetPx(), 0.22f);
         close.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
     }
@@ -3038,14 +3131,6 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         return layer;
     }
 
-    private void applyRoundedDialogWindow(@NonNull AlertDialog dialog) {
-        if (dialog.getWindow() == null) return;
-        dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-        android.view.WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
-        lp.dimAmount = 0.22f;
-        dialog.getWindow().setAttributes(lp);
-        dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-    }
 
     // -------------------------------------------------------------------------
     // Menu

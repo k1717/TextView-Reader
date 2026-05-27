@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import java.io.File;
@@ -74,12 +76,24 @@ public class FontManager {
      * Scan for fonts asynchronously.
      */
     public void scanFonts(Context context, OnScanCompleteListener listener) {
-        ExecutorService executor = Executors.newSingleThreadExecutor();
+        final Context appContext = context != null ? context.getApplicationContext() : null;
+        final Handler mainHandler = new Handler(Looper.getMainLooper());
+        final ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
-            doScan(context);
-            List<String> names = getFontNames();
-            if (listener != null) {
-                ((android.app.Activity) context).runOnUiThread(() -> listener.onScanComplete(names));
+            List<String> names = Collections.emptyList();
+            try {
+                if (appContext != null) {
+                    doScan(appContext);
+                    names = getFontNames();
+                }
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Font scan failed", e);
+            } finally {
+                final List<String> callbackNames = names;
+                if (listener != null) {
+                    mainHandler.post(() -> listener.onScanComplete(callbackNames));
+                }
+                executor.shutdown();
             }
         });
     }
@@ -343,7 +357,7 @@ public class FontManager {
             if (familyName.isEmpty()) return Typeface.DEFAULT;
             try {
                 return Typeface.create(familyName, Typeface.NORMAL);
-            } catch (Throwable ignored) {
+            } catch (RuntimeException ignored) {
                 return Typeface.DEFAULT;
             }
         }

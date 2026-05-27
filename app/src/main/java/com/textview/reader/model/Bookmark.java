@@ -387,12 +387,6 @@ public class Bookmark {
         return "개발자 복구용입니다. 먼저 edit.lineOrPage 수정을 권장합니다. raw 내부 위치를 직접 지정해야 할 때만 edit.charPosition을 수정하세요.";
     }
 
-    private String getBeginnerPositionMeaning(String type) {
-        if ("PDF".equals(type)) return "PDF page number, starting from 1";
-        if ("EPUB".equals(type)) return "EPUB page/section number, starting from 1";
-        if ("WORD".equals(type)) return "Word page number, starting from 1";
-        return "TXT logical line number, starting from 1";
-    }
 
     private String getBeginnerEditableFields(String type) {
         if ("TXT".equals(type)) {
@@ -425,27 +419,7 @@ public class Bookmark {
         return "PDF/Word: 정확한 페이지를 알면 setPage를 바꾸세요. 조금 보정하려면 moveByPages를 쓰면 됩니다. memo는 자유 메모입니다.";
     }
 
-    private String getBeginnerSampleEditEn(String type, int position) {
-        int base = Math.max(1, position);
-        if ("TXT".equals(type)) {
-            return "Examples: setLine=" + (base + 10) + ", moveByLines=0 -> move to line " + (base + 10) + "; keep setLine=" + base + " and set moveByLines=2 -> move to line " + (base + 2) + "; set findText=\"target phrase\", findOccurrence=1 -> move to that phrase. Do not use cached pageNumber/totalPages as the edit target for TXT.";
-        }
-        if ("EPUB".equals(type)) {
-            return "Examples: setPageOrSection=" + (base + 5) + ", moveByPages=0 -> move to app page/section " + (base + 5) + "; keep setPageOrSection=" + base + " and set moveByPages=-1 -> move one page/section earlier.";
-        }
-        return "Examples: setPage=" + (base + 5) + ", moveByPages=0 -> move to page " + (base + 5) + "; keep setPage=" + base + " and set moveByPages=-1 -> move to page " + Math.max(1, base - 1) + ".";
-    }
 
-    private String getBeginnerSampleEditKo(String type, int position) {
-        int base = Math.max(1, position);
-        if ("TXT".equals(type)) {
-            return "예시: setLine=" + (base + 10) + ", moveByLines=0 -> " + (base + 10) + "번째 줄로 이동; setLine=" + base + " 그대로 두고 moveByLines=2 -> " + (base + 2) + "번째 줄로 이동; findText=\"찾을 문장\", findOccurrence=1 -> 그 문장 위치로 이동. TXT 위치 수정에서는 cached pageNumber/totalPages를 기준으로 쓰지 마세요.";
-        }
-        if ("EPUB".equals(type)) {
-            return "예시: setPageOrSection=" + (base + 5) + ", moveByPages=0 -> 앱 기준 " + (base + 5) + "번째 페이지/섹션으로 이동; setPageOrSection=" + base + " 그대로 두고 moveByPages=-1 -> 한 페이지/섹션 앞쪽으로 이동.";
-        }
-        return "예시: setPage=" + (base + 5) + ", moveByPages=0 -> " + (base + 5) + "페이지로 이동; setPage=" + base + " 그대로 두고 moveByPages=-1 -> " + Math.max(1, base - 1) + "페이지로 이동.";
-    }
 
     public boolean hasPendingPcTextEdit() {
         return pendingPcEditLine > 0

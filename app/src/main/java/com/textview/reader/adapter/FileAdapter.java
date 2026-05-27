@@ -2,6 +2,8 @@ package com.textview.reader.adapter;
 
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.LayoutInflater;
@@ -167,6 +169,12 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
         super.onViewDetachedFromWindow(holder);
     }
 
+    public void refreshTheme() {
+        if (getItemCount() > 0) {
+            notifyItemRangeChanged(0, getItemCount());
+        }
+    }
+
     public void release() {
         listener = null;
         files.clear();
@@ -299,6 +307,20 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                 info.setText(String.format(Locale.getDefault(), "%s  •  %s  •  %s", type, size, date));
             }
             icon.setImageTintList(ColorStateList.valueOf(iconTint));
+            itemView.setPressed(false);
+            itemView.setSelected(false);
+            itemView.setActivated(false);
+            itemView.setBackground(makeFileRowBackground(prefs));
+        }
+
+        private StateListDrawable makeFileRowBackground(@NonNull PrefsManager prefs) {
+            int pressed = prefs.getMainFileLongHoldColor(itemView.getContext());
+            StateListDrawable states = new StateListDrawable();
+            states.addState(new int[]{android.R.attr.state_pressed}, new ColorDrawable(pressed));
+            states.addState(new int[]{android.R.attr.state_focused}, new ColorDrawable(pressed));
+            states.addState(new int[]{android.R.attr.state_selected}, new ColorDrawable(pressed));
+            states.addState(new int[]{}, new ColorDrawable(Color.TRANSPARENT));
+            return states;
         }
     }
 }

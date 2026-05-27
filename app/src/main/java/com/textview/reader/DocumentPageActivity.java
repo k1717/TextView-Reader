@@ -128,6 +128,7 @@ public class DocumentPageActivity extends AppCompatActivity {
     private TextView moreButton;
     private int readerBg = Color.rgb(18, 18, 18);
     private int readerFg = Color.rgb(232, 234, 237);
+    private int readerToolbarBg = Color.rgb(18, 18, 18);
     private int readerSub = Color.rgb(176, 176, 176);
     private int readerPanel = Color.rgb(32, 33, 36);
     private int readerLine = Color.rgb(84, 86, 90);
@@ -320,6 +321,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         if (theme != null) {
             readerBg = theme.getBackgroundColor();
             readerFg = theme.getTextColor();
+            readerToolbarBg = theme.getToolbarColor();
         }
         readerSub = blendColors(readerBg, readerFg, isDarkColor(readerBg) ? 0.72f : 0.64f);
         readerPanel = blendColors(readerBg, readerFg, isDarkColor(readerBg) ? 0.10f : 0.08f);
@@ -337,6 +339,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         return theme.getId()
                 + "|fg=" + theme.getTextColor()
                 + "|bg=" + theme.getBackgroundColor()
+                + "|toolbar=" + theme.getToolbarColor()
                 + "|link=" + theme.getLinkColor()
                 + "|img=" + (backgroundImagePath != null ? backgroundImagePath : "")
                 + "|alpha=" + theme.getBackgroundImageAlpha()
@@ -373,7 +376,8 @@ public class DocumentPageActivity extends AppCompatActivity {
     private void applyDocumentSystemBarColors() {
         resolveReaderThemeColors();
         int bg = readerBg;
-        getWindow().setStatusBarColor(bg);
+        int toolbarBg = readerToolbarBg;
+        getWindow().setStatusBarColor(toolbarBg);
         getWindow().setNavigationBarColor(bg);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
             getWindow().setNavigationBarDividerColor(bg);
@@ -384,9 +388,8 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
         androidx.core.view.WindowInsetsControllerCompat controller =
                 androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-        boolean light = !isDarkColor(bg);
-        controller.setAppearanceLightStatusBars(light);
-        controller.setAppearanceLightNavigationBars(light);
+        controller.setAppearanceLightStatusBars(!isDarkColor(toolbarBg));
+        controller.setAppearanceLightNavigationBars(!isDarkColor(bg));
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             int flags = getWindow().getDecorView().getSystemUiVisibility();
             if (!isDarkColor(bg)) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
@@ -422,10 +425,10 @@ public class DocumentPageActivity extends AppCompatActivity {
         if (viewport != null) viewport.setBackgroundColor(readerBg);
         if (documentSearchPanelContainer != null) documentSearchPanelContainer.setBackgroundColor(readerBg);
         if (documentSearchOverlayContainer != null) documentSearchOverlayContainer.setBackgroundColor(Color.TRANSPARENT);
-        if (appbar != null) appbar.setBackgroundColor(readerBg);
+        if (appbar != null) appbar.setBackgroundColor(readerToolbarBg);
         if (bottom != null) bottom.setBackgroundColor(readerPanel);
         if (toolbar != null) {
-            toolbar.setBackgroundColor(readerBg);
+            toolbar.setBackgroundColor(readerToolbarBg);
             toolbar.setTitleTextColor(readerFg);
             android.graphics.drawable.Drawable nav = toolbar.getNavigationIcon();
             if (nav != null) {
@@ -1807,17 +1810,6 @@ public class DocumentPageActivity extends AppCompatActivity {
         return dialog;
     }
 
-    private void positionFontDialogForThumbReach(@NonNull androidx.appcompat.app.AlertDialog dialog, int maxWidthDp) {
-        if (dialog.getWindow() == null) return;
-        android.view.Window window = dialog.getWindow();
-        window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
-        lp.copyFrom(window.getAttributes());
-        lp.width = txtReaderDialogWidthPx();
-        lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dpToPx(DOCUMENT_TOOLBAR_POPUP_Y_DP);
-        window.setAttributes(lp);
-    }
 
     private TextView makeDialogActionRow(String text, Runnable action) {
         TextView row = new TextView(this);
@@ -2547,31 +2539,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         return Math.min(screenWidth - dpToPx(14), dpToPx(460));
     }
 
-    private void positionPageDialogForThumbReach(@NonNull androidx.appcompat.app.AlertDialog dialog) {
-        if (dialog.getWindow() == null) return;
-        android.view.Window window = dialog.getWindow();
-        window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-        android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
-        lp.copyFrom(window.getAttributes());
-        lp.width = txtReaderDialogWidthPx();
-        lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dpToPx(DOCUMENT_TOOLBAR_POPUP_Y_DP);
-        window.setAttributes(lp);
-        window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-    }
 
-    private void positionBookmarkDialogForThumbReach(@NonNull androidx.appcompat.app.AlertDialog dialog) {
-        if (dialog.getWindow() == null) return;
-        android.view.Window window = dialog.getWindow();
-        window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-        android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
-        lp.copyFrom(window.getAttributes());
-        lp.width = legacyBookmarkDialogWidthPx();
-        lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dpToPx(74);
-        window.setAttributes(lp);
-        window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-    }
 
     private String formatPageMoveLabel(int page, int totalPages) {
         return String.format(Locale.getDefault(), "Page %d / %d", page, Math.max(1, totalPages));
@@ -2812,17 +2780,6 @@ public class DocumentPageActivity extends AppCompatActivity {
         return getResources().getDisplayMetrics().heightPixels;
     }
 
-    private void positionMoreDialogForThumbReach(@NonNull androidx.appcompat.app.AlertDialog dialog) {
-        if (dialog.getWindow() == null) return;
-        android.view.Window window = dialog.getWindow();
-        window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-        android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
-        lp.copyFrom(window.getAttributes());
-        lp.width = txtReaderDialogWidthPx();
-        lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dpToPx(34);
-        window.setAttributes(lp);
-    }
 
     private void addDialogBottomActions(LinearLayout box, String primaryText, Runnable primaryAction) {
         addDialogBottomActions(box, null, null, primaryText, primaryAction);
@@ -2866,11 +2823,6 @@ public class DocumentPageActivity extends AppCompatActivity {
         primary.setOnClickListener(v -> primaryAction.run());
     }
 
-    private void styleDialogWindow(androidx.appcompat.app.AlertDialog dialog) {
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        }
-    }
 
     private void loadFromIntent(Intent intent) {
         final int generation = ++loadGeneration;
@@ -2986,11 +2938,6 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
 
-    private String documentSideSpacingCss() {
-        // EPUB boundaries are applied as WebView margins, not HTML padding.
-        // Keeping this no-op method avoids reintroducing Word/DOCX page padding.
-        return "";
-    }
 
     private String cssColor(int color) {
         return String.format(Locale.US, "#%06X", 0xFFFFFF & color);

@@ -11,6 +11,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.SeekBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -19,9 +20,13 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.textview.reader.model.Theme;
 import com.textview.reader.util.ThemeManager;
+import com.textview.reader.util.PrefsManager;
 
 import com.google.android.material.button.MaterialButton;
 
@@ -35,16 +40,22 @@ public class ThemeEditorActivity extends AppCompatActivity {
     public static final String EXTRA_THEME_ID = "theme_id";
 
     private EditText nameInput;
-    private View bgPreview, textPreview;
+    private static final int COLOR_TARGET_BACKGROUND = 0;
+    private static final int COLOR_TARGET_TEXT = 1;
+    private static final int COLOR_TARGET_TOOLBAR = 2;
+
+    private View bgPreview, textPreview, toolbarPreview;
     private TextView previewText;
-    private EditText bgHexInput, textHexInput;
-    private SeekBar bgR, bgG, bgB, txtR, txtG, txtB;
+    private EditText bgHexInput, textHexInput, toolbarHexInput;
+    private SeekBar bgR, bgG, bgB, txtR, txtG, txtB, toolbarR, toolbarG, toolbarB;
     private boolean updatingHexFields = false;
 
     private int currentBgColor = 0xFFFAFAFA;
     private int currentTextColor = 0xFF212121;
+    private int currentToolbarColor = 0xFFFAFAFA;
     private String backgroundImagePath = null;
     private Theme editingTheme = null;
+    private PrefsManager prefs;
 
     private final ActivityResultLauncher<String[]> imagePicker =
             registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
@@ -58,8 +69,14 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        prefs = PrefsManager.getInstance(this);
+        if (prefs != null) {
+            prefs.applyLanguage(prefs.getLanguageMode());
+            prefs.applyDarkMode(prefs.getDarkMode());
+        }
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_theme_editor);
+        applyThemeEditorSafeInsets();
 
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -70,9 +87,11 @@ public class ThemeEditorActivity extends AppCompatActivity {
         nameInput = findViewById(R.id.theme_name_input);
         bgPreview = findViewById(R.id.bg_color_preview);
         textPreview = findViewById(R.id.text_color_preview);
+        toolbarPreview = findViewById(R.id.toolbar_color_preview);
         previewText = findViewById(R.id.preview_text);
         bgHexInput = findViewById(R.id.bg_hex_input);
         textHexInput = findViewById(R.id.text_hex_input);
+        toolbarHexInput = findViewById(R.id.toolbar_hex_input);
 
         bgR = findViewById(R.id.bg_red);
         bgG = findViewById(R.id.bg_green);
@@ -80,13 +99,17 @@ public class ThemeEditorActivity extends AppCompatActivity {
         txtR = findViewById(R.id.txt_red);
         txtG = findViewById(R.id.txt_green);
         txtB = findViewById(R.id.txt_blue);
+        toolbarR = findViewById(R.id.toolbar_red);
+        toolbarG = findViewById(R.id.toolbar_green);
+        toolbarB = findViewById(R.id.toolbar_blue);
 
         applyReadableThemeEditorColors();
+
+        ThemeManager tm = ThemeManager.getInstance(this);
 
         // Check if editing existing theme
         String themeId = getIntent().getStringExtra(EXTRA_THEME_ID);
         if (themeId != null) {
-            ThemeManager tm = ThemeManager.getInstance(this);
             for (Theme t : tm.getAllThemes()) {
                 if (t.getId().equals(themeId) && !t.isBuiltIn()) {
                     editingTheme = t;
@@ -100,10 +123,22 @@ public class ThemeEditorActivity extends AppCompatActivity {
             nameInput.setText(editingTheme.getName());
             currentBgColor = editingTheme.getBackgroundColor();
             currentTextColor = editingTheme.getTextColor();
+            currentToolbarColor = editingTheme.getToolbarColor();
             backgroundImagePath = editingTheme.getBackgroundImagePath();
         } else {
             getSupportActionBar().setTitle("New Theme");
             nameInput.setText("Custom Theme");
+
+            Theme activeTheme = tm.getActiveTheme();
+            if (activeTheme != null) {
+                currentBgColor = activeTheme.getBackgroundColor();
+                currentTextColor = activeTheme.getTextColor();
+                currentToolbarColor = activeTheme.getToolbarColor();
+            } else if (prefs != null) {
+                currentBgColor = prefs.getMainBgColor(this);
+                currentTextColor = prefs.getMainTextColor(this);
+                currentToolbarColor = currentBgColor;
+            }
         }
 
         // Set slider positions from colors
@@ -113,6 +148,9 @@ public class ThemeEditorActivity extends AppCompatActivity {
         txtR.setProgress(Color.red(currentTextColor));
         txtG.setProgress(Color.green(currentTextColor));
         txtB.setProgress(Color.blue(currentTextColor));
+        toolbarR.setProgress(Color.red(currentToolbarColor));
+        toolbarG.setProgress(Color.green(currentToolbarColor));
+        toolbarB.setProgress(Color.blue(currentToolbarColor));
 
         SeekBar.OnSeekBarChangeListener colorListener = new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -127,9 +165,13 @@ public class ThemeEditorActivity extends AppCompatActivity {
         txtR.setOnSeekBarChangeListener(colorListener);
         txtG.setOnSeekBarChangeListener(colorListener);
         txtB.setOnSeekBarChangeListener(colorListener);
+        toolbarR.setOnSeekBarChangeListener(colorListener);
+        toolbarG.setOnSeekBarChangeListener(colorListener);
+        toolbarB.setOnSeekBarChangeListener(colorListener);
 
-        installHexInput(bgHexInput, true);
-        installHexInput(textHexInput, false);
+        installHexInput(bgHexInput, COLOR_TARGET_BACKGROUND);
+        installHexInput(textHexInput, COLOR_TARGET_TEXT);
+        installHexInput(toolbarHexInput, COLOR_TARGET_TOOLBAR);
 
         findViewById(R.id.btn_pick_bg_image).setOnClickListener(v ->
                 imagePicker.launch(new String[]{"image/*"}));
@@ -145,19 +187,44 @@ public class ThemeEditorActivity extends AppCompatActivity {
     }
 
 
+    private void applyThemeEditorSafeInsets() {
+        View root = findViewById(R.id.theme_editor_root);
+        ScrollView scroll = findViewById(R.id.theme_editor_scroll);
+        if (root == null || scroll == null) return;
+
+        final int left = scroll.getPaddingLeft();
+        final int top = scroll.getPaddingTop();
+        final int right = scroll.getPaddingRight();
+        final int bottom = scroll.getPaddingBottom();
+        final int extraBottomGap = dpToPx(16);
+        scroll.setClipToPadding(false);
+
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                    | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            boolean imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+            int bottomInset = imeVisible ? Math.max(bars.bottom, ime.bottom) : bars.bottom;
+            scroll.setPadding(left, top, right, bottom + bottomInset + extraBottomGap);
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(root);
+    }
+
     private boolean isDarkUi() {
         int mask = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         return mask == Configuration.UI_MODE_NIGHT_YES;
     }
 
     private void applyReadableThemeEditorColors() {
-        boolean dark = isDarkUi();
-        int bg = dark ? Color.rgb(0, 0, 0) : Color.WHITE;
-        int text = dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
-        int sub = dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
-        int bar = dark ? Color.rgb(0, 0, 0) : Color.rgb(32, 33, 36);
-        int outline = dark ? Color.rgb(68, 68, 68) : Color.rgb(218, 220, 224);
-        int accent = dark ? Color.rgb(189, 189, 189) : Color.rgb(70, 70, 70);
+        boolean dark = prefs != null ? prefs.shouldUseDarkColors(this) : isDarkUi();
+        int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(0, 0, 0) : Color.WHITE);
+        int panel = prefs != null ? prefs.getMainPanelColor(this) : (dark ? Color.rgb(16, 16, 16) : Color.WHITE);
+        int text = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36));
+        int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104));
+        int bar = prefs != null ? prefs.getMainBarColor(this) : (dark ? Color.rgb(0, 0, 0) : Color.rgb(32, 33, 36));
+        int outline = prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(68, 68, 68) : Color.rgb(218, 220, 224));
+        int accent = prefs != null ? prefs.getMainControlColor(this) : (dark ? Color.rgb(189, 189, 189) : Color.rgb(70, 70, 70));
 
         getWindow().setStatusBarColor(bar);
         getWindow().setNavigationBarColor(bg);
@@ -169,33 +236,55 @@ public class ThemeEditorActivity extends AppCompatActivity {
         Toolbar tb = findViewById(R.id.toolbar);
         if (tb != null) {
             tb.setBackgroundColor(bar);
-            tb.setTitleTextColor(Color.WHITE);
+            tb.setTitleTextColor(text);
+            if (tb.getNavigationIcon() != null) {
+                tb.getNavigationIcon().setTint(text);
+            }
         }
 
         View root = findViewById(android.R.id.content);
+        View rootLayout = findViewById(R.id.theme_editor_root);
+        ScrollView scroll = findViewById(R.id.theme_editor_scroll);
         if (root != null) root.setBackgroundColor(bg);
+        if (rootLayout != null) rootLayout.setBackgroundColor(bg);
+        if (scroll != null) scroll.setBackgroundColor(bg);
         applyThemeEditorColorsRecursive(root, text, sub,
                 ColorStateList.valueOf(accent),
-                ColorStateList.valueOf(outline));
+                ColorStateList.valueOf(outline),
+                ColorStateList.valueOf(panel));
 
-        // The Save Theme button is a filled action button. Do not reuse the
-        // page text color here, because in light/main-white mode that made
-        // black text sit on a dark filled button. Give the filled button an
-        // explicit high-contrast foreground/background pair instead.
-        MaterialButton saveButton = findViewById(R.id.btn_save_theme);
-        if (saveButton != null) {
-            int saveBg = dark ? Color.rgb(224, 224, 224) : Color.rgb(32, 33, 36);
-            int saveFg = dark ? Color.rgb(0, 0, 0) : Color.WHITE;
-            saveButton.setTextColor(saveFg);
-            saveButton.setBackgroundTintList(ColorStateList.valueOf(saveBg));
-            saveButton.setStrokeWidth(0);
-            saveButton.setRippleColor(ColorStateList.valueOf(
-                    dark ? Color.rgb(200, 200, 200) : Color.rgb(68, 68, 68)));
+        // Match the theme editor action buttons to the same card color used by
+        // main file operation rows such as Open / File Info.
+        ColorStateList actionButtonBackground = ColorStateList.valueOf(panel);
+        ColorStateList actionButtonRipple = ColorStateList.valueOf(accent);
+        applyThemeEditorActionButtonStyle(findViewById(R.id.btn_pick_bg_image), text,
+                actionButtonBackground, actionButtonRipple);
+        applyThemeEditorActionButtonStyle(findViewById(R.id.btn_clear_bg_image), text,
+                actionButtonBackground, actionButtonRipple);
+        applyThemeEditorActionButtonStyle(findViewById(R.id.btn_save_theme), text,
+                actionButtonBackground, actionButtonRipple);
+    }
+
+
+    private void applyThemeEditorActionButtonStyle(
+            MaterialButton button, int textColor, ColorStateList background, ColorStateList ripple) {
+        if (button == null) return;
+        button.setTextColor(textColor);
+        button.setBackgroundTintList(background);
+        button.setRippleColor(ripple);
+        button.setStrokeWidth(0);
+        button.setStrokeColor(ColorStateList.valueOf(Color.TRANSPARENT));
+        button.setCornerRadius(dpToPx(10));
+        button.setElevation(0f);
+        button.setTranslationZ(0f);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            button.setStateListAnimator(null);
         }
     }
 
     private void applyThemeEditorColorsRecursive(
-            View view, int text, int sub, ColorStateList accentState, ColorStateList outlineState) {
+            View view, int text, int sub, ColorStateList accentState, ColorStateList outlineState,
+            ColorStateList buttonBackgroundState) {
         if (view == null) return;
 
         if (view instanceof EditText) {
@@ -209,6 +298,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
             MaterialButton mb = (MaterialButton) view;
             mb.setTextColor(text);
             mb.setStrokeColor(outlineState);
+            mb.setBackgroundTintList(buttonBackgroundState);
         } else if (view instanceof TextView && view != previewText) {
             ((TextView) view).setTextColor(text);
         }
@@ -223,32 +313,40 @@ public class ThemeEditorActivity extends AppCompatActivity {
         if (view instanceof android.view.ViewGroup) {
             android.view.ViewGroup group = (android.view.ViewGroup) view;
             for (int i = 0; i < group.getChildCount(); i++) {
-                applyThemeEditorColorsRecursive(group.getChildAt(i), text, sub, accentState, outlineState);
+                applyThemeEditorColorsRecursive(group.getChildAt(i), text, sub, accentState, outlineState, buttonBackgroundState);
             }
         }
     }
 
 
+    private int dpToPx(float dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
+    }
+
     private void updatePreview() {
+        if (updatingHexFields) return;
         currentBgColor = Color.rgb(bgR.getProgress(), bgG.getProgress(), bgB.getProgress());
         currentTextColor = Color.rgb(txtR.getProgress(), txtG.getProgress(), txtB.getProgress());
+        currentToolbarColor = Color.rgb(toolbarR.getProgress(), toolbarG.getProgress(), toolbarB.getProgress());
         renderPreview(true);
     }
 
     private void renderPreview(boolean syncHexFields) {
         bgPreview.setBackgroundColor(currentBgColor);
         textPreview.setBackgroundColor(currentTextColor);
+        if (toolbarPreview != null) toolbarPreview.setBackgroundColor(currentToolbarColor);
         previewText.setBackgroundColor(currentBgColor);
         previewText.setTextColor(currentTextColor);
         if (syncHexFields) {
             updatingHexFields = true;
             if (bgHexInput != null) bgHexInput.setText(colorToHex(currentBgColor));
             if (textHexInput != null) textHexInput.setText(colorToHex(currentTextColor));
+            if (toolbarHexInput != null) toolbarHexInput.setText(colorToHex(currentToolbarColor));
             updatingHexFields = false;
         }
     }
 
-    private void installHexInput(EditText input, boolean backgroundColor) {
+    private void installHexInput(EditText input, int target) {
         if (input == null) return;
         input.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -257,12 +355,15 @@ public class ThemeEditorActivity extends AppCompatActivity {
                 if (updatingHexFields) return;
                 Integer color = parseHexColor(editable != null ? editable.toString() : null);
                 if (color == null) return;
-                if (backgroundColor) {
+                if (target == COLOR_TARGET_BACKGROUND) {
                     currentBgColor = color;
                     setSeekBarsFromColor(bgR, bgG, bgB, color);
-                } else {
+                } else if (target == COLOR_TARGET_TEXT) {
                     currentTextColor = color;
                     setSeekBarsFromColor(txtR, txtG, txtB, color);
+                } else if (target == COLOR_TARGET_TOOLBAR) {
+                    currentToolbarColor = color;
+                    setSeekBarsFromColor(toolbarR, toolbarG, toolbarB, color);
                 }
                 renderPreview(false);
             }
@@ -270,23 +371,24 @@ public class ThemeEditorActivity extends AppCompatActivity {
     }
 
     private void setSeekBarsFromColor(SeekBar r, SeekBar g, SeekBar b, int color) {
+        boolean wasUpdating = updatingHexFields;
         updatingHexFields = true;
-        r.setProgress(Color.red(color));
-        g.setProgress(Color.green(color));
-        b.setProgress(Color.blue(color));
-        updatingHexFields = false;
+        try {
+            r.setProgress(Color.red(color));
+            g.setProgress(Color.green(color));
+            b.setProgress(Color.blue(color));
+        } finally {
+            updatingHexFields = wasUpdating;
+        }
     }
 
     private Integer parseHexColor(String raw) {
         if (raw == null) return null;
         String value = raw.trim();
         if (value.startsWith("#")) value = value.substring(1);
-        if (value.length() == 3) {
-            value = "" + value.charAt(0) + value.charAt(0)
-                    + value.charAt(1) + value.charAt(1)
-                    + value.charAt(2) + value.charAt(2);
-        }
-        if (value.length() == 8) value = value.substring(2);
+        // Do not treat 3 typed characters as shorthand while editing.
+        // Otherwise input such as #050D1A is rewritten as #005500 at #050.
+        // Reading theme colors are RGB-only: RRGGBB or #RRGGBB.
         if (value.length() != 6 || !value.matches("[0-9a-fA-F]{6}")) return null;
         try {
             return Color.rgb(
@@ -312,6 +414,10 @@ public class ThemeEditorActivity extends AppCompatActivity {
             textHexInput.setError("Invalid HEX color");
             ok = false;
         }
+        if (toolbarHexInput != null && parseHexColor(toolbarHexInput.getText().toString()) == null) {
+            toolbarHexInput.setError("Invalid HEX color");
+            ok = false;
+        }
         return ok;
     }
 
@@ -332,6 +438,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
             editingTheme.setName(name);
             editingTheme.setBackgroundColor(currentBgColor);
             editingTheme.setTextColor(currentTextColor);
+            editingTheme.setToolbarColor(currentToolbarColor);
             editingTheme.setBackgroundImagePath(backgroundImagePath);
             tm.updateCustomTheme(editingTheme);
         } else {
@@ -339,6 +446,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
             newTheme.setName(name);
             newTheme.setBackgroundColor(currentBgColor);
             newTheme.setTextColor(currentTextColor);
+            newTheme.setToolbarColor(currentToolbarColor);
             newTheme.setBackgroundImagePath(backgroundImagePath);
             tm.addCustomTheme(newTheme);
         }

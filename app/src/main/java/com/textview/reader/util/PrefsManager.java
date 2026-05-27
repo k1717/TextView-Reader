@@ -219,7 +219,12 @@ public class PrefsManager {
                 "main_custom_text",
                 "main_custom_sub_text",
                 "main_custom_outline",
-                "main_custom_reading_card"
+                "main_custom_selected",
+                "main_custom_file_type_chip",
+                "main_custom_file_type_chip_selected",
+                "main_custom_reading_card",
+                "main_custom_shortcut_box",
+                "main_custom_drawer_action_icon"
         };
         for (String key : keys) editor.remove(key);
         editor.commit();
@@ -340,12 +345,17 @@ public class PrefsManager {
     }
 
     private static final int DEFAULT_MAIN_CUSTOM_BG = Color.rgb(5, 13, 26);
-    private static final int DEFAULT_MAIN_CUSTOM_PANEL = Color.rgb(12, 27, 45);
+    private static final int DEFAULT_MAIN_CUSTOM_PANEL = Color.rgb(9, 18, 42);
     private static final int DEFAULT_MAIN_CUSTOM_BAR = Color.rgb(3, 10, 22);
     private static final int DEFAULT_MAIN_CUSTOM_TEXT = Color.rgb(234, 242, 255);
     private static final int DEFAULT_MAIN_CUSTOM_SUB = Color.rgb(180, 200, 226);
-    private static final int DEFAULT_MAIN_CUSTOM_OUTLINE = Color.rgb(55, 82, 115);
-    private static final int DEFAULT_MAIN_CUSTOM_READING_CARD = Color.rgb(7, 18, 32);
+    private static final int DEFAULT_MAIN_CUSTOM_OUTLINE = Color.rgb(4, 32, 69);
+    private static final int DEFAULT_MAIN_CUSTOM_SELECTED = Color.rgb(10, 29, 66);
+    private static final int DEFAULT_MAIN_CUSTOM_FILE_TYPE_CHIP = Color.rgb(6, 22, 58);
+    private static final int DEFAULT_MAIN_CUSTOM_FILE_TYPE_CHIP_SELECTED = Color.rgb(10, 36, 85);
+    private static final int DEFAULT_MAIN_CUSTOM_READING_CARD = Color.rgb(0, 9, 29);
+    private static final int DEFAULT_MAIN_CUSTOM_SHORTCUT_BOX = Color.rgb(0, 21, 48);
+    private static final int DEFAULT_MAIN_CUSTOM_DRAWER_ACTION_ICON = DEFAULT_MAIN_CUSTOM_TEXT;
 
     public int getMainCustomBgColor() { return prefs.getInt("main_custom_bg", DEFAULT_MAIN_CUSTOM_BG); }
     public int getMainCustomPanelColor() { return prefs.getInt("main_custom_panel", DEFAULT_MAIN_CUSTOM_PANEL); }
@@ -353,9 +363,27 @@ public class PrefsManager {
     public int getMainCustomTextColor() { return prefs.getInt("main_custom_text", DEFAULT_MAIN_CUSTOM_TEXT); }
     public int getMainCustomSubTextColor() { return prefs.getInt("main_custom_sub_text", DEFAULT_MAIN_CUSTOM_SUB); }
     public int getMainCustomOutlineColor() { return prefs.getInt("main_custom_outline", DEFAULT_MAIN_CUSTOM_OUTLINE); }
+    public int getMainCustomSelectedColor() {
+        if (prefs.contains("main_custom_selected")) {
+            return prefs.getInt("main_custom_selected", DEFAULT_MAIN_CUSTOM_SELECTED);
+        }
+        return deriveMainCustomSelectedColor();
+    }
+    public int getMainCustomFileTypeChipColor() { return prefs.getInt("main_custom_file_type_chip", DEFAULT_MAIN_CUSTOM_FILE_TYPE_CHIP); }
+    public int getMainCustomFileTypeChipSelectedColor() { return prefs.getInt("main_custom_file_type_chip_selected", DEFAULT_MAIN_CUSTOM_FILE_TYPE_CHIP_SELECTED); }
     public int getMainCustomReadingThemeCardColor() { return prefs.getInt("main_custom_reading_card", DEFAULT_MAIN_CUSTOM_READING_CARD); }
+    public int getMainCustomShortcutBoxColor() {
+        if (prefs.contains("main_custom_shortcut_box")) {
+            return prefs.getInt("main_custom_shortcut_box", DEFAULT_MAIN_CUSTOM_SHORTCUT_BOX);
+        }
+        return getMainCustomReadingThemeCardColor();
+    }
 
-    public void setMainCustomColors(int bg, int panel, int bar, int text, int subText, int outline, int readingThemeCard) {
+    public int getMainCustomDrawerActionIconColor() {
+        return prefs.getInt("main_custom_drawer_action_icon", DEFAULT_MAIN_CUSTOM_DRAWER_ACTION_ICON);
+    }
+
+    public void setMainCustomColors(int bg, int panel, int bar, int text, int subText, int outline, int selected, int readingThemeCard, int shortcutBox, int drawerActionIcon) {
         prefs.edit()
                 .putInt("main_custom_bg", forceOpaque(bg))
                 .putInt("main_custom_panel", forceOpaque(panel))
@@ -363,12 +391,26 @@ public class PrefsManager {
                 .putInt("main_custom_text", forceOpaque(text))
                 .putInt("main_custom_sub_text", forceOpaque(subText))
                 .putInt("main_custom_outline", forceOpaque(outline))
+                .putInt("main_custom_selected", forceOpaque(selected))
                 .putInt("main_custom_reading_card", forceOpaque(readingThemeCard))
+                .putInt("main_custom_shortcut_box", forceOpaque(shortcutBox))
+                .putInt("main_custom_drawer_action_icon", forceOpaque(drawerActionIcon))
+                .apply();
+    }
+
+    public void setMainCustomFileTypeChipColors(int fileTypeChip, int selectedFileTypeChip) {
+        prefs.edit()
+                .putInt("main_custom_file_type_chip", forceOpaque(fileTypeChip))
+                .putInt("main_custom_file_type_chip_selected", forceOpaque(selectedFileTypeChip))
                 .apply();
     }
 
     private int forceOpaque(int color) {
         return Color.rgb(Color.red(color), Color.green(color), Color.blue(color));
+    }
+
+    private int deriveMainCustomSelectedColor() {
+        return blendColors(getMainCustomPanelColor(), getMainCustomTextColor(), isCustomMainDark() ? 0.22f : 0.16f);
     }
 
     private boolean isCustomMainDark() {
@@ -397,20 +439,26 @@ public class PrefsManager {
 
     public int getMainPanelColor(Context context) {
         if (isMainCustomMode()) return getMainCustomPanelColor();
-        if (isDarkNavyMode()) return Color.rgb(12, 27, 45);
-        return shouldUseDarkColors(context) ? Color.rgb(17, 17, 17) : Color.rgb(248, 249, 250);
+        if (isDarkNavyMode()) return Color.rgb(9, 18, 42);
+        return shouldUseDarkColors(context) ? Color.rgb(17, 17, 17) : Color.rgb(240, 241, 244);
     }
 
     public int getMainElevatedPanelColor(Context context) {
         if (isMainCustomMode()) return blendColors(getMainCustomPanelColor(), getMainCustomTextColor(), isCustomMainDark() ? 0.10f : 0.055f);
         if (isDarkNavyMode()) return Color.rgb(16, 35, 58);
-        return shouldUseDarkColors(context) ? Color.rgb(30, 30, 30) : Color.rgb(238, 238, 238);
+        return shouldUseDarkColors(context) ? Color.rgb(30, 30, 30) : Color.rgb(232, 234, 237);
     }
 
     public int getMainReadingThemeCardColor(Context context) {
         if (isMainCustomMode()) return getMainCustomReadingThemeCardColor();
-        if (isDarkNavyMode()) return Color.rgb(7, 18, 32);
-        return getMainElevatedPanelColor(context);
+        if (isDarkNavyMode()) return Color.rgb(0, 9, 29);
+        return shouldUseDarkColors(context) ? Color.rgb(3, 3, 3) : Color.rgb(254, 254, 254);
+    }
+
+    public int getMainShortcutBoxColor(Context context) {
+        if (isMainCustomMode()) return getMainCustomShortcutBoxColor();
+        if (isDarkNavyMode()) return Color.rgb(0, 21, 48);
+        return shouldUseDarkColors(context) ? Color.rgb(18, 18, 18) : Color.rgb(232, 234, 237);
     }
 
     public int getMainTextColor(Context context) {
@@ -439,20 +487,48 @@ public class PrefsManager {
 
     public int getMainOutlineColor(Context context) {
         if (isMainCustomMode()) return getMainCustomOutlineColor();
-        if (isDarkNavyMode()) return Color.rgb(55, 82, 115);
+        if (isDarkNavyMode()) return Color.rgb(4, 32, 69);
         return shouldUseDarkColors(context) ? Color.rgb(70, 70, 70) : Color.rgb(210, 210, 210);
     }
 
     public int getMainSelectedColor(Context context) {
-        if (isMainCustomMode()) return blendColors(getMainCustomPanelColor(), getMainCustomTextColor(), isCustomMainDark() ? 0.22f : 0.16f);
-        if (isDarkNavyMode()) return Color.rgb(42, 69, 108);
-        return shouldUseDarkColors(context) ? Color.rgb(72, 72, 72) : Color.rgb(32, 33, 36);
+        if (isMainCustomMode()) return getMainCustomSelectedColor();
+        if (isDarkNavyMode()) return Color.rgb(10, 29, 66);
+        return shouldUseDarkColors(context) ? Color.rgb(72, 72, 72) : Color.rgb(226, 228, 232);
+    }
+
+    public int getMainFileTypeChipColor(Context context) {
+        if (isMainCustomMode()) return getMainCustomFileTypeChipColor();
+        if (isDarkNavyMode()) return Color.rgb(6, 22, 58);
+        return getMainElevatedPanelColor(context);
+    }
+
+    public int getMainFileTypeChipSelectedColor(Context context) {
+        if (isMainCustomMode()) return getMainCustomFileTypeChipSelectedColor();
+        if (isDarkNavyMode()) return Color.rgb(10, 36, 85);
+        return getMainSelectedColor(context);
+    }
+
+    public int getMainFileLongHoldColor(Context context) {
+        if (isMainCustomMode()) {
+            return blendColors(getMainCustomBgColor(), getMainCustomSelectedColor(), isCustomMainDark() ? 0.58f : 0.36f);
+        }
+        if (isDarkNavyMode()) {
+            return blendColors(getMainBgColor(context), getMainSelectedColor(context), 0.58f);
+        }
+        return getMainSelectedColor(context);
     }
 
     public int getMainControlColor(Context context) {
         if (isMainCustomMode()) return getMainCustomTextColor();
         if (isDarkNavyMode()) return Color.rgb(206, 222, 246);
         return shouldUseDarkColors(context) ? Color.rgb(210, 210, 210) : Color.rgb(80, 80, 80);
+    }
+
+    public int getMainDrawerActionIconColor(Context context) {
+        if (isMainCustomMode()) return getMainCustomDrawerActionIconColor();
+        if (isDarkNavyMode()) return getMainTextColor(context);
+        return getMainControlColor(context);
     }
 
 

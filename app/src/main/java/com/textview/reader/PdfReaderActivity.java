@@ -141,6 +141,7 @@ public class PdfReaderActivity extends AppCompatActivity {
 
     private int readerBg = Color.rgb(18, 18, 18);
     private int readerFg = Color.rgb(232, 234, 237);
+    private int readerToolbarBg = Color.rgb(18, 18, 18);
     private int readerSub = Color.rgb(176, 176, 176);
     private int readerPanel = Color.rgb(32, 33, 36);
     private int readerLine = Color.rgb(84, 86, 90);
@@ -744,6 +745,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         if (theme != null) {
             readerBg = theme.getBackgroundColor();
             readerFg = theme.getTextColor();
+            readerToolbarBg = theme.getToolbarColor();
         }
         readerSub = blendColors(readerBg, readerFg, isDarkColor(readerBg) ? 0.72f : 0.64f);
         readerPanel = blendColors(readerBg, readerFg, isDarkColor(readerBg) ? 0.10f : 0.08f);
@@ -753,7 +755,8 @@ public class PdfReaderActivity extends AppCompatActivity {
     private void applyDocumentSystemBarColors() {
         resolveReaderThemeColors();
         int bg = readerBg;
-        getWindow().setStatusBarColor(bg);
+        int toolbarBg = readerToolbarBg;
+        getWindow().setStatusBarColor(toolbarBg);
         getWindow().setNavigationBarColor(bg);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
             getWindow().setNavigationBarDividerColor(bg);
@@ -765,9 +768,8 @@ public class PdfReaderActivity extends AppCompatActivity {
         androidx.core.view.WindowInsetsControllerCompat controller =
                 androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         if (controller != null) {
-            boolean light = !isDarkColor(bg);
-            controller.setAppearanceLightStatusBars(light);
-            controller.setAppearanceLightNavigationBars(light);
+            controller.setAppearanceLightStatusBars(!isDarkColor(toolbarBg));
+            controller.setAppearanceLightNavigationBars(!isDarkColor(bg));
         }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             int flags = getWindow().getDecorView().getSystemUiVisibility();
@@ -815,10 +817,10 @@ public class PdfReaderActivity extends AppCompatActivity {
         resolveReaderThemeColors();
         if (root != null) root.setBackgroundColor(readerBg);
         if (pdfAppBar == null) pdfAppBar = findViewById(R.id.pdf_appbar);
-        if (pdfAppBar != null) pdfAppBar.setBackgroundColor(readerBg);
+        if (pdfAppBar != null) pdfAppBar.setBackgroundColor(readerToolbarBg);
         Toolbar toolbar = findViewById(R.id.toolbar);
         if (toolbar != null) {
-            toolbar.setBackgroundColor(readerBg);
+            toolbar.setBackgroundColor(readerToolbarBg);
             toolbar.setTitleTextColor(readerFg);
             toolbar.setNavigationIcon(tintedBackIcon());
         }
@@ -1319,31 +1321,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         return Math.min(screenWidth - dpToPx(14), dpToPx(460));
     }
 
-    private void positionPageDialogForThumbReach(@NonNull AlertDialog dialog) {
-        if (dialog.getWindow() == null) return;
-        android.view.Window window = dialog.getWindow();
-        window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
-        lp.copyFrom(window.getAttributes());
-        lp.width = txtReaderDialogWidthPx();
-        lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dpToPx(PDF_TOOLBAR_POPUP_Y_DP);
-        window.setAttributes(lp);
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-    }
 
-    private void positionBookmarkDialogForThumbReach(@NonNull AlertDialog dialog) {
-        if (dialog.getWindow() == null) return;
-        android.view.Window window = dialog.getWindow();
-        window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
-        lp.copyFrom(window.getAttributes());
-        lp.width = legacyBookmarkDialogWidthPx();
-        lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dpToPx(74);
-        window.setAttributes(lp);
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-    }
 
     private String formatPageMoveLabel(int page, int totalPages) {
         return String.format(Locale.getDefault(), "Page %d / %d", page, Math.max(1, totalPages));
@@ -1454,13 +1432,6 @@ public class PdfReaderActivity extends AppCompatActivity {
         box.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
     }
 
-    private void addDialogDivider(LinearLayout box) {
-        View line = new View(this);
-        line.setBackgroundColor(readerLine);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Math.max(1, dpToPx(1)));
-        lp.setMargins(0, dpToPx(4), 0, dpToPx(10));
-        box.addView(line, lp);
-    }
 
     private android.app.Dialog showFileInfoDialogWithCenteredClose(LinearLayout box) {
         final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
@@ -1614,17 +1585,6 @@ public class PdfReaderActivity extends AppCompatActivity {
         return getResources().getDisplayMetrics().heightPixels;
     }
 
-    private void positionMoreDialogForThumbReach(@NonNull AlertDialog dialog) {
-        if (dialog.getWindow() == null) return;
-        android.view.Window window = dialog.getWindow();
-        window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
-        lp.copyFrom(window.getAttributes());
-        lp.width = txtReaderDialogWidthPx();
-        lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dpToPx(34);
-        window.setAttributes(lp);
-    }
 
     private void addDialogBottomActions(LinearLayout box, android.app.Dialog dialog, String primaryText, Runnable primaryAction) {
         addDialogBottomActions(box, null, null, primaryText, primaryAction);
@@ -1668,11 +1628,6 @@ public class PdfReaderActivity extends AppCompatActivity {
         primary.setOnClickListener(v -> primaryAction.run());
     }
 
-    private void styleDialogWindow(AlertDialog dialog) {
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        }
-    }
 
     private void loadPdfFromIntent() {
         if (activityDestroyed) return;

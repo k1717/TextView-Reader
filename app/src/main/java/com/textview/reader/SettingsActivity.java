@@ -16,12 +16,14 @@ import android.os.Looper;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.text.Editable;
+import android.text.InputFilter;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
+import android.text.method.DigitsKeyListener;
 import android.view.Gravity;
 import android.view.MenuItem;
 import android.view.View;
@@ -115,6 +117,7 @@ public class SettingsActivity extends AppCompatActivity {
         currentTxtFilePath = getIntent() != null ? getIntent().getStringExtra("txt_file_path") : null;
 
         setupLanguage();
+        suppressLanguageRadioEffects();
         setupDarkMode();
         setupCustomMainThemeColors();
         setupFontSize();
@@ -134,6 +137,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         // Force readable colors for every control after Android/Material defaults are applied.
         applySettingsReadableTheme();
+        suppressLanguageRadioEffects();
         renderReadingThemeRows();
         refreshMainCustomHexFieldPreviews();
     }
@@ -146,6 +150,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
         if (prefs != null && themeManager != null) {
             applySettingsReadableTheme();
+            suppressLanguageRadioEffects();
             renderReadingThemeRows();
             refreshMainCustomHexFieldPreviews();
         }
@@ -195,6 +200,18 @@ public class SettingsActivity extends AppCompatActivity {
         });
     }
 
+    private void suppressLanguageRadioEffects() {
+        RadioButton english = findViewById(R.id.radio_language_english);
+        RadioButton korean = findViewById(R.id.radio_language_korean);
+        for (RadioButton radio : new RadioButton[]{english, korean}) {
+            if (radio == null) continue;
+            radio.setBackgroundColor(Color.TRANSPARENT);
+            radio.setForeground(null);
+            radio.setStateListAnimator(null);
+            radio.jumpDrawablesToCurrentState();
+        }
+    }
+
     private void setupDarkMode() {
         RadioGroup group = findViewById(R.id.dark_mode_group);
         int current = prefs.getDarkMode();
@@ -226,9 +243,14 @@ public class SettingsActivity extends AppCompatActivity {
         EditText text = findViewById(R.id.main_custom_text_hex);
         EditText sub = findViewById(R.id.main_custom_sub_hex);
         EditText outline = findViewById(R.id.main_custom_outline_hex);
+        EditText selected = findViewById(R.id.main_custom_selected_hex);
+        EditText fileTypeChip = findViewById(R.id.main_custom_file_type_chip_hex);
+        EditText selectedFileTypeChip = findViewById(R.id.main_custom_file_type_chip_selected_hex);
         EditText readingCard = findViewById(R.id.main_custom_reading_card_hex);
+        EditText shortcutBox = findViewById(R.id.main_custom_shortcut_box_hex);
+        EditText drawerActionIcon = findViewById(R.id.main_custom_drawer_action_icon_hex);
         MaterialButton apply = findViewById(R.id.btn_apply_custom_main_theme);
-        if (bg == null || panel == null || bar == null || text == null || sub == null || outline == null || readingCard == null || apply == null) return;
+        if (bg == null || panel == null || bar == null || text == null || sub == null || outline == null || selected == null || fileTypeChip == null || selectedFileTypeChip == null || readingCard == null || shortcutBox == null || drawerActionIcon == null || apply == null) return;
 
         bg.setText(colorToHex(prefs.getMainCustomBgColor()));
         panel.setText(colorToHex(prefs.getMainCustomPanelColor()));
@@ -236,7 +258,17 @@ public class SettingsActivity extends AppCompatActivity {
         text.setText(colorToHex(prefs.getMainCustomTextColor()));
         sub.setText(colorToHex(prefs.getMainCustomSubTextColor()));
         outline.setText(colorToHex(prefs.getMainCustomOutlineColor()));
+        selected.setText(colorToHex(prefs.getMainCustomSelectedColor()));
+        fileTypeChip.setText(colorToHex(prefs.getMainCustomFileTypeChipColor()));
+        selectedFileTypeChip.setText(colorToHex(prefs.getMainCustomFileTypeChipSelectedColor()));
         readingCard.setText(colorToHex(prefs.getMainCustomReadingThemeCardColor()));
+        shortcutBox.setText(colorToHex(prefs.getMainCustomShortcutBoxColor()));
+        drawerActionIcon.setText(colorToHex(prefs.getMainCustomDrawerActionIconColor()));
+
+        for (EditText customHexField : new EditText[]{bg, panel, bar, text, sub, outline, selected, fileTypeChip, selectedFileTypeChip, readingCard, shortcutBox, drawerActionIcon}) {
+            configureMainCustomHexInput(customHexField);
+            applyMainCustomHexFieldPadding(customHexField);
+        }
 
         attachMainCustomRgbSliders(bg, prefs.getMainCustomBgColor());
         attachMainCustomRgbSliders(panel, prefs.getMainCustomPanelColor());
@@ -244,7 +276,12 @@ public class SettingsActivity extends AppCompatActivity {
         attachMainCustomRgbSliders(text, prefs.getMainCustomTextColor());
         attachMainCustomRgbSliders(sub, prefs.getMainCustomSubTextColor());
         attachMainCustomRgbSliders(outline, prefs.getMainCustomOutlineColor());
+        attachMainCustomRgbSliders(selected, prefs.getMainCustomSelectedColor());
+        attachMainCustomRgbSliders(fileTypeChip, prefs.getMainCustomFileTypeChipColor());
+        attachMainCustomRgbSliders(selectedFileTypeChip, prefs.getMainCustomFileTypeChipSelectedColor());
         attachMainCustomRgbSliders(readingCard, prefs.getMainCustomReadingThemeCardColor());
+        attachMainCustomRgbSliders(shortcutBox, prefs.getMainCustomShortcutBoxColor());
+        attachMainCustomRgbSliders(drawerActionIcon, prefs.getMainCustomDrawerActionIconColor());
 
         apply.setOnClickListener(v -> {
             Integer bgColor = readHexColor(bg);
@@ -253,14 +290,22 @@ public class SettingsActivity extends AppCompatActivity {
             Integer textColor = readHexColor(text);
             Integer subColor = readHexColor(sub);
             Integer outlineColor = readHexColor(outline);
+            Integer selectedColor = readHexColor(selected);
+            Integer fileTypeChipColor = readHexColor(fileTypeChip);
+            Integer selectedFileTypeChipColor = readHexColor(selectedFileTypeChip);
             Integer readingCardColor = readHexColor(readingCard);
+            Integer shortcutBoxColor = readHexColor(shortcutBox);
+            Integer drawerActionIconColor = readHexColor(drawerActionIcon);
             if (bgColor == null || panelColor == null || barColor == null
-                    || textColor == null || subColor == null || outlineColor == null || readingCardColor == null) {
+                    || textColor == null || subColor == null || outlineColor == null || selectedColor == null
+                    || fileTypeChipColor == null || selectedFileTypeChipColor == null
+                    || readingCardColor == null || shortcutBoxColor == null || drawerActionIconColor == null) {
                 Toast.makeText(this, R.string.invalid_hex_color, Toast.LENGTH_SHORT).show();
                 return;
             }
 
-            prefs.setMainCustomColors(bgColor, panelColor, barColor, textColor, subColor, outlineColor, readingCardColor);
+            prefs.setMainCustomColors(bgColor, panelColor, barColor, textColor, subColor, outlineColor, selectedColor, readingCardColor, shortcutBoxColor, drawerActionIconColor);
+            prefs.setMainCustomFileTypeChipColors(fileTypeChipColor, selectedFileTypeChipColor);
             if (prefs.getDarkMode() != PrefsManager.DARK_MODE_CUSTOM) {
                 prefs.setDarkMode(PrefsManager.DARK_MODE_CUSTOM);
             } else {
@@ -281,13 +326,13 @@ public class SettingsActivity extends AppCompatActivity {
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dpToPx(10), dpToPx(2), dpToPx(10), dpToPx(12));
+        box.setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(16));
 
         TextView sliderHint = new TextView(this);
         sliderHint.setText(getString(R.string.main_custom_rgb_sliders));
         sliderHint.setTextSize(12f);
         sliderHint.setTextColor(prefs != null ? prefs.getMainSubTextColor(this) : Color.rgb(120, 120, 120));
-        sliderHint.setPadding(0, 0, 0, dpToPx(2));
+        sliderHint.setPadding(0, 0, 0, dpToPx(6));
         box.addView(sliderHint, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -371,6 +416,13 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
+    private void applyMainCustomHexFieldPadding(@NonNull EditText field) {
+        field.setMinHeight(dpToPx(48));
+        field.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        field.setPadding(dpToPx(18), 0, dpToPx(18), 0);
+        field.setIncludeFontPadding(false);
+    }
+
     private void applyMainCustomHexFieldPreview(@NonNull EditText field, int color) {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(color);
@@ -381,6 +433,7 @@ public class SettingsActivity extends AppCompatActivity {
             field.setBackgroundTintList(null);
         }
         field.setBackground(bg);
+        applyMainCustomHexFieldPadding(field);
 
         int textColor = readableTextColorForMainCustomColor(color);
         field.setTextColor(textColor);
@@ -399,6 +452,7 @@ public class SettingsActivity extends AppCompatActivity {
             field.setBackgroundTintList(null);
         }
         field.setBackground(bg);
+        applyMainCustomHexFieldPadding(field);
         field.setTextColor(fg);
         field.setHintTextColor(prefs != null ? prefs.getMainSubTextColor(this) : Color.rgb(120, 120, 120));
         field.invalidate();
@@ -412,7 +466,12 @@ public class SettingsActivity extends AppCompatActivity {
                 || id == R.id.main_custom_text_hex
                 || id == R.id.main_custom_sub_hex
                 || id == R.id.main_custom_outline_hex
-                || id == R.id.main_custom_reading_card_hex;
+                || id == R.id.main_custom_selected_hex
+                || id == R.id.main_custom_file_type_chip_hex
+                || id == R.id.main_custom_file_type_chip_selected_hex
+                || id == R.id.main_custom_reading_card_hex
+                || id == R.id.main_custom_shortcut_box_hex
+                || id == R.id.main_custom_drawer_action_icon_hex;
     }
 
     private void refreshMainCustomHexFieldPreviews() {
@@ -423,7 +482,12 @@ public class SettingsActivity extends AppCompatActivity {
                 R.id.main_custom_text_hex,
                 R.id.main_custom_sub_hex,
                 R.id.main_custom_outline_hex,
-                R.id.main_custom_reading_card_hex
+                R.id.main_custom_selected_hex,
+                R.id.main_custom_file_type_chip_hex,
+                R.id.main_custom_file_type_chip_selected_hex,
+                R.id.main_custom_reading_card_hex,
+                R.id.main_custom_shortcut_box_hex,
+                R.id.main_custom_drawer_action_icon_hex
         };
         for (int id : ids) {
             EditText field = findViewById(id);
@@ -460,7 +524,7 @@ public class SettingsActivity extends AppCompatActivity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, 0, 0, dpToPx(1));
+        row.setPadding(0, dpToPx(2), 0, dpToPx(6));
 
         TextView labelView = new TextView(this);
         labelView.setText(label);
@@ -511,6 +575,12 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
+    private void configureMainCustomHexInput(@NonNull EditText field) {
+        field.setSingleLine(true);
+        field.setFilters(new InputFilter[]{new InputFilter.LengthFilter(7)});
+        field.setKeyListener(DigitsKeyListener.getInstance("#0123456789abcdefABCDEF"));
+    }
+
     private Integer readHexColor(EditText field) {
         Integer color = parseHexColor(field != null ? field.getText().toString() : null);
         if (field != null) field.setError(color == null ? getString(R.string.invalid_hex_color) : null);
@@ -521,12 +591,6 @@ public class SettingsActivity extends AppCompatActivity {
         if (raw == null) return null;
         String value = raw.trim();
         if (value.startsWith("#")) value = value.substring(1);
-        if (value.length() == 3) {
-            value = "" + value.charAt(0) + value.charAt(0)
-                    + value.charAt(1) + value.charAt(1)
-                    + value.charAt(2) + value.charAt(2);
-        }
-        if (value.length() == 8) value = value.substring(2);
         if (value.length() != 6 || !value.matches("[0-9a-fA-F]{6}")) return null;
         try {
             return Color.rgb(
@@ -547,7 +611,7 @@ public class SettingsActivity extends AppCompatActivity {
         TextView label = findViewById(R.id.font_size_label);
         float current = prefs.getFontSize();
         sb.setMax(40);
-        sb.setProgress((int) (current - 8));
+        sb.setProgress(Math.round(current - 8f));
         label.setText(String.format(getString(R.string.font_size_format), current));
         sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
@@ -565,7 +629,7 @@ public class SettingsActivity extends AppCompatActivity {
         TextView label = findViewById(R.id.line_spacing_label);
         float current = prefs.getLineSpacing();
         sb.setMax(20);
-        sb.setProgress((int) ((current - 1.0f) * 10));
+        sb.setProgress(Math.round((current - 1.0f) * 10f));
         label.setText(String.format(getString(R.string.line_spacing_format), current));
         sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
@@ -838,23 +902,23 @@ public class SettingsActivity extends AppCompatActivity {
             panel.addView(largeWarning);
         }
 
-        MaterialButton original = makeSettingsDialogButtonNoShade(
-                getString(R.string.txt_display_rules_actual_file_original), text, outline);
+        MaterialButton original = makeTextRuleDialogButton(
+                getString(R.string.txt_display_rules_actual_file_original), text);
         original.setOnClickListener(v -> {
             dialog.dismiss();
             showTextDisplayRulesActualFileConfirmDialog(true, sourceFile, copyTarget, activeRules.size());
         });
         panel.addView(original);
 
-        MaterialButton copy = makeSettingsDialogButtonNoShade(
-                getString(R.string.txt_display_rules_actual_file_copy), text, outline);
+        MaterialButton copy = makeTextRuleDialogButton(
+                getString(R.string.txt_display_rules_actual_file_copy), text);
         copy.setOnClickListener(v -> {
             dialog.dismiss();
             showTextDisplayRulesActualFileConfirmDialog(false, sourceFile, copyTarget, activeRules.size());
         });
         panel.addView(copy);
 
-        MaterialButton cancel = makeSettingsDialogButtonNoShade(getString(R.string.cancel), text, outline);
+        MaterialButton cancel = makeTextRuleDialogButton(getString(R.string.cancel), text);
         cancel.setOnClickListener(v -> dialog.dismiss());
         panel.addView(cancel);
 
@@ -918,17 +982,17 @@ public class SettingsActivity extends AppCompatActivity {
             panel.addView(largeWarning);
         }
 
-        MaterialButton apply = makeSettingsDialogButtonNoShade(
+        MaterialButton apply = makeTextRuleDialogButton(
                 getString(editOriginal
                         ? R.string.txt_display_rules_actual_file_confirm_original_button
-                        : R.string.txt_display_rules_actual_file_confirm_copy_button), text, outline);
+                        : R.string.txt_display_rules_actual_file_confirm_copy_button), text);
         apply.setOnClickListener(v -> {
             dialog.dismiss();
             applyTextDisplayRulesToActualFile(editOriginal);
         });
         panel.addView(apply);
 
-        MaterialButton cancel = makeSettingsDialogButtonNoShade(getString(R.string.cancel), text, outline);
+        MaterialButton cancel = makeTextRuleDialogButton(getString(R.string.cancel), text);
         cancel.setOnClickListener(v -> dialog.dismiss());
         panel.addView(cancel);
 
@@ -1141,7 +1205,7 @@ public class SettingsActivity extends AppCompatActivity {
                 row.setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10));
                 GradientDrawable bg = new GradientDrawable();
                 bg.setColor(dialogRowBackgroundColor());
-                bg.setStroke(1, outline);
+                bg.setStroke(dpToPx(1), outline);
                 bg.setCornerRadius(dpToPx(14));
                 row.setBackground(bg);
 
@@ -1246,14 +1310,14 @@ public class SettingsActivity extends AppCompatActivity {
         };
         refresh[0].run();
 
-        MaterialButton add = makeSettingsDialogButtonNoShade(getString(R.string.add), text, outline);
+        MaterialButton add = makeTextRuleDialogButton(getString(R.string.add), text);
         add.setOnClickListener(v -> showEditTextDisplayRuleDialog(rules, -1, () -> {
             TextDisplayRuleManager.saveRules(this, rules);
             refresh[0].run();
         }));
         panel.addView(add);
 
-        MaterialButton clear = makeSettingsDialogButtonNoShade(getString(R.string.clear_all), text, outline);
+        MaterialButton clear = makeTextRuleDialogButton(getString(R.string.clear_all), text);
         clear.setOnClickListener(v -> {
             if (!rules.isEmpty()) {
                 showClearTextDisplayRulesConfirmDialog(() -> {
@@ -1265,7 +1329,7 @@ public class SettingsActivity extends AppCompatActivity {
         });
         panel.addView(clear);
 
-        MaterialButton close = makeSettingsDialogButtonNoShade(getString(R.string.close), text, outline);
+        MaterialButton close = makeTextRuleDialogButton(getString(R.string.close), text);
         close.setOnClickListener(v -> dialog.dismiss());
         panel.addView(close);
 
@@ -1288,14 +1352,14 @@ public class SettingsActivity extends AppCompatActivity {
         message.setGravity(Gravity.CENTER);
         panel.addView(message);
 
-        MaterialButton delete = makeSettingsDialogButtonNoShade(getString(R.string.delete), text, outline);
+        MaterialButton delete = makeTextRuleDialogButton(getString(R.string.delete), text);
         delete.setOnClickListener(v -> {
             dialog.dismiss();
             onDelete.run();
         });
         panel.addView(delete);
 
-        MaterialButton cancel = makeSettingsDialogButtonNoShade(getString(R.string.cancel), text, outline);
+        MaterialButton cancel = makeTextRuleDialogButton(getString(R.string.cancel), text);
         cancel.setOnClickListener(v -> dialog.dismiss());
         panel.addView(cancel);
 
@@ -1313,14 +1377,14 @@ public class SettingsActivity extends AppCompatActivity {
         panel.addView(makeSettingsDialogTitle(getString(R.string.clear_all), text));
         panel.addView(makeSettingsDialogMessage(getString(R.string.txt_display_rules_clear_confirm), sub));
 
-        MaterialButton clear = makeSettingsDialogButtonNoShade(getString(R.string.clear_all), text, outline);
+        MaterialButton clear = makeTextRuleDialogButton(getString(R.string.clear_all), text);
         clear.setOnClickListener(v -> {
             dialog.dismiss();
             onClear.run();
         });
         panel.addView(clear);
 
-        MaterialButton cancel = makeSettingsDialogButtonNoShade(getString(R.string.cancel), text, outline);
+        MaterialButton cancel = makeTextRuleDialogButton(getString(R.string.cancel), text);
         cancel.setOnClickListener(v -> dialog.dismiss());
         panel.addView(cancel);
 
@@ -1386,7 +1450,7 @@ public class SettingsActivity extends AppCompatActivity {
         warning.setGravity(Gravity.START);
         panel.addView(warning);
 
-        MaterialButton save = makeSettingsDialogButtonNoShade(getString(R.string.save), text, outline);
+        MaterialButton save = makeTextRuleDialogButton(getString(R.string.save), text);
         save.setOnClickListener(v -> {
             String find = findInput.getText() != null ? findInput.getText().toString() : "";
             if (find.isEmpty()) {
@@ -1421,7 +1485,7 @@ public class SettingsActivity extends AppCompatActivity {
         });
         panel.addView(save);
 
-        MaterialButton cancel = makeSettingsDialogButtonNoShade(getString(R.string.cancel), text, outline);
+        MaterialButton cancel = makeTextRuleDialogButton(getString(R.string.cancel), text);
         cancel.setOnClickListener(v -> dialog.dismiss());
         panel.addView(cancel);
 
@@ -1451,17 +1515,30 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private TextView makeSmallTextButton(String text) {
-        TextView button = new TextView(this);
+        MaterialButton button = new MaterialButton(this);
+        button.setAllCaps(false);
         button.setText(text);
         button.setTextColor(dialogTextColor());
         button.setTextSize(12f);
         button.setGravity(Gravity.CENTER);
+        button.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        button.setIncludeFontPadding(false);
+        button.setSingleLine(true);
         button.setPadding(dpToPx(4), 0, dpToPx(4), 0);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(dialogRowBackgroundColor());
-        bg.setStroke(1, dialogOutlineColor());
-        bg.setCornerRadius(dpToPx(10));
-        button.setBackground(bg);
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
+        button.setMinWidth(0);
+        button.setMinimumWidth(0);
+        button.setMinHeight(0);
+        button.setMinimumHeight(0);
+        button.setCornerRadius(dpToPx(10));
+        button.setStrokeWidth(0);
+        button.setStrokeColor(ColorStateList.valueOf(Color.TRANSPARENT));
+        button.setBackgroundTintList(ColorStateList.valueOf(Color.TRANSPARENT));
+        button.setElevation(0f);
+        button.setTranslationZ(0f);
+        button.setStateListAnimator(null);
+        button.setRippleColor(ColorStateList.valueOf(Color.TRANSPARENT));
         return button;
     }
 
@@ -1778,12 +1855,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    private int resolveColor(int attr) {
-        android.util.TypedValue out = new android.util.TypedValue();
-        getTheme().resolveAttribute(attr, out, true);
-        if (out.resourceId != 0) return ContextCompat.getColor(this, out.resourceId);
-        return out.data;
-    }
 
 
     private boolean isDarkUi() {
@@ -2076,16 +2147,16 @@ public class SettingsActivity extends AppCompatActivity {
         Theme activeTheme = themeManager.getActiveTheme();
         String activeId = activeTheme != null ? activeTheme.getId() : "";
 
-        boolean dark = isDarkUi();
+        boolean dark = prefs != null ? prefs.shouldUseDarkColors(this) : isDarkUi();
         int rowBg = prefs != null
                 ? prefs.getMainReadingThemeCardColor(this)
                 : (dark ? Color.rgb(10, 10, 10) : Color.rgb(255, 255, 255));
         int text = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36));
         int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104));
-        int outline = prefs != null && prefs.isDarkNavyMode()
-                ? Color.rgb(42, 64, 92)
-                : (prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(70, 70, 70) : Color.rgb(218, 220, 224)));
-        int selectedOutline = prefs != null ? prefs.getMainControlColor(this) : (dark ? Color.rgb(210, 210, 210) : Color.rgb(80, 80, 80));
+        int outline = prefs != null
+                ? prefs.getMainOutlineColor(this)
+                : (dark ? Color.rgb(70, 70, 70) : Color.rgb(218, 220, 224));
+        int selectedOutline = toneAwareReadingThemeSelectedOutlineColor(outline, dark);
 
         for (Theme theme : themes) {
             boolean selected = theme.getId().equals(activeId);
@@ -2103,6 +2174,26 @@ public class SettingsActivity extends AppCompatActivity {
             }
             container.addView(row);
         }
+    }
+
+    private int toneAwareReadingThemeSelectedOutlineColor(int outline, boolean darkTone) {
+        return darkTone ? brightenColor(outline, 0.30f) : darkenColor(outline, 0.22f);
+    }
+
+    private int brightenColor(int color, float amount) {
+        amount = Math.max(0f, Math.min(1f, amount));
+        int r = Math.round(Color.red(color) + (255 - Color.red(color)) * amount);
+        int g = Math.round(Color.green(color) + (255 - Color.green(color)) * amount);
+        int b = Math.round(Color.blue(color) + (255 - Color.blue(color)) * amount);
+        return Color.rgb(r, g, b);
+    }
+
+    private int darkenColor(int color, float amount) {
+        amount = Math.max(0f, Math.min(1f, amount));
+        int r = Math.round(Color.red(color) * (1f - amount));
+        int g = Math.round(Color.green(color) * (1f - amount));
+        int b = Math.round(Color.blue(color) * (1f - amount));
+        return Color.rgb(r, g, b);
     }
 
     private View makeReadingThemeRow(Theme theme, boolean selected, int rowBg,
@@ -2171,7 +2262,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         TextView check = new TextView(this);
         check.setText(selected ? "✓" : "");
-        check.setTextColor(text);
+        check.setTextColor(selected ? selectedOutline : text);
         check.setTextSize(24f);
         check.setGravity(android.view.Gravity.CENTER);
         row.addView(check, new LinearLayout.LayoutParams(dpToPx(36),
@@ -2478,7 +2569,15 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private MaterialButton makeSettingsDialogButtonNoShade(String label, int text, int outline) {
-        return makeSettingsDialogButton(label, text, dialogPanelBackgroundColor(), outline, true);
+        return makeSettingsDialogButton(label, text, dialogActionButtonBackgroundColor(), outline, true);
+    }
+
+    private MaterialButton makeTextRuleDialogButton(String label, int text) {
+        MaterialButton button = makeSettingsDialogButton(label, text,
+                dialogActionButtonBackgroundColor(), Color.TRANSPARENT, true);
+        button.setStrokeWidth(0);
+        button.setStrokeColor(ColorStateList.valueOf(Color.TRANSPARENT));
+        return button;
     }
 
     private MaterialButton makeSettingsDialogButton(String label, int text, int bg, int outline,
@@ -2512,23 +2611,45 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private int dialogPanelBackgroundColor() {
+        if (prefs != null) return prefs.getMainBgColor(this);
         return isDarkUi() ? Color.rgb(16, 16, 16) : Color.rgb(255, 255, 255);
     }
 
+    private int dialogActionButtonBackgroundColor() {
+        if (prefs != null) return prefs.getMainPanelColor(this);
+        return isDarkUi() ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245);
+    }
+
     private int dialogRowBackgroundColor() {
-        return isDarkUi() ? Color.rgb(24, 24, 24) : Color.rgb(248, 249, 250);
+        return dialogActionButtonBackgroundColor();
     }
 
     private int dialogTextColor() {
+        if (prefs != null) return prefs.getMainTextColor(this);
         return isDarkUi() ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
     }
 
     private int dialogSubTextColor() {
+        if (prefs != null) return prefs.getMainSubTextColor(this);
         return isDarkUi() ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
     }
 
     private int dialogOutlineColor() {
+        if (prefs != null) return prefs.getMainOutlineColor(this);
         return isDarkUi() ? Color.rgb(70, 70, 70) : Color.rgb(218, 220, 224);
+    }
+    private boolean isLightColor(int color) {
+        double luminance = 0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color);
+        return luminance > 160;
+    }
+
+    private int blendColors(int bottomColor, int topColor, float topAlpha) {
+        topAlpha = Math.max(0f, Math.min(1f, topAlpha));
+        float bottomAlpha = 1f - topAlpha;
+        int r = Math.round(Color.red(topColor) * topAlpha + Color.red(bottomColor) * bottomAlpha);
+        int g = Math.round(Color.green(topColor) * topAlpha + Color.green(bottomColor) * bottomAlpha);
+        int b = Math.round(Color.blue(topColor) * topAlpha + Color.blue(bottomColor) * bottomAlpha);
+        return Color.rgb(r, g, b);
     }
 
     private int dpToPx(int dp) {

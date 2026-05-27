@@ -7,13 +7,16 @@ import androidx.annotation.Nullable;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.json.JSONException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -216,7 +219,7 @@ public final class PageIndexCacheManager {
                 e.cacheBytes = o.optLong("cacheBytes", 0L);
                 if (!e.key.isEmpty() && !e.filePath.isEmpty()) entries.add(e);
             }
-        } catch (Throwable ignored) {
+        } catch (IOException | JSONException | RuntimeException ignored) {
             entries.clear();
         }
         return entries;
@@ -261,11 +264,11 @@ public final class PageIndexCacheManager {
                 //noinspection ResultOfMethodCallIgnored
                 tmp.delete();
             }
-        } catch (Throwable ignored) {
+        } catch (IOException | JSONException | RuntimeException ignored) {
         }
     }
 
-    private String readUtf8(@NonNull File file) throws Exception {
+    private String readUtf8(@NonNull File file) throws IOException {
         try (FileInputStream in = new FileInputStream(file);
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192];
@@ -341,7 +344,7 @@ public final class PageIndexCacheManager {
                 sb.append(hex[value & 0x0F]);
             }
             return sb.toString();
-        } catch (Throwable ignored) {
+        } catch (NoSuchAlgorithmException | RuntimeException ignored) {
             return Integer.toHexString(path.hashCode());
         }
     }

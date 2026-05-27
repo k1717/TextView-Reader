@@ -1,7 +1,11 @@
 package com.textview.reader;
 
+import android.content.res.ColorStateList;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -23,17 +27,23 @@ public class LockActivity extends AppCompatActivity {
 
     private EditText pinInput;
     private TextView messageText;
+    private PrefsManager prefs;
     private int mode;
     private String firstEntry; // for PIN confirmation during set
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        prefs = PrefsManager.getInstance(this);
+        prefs.applyLanguage(prefs.getLanguageMode());
+        prefs.applyDarkMode(prefs.getDarkMode());
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_lock);
 
         pinInput = findViewById(R.id.pin_input);
         messageText = findViewById(R.id.lock_message);
         Button btnConfirm = findViewById(R.id.btn_confirm);
+
+        applyLockTheme();
 
         mode = getIntent().getIntExtra(EXTRA_MODE, MODE_UNLOCK);
 
@@ -82,6 +92,83 @@ public class LockActivity extends AppCompatActivity {
         }
     }
 
+    private void applyLockTheme() {
+        if (prefs == null) return;
+
+        int bg = prefs.getMainBgColor(this);
+        int panel = prefs.getMainPanelColor(this);
+        int elevated = prefs.getMainElevatedPanelColor(this);
+        int text = prefs.getMainTextColor(this);
+        int sub = prefs.getMainSubTextColor(this);
+        int outline = prefs.getMainOutlineColor(this);
+        int control = prefs.getMainControlColor(this);
+
+        ViewGroup content = findViewById(android.R.id.content);
+        View root = content != null && content.getChildCount() > 0 ? content.getChildAt(0) : null;
+        if (root != null) root.setBackgroundColor(bg);
+        if (messageText != null) messageText.setTextColor(text);
+
+        if (pinInput != null) {
+            pinInput.setTextColor(text);
+            pinInput.setHintTextColor(sub);
+            pinInput.setBackgroundTintList(ColorStateList.valueOf(control));
+        }
+
+        int[] outlineButtons = {
+                R.id.btn_0, R.id.btn_1, R.id.btn_2, R.id.btn_3, R.id.btn_4,
+                R.id.btn_5, R.id.btn_6, R.id.btn_7, R.id.btn_8, R.id.btn_9,
+                R.id.btn_delete
+        };
+        for (int id : outlineButtons) {
+            View v = findViewById(id);
+            if (v instanceof Button) {
+                styleLockButton((Button) v, text, panel, outline);
+            }
+        }
+
+        View confirm = findViewById(R.id.btn_confirm);
+        if (confirm instanceof Button) {
+            styleLockTextActionButton((Button) confirm, control);
+        }
+    }
+
+    private void styleLockButton(Button button, int textColor, int bgColor, int outlineColor) {
+        button.setTextColor(textColor);
+        button.setAllCaps(false);
+        button.setIncludeFontPadding(false);
+        CharSequence label = button.getText();
+        if (label != null && label.length() == 1 && Character.isDigit(label.charAt(0))) {
+            button.setTextSize(26f);
+        } else {
+            button.setTextSize(23f);
+        }
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(bgColor);
+        bg.setCornerRadius(dpToPx(14));
+        bg.setStroke(dpToPx(1), outlineColor);
+        button.setBackground(bg);
+    }
+
+
+    private void styleLockTextActionButton(Button button, int textColor) {
+        button.setTextColor(textColor);
+        button.setAllCaps(false);
+        button.setIncludeFontPadding(false);
+        button.setTextSize(23f);
+        button.setBackground(null);
+        button.setBackgroundTintList(null);
+        button.setStateListAnimator(null);
+        button.setElevation(0f);
+        button.setTranslationZ(0f);
+        button.setMinWidth(0);
+        button.setMinHeight(0);
+        button.setPadding(dpToPx(8), 0, dpToPx(8), 0);
+    }
+
+    private int dpToPx(int dp) {
+        return (int) (dp * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
     private void onConfirm() {
         String pin = pinInput.getText().toString();
         if (pin.length() < 4) {
@@ -89,7 +176,7 @@ public class LockActivity extends AppCompatActivity {
             return;
         }
 
-        PrefsManager prefs = PrefsManager.getInstance(this);
+        if (prefs == null) prefs = PrefsManager.getInstance(this);
 
         switch (mode) {
             case MODE_UNLOCK:
