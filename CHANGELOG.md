@@ -1,10 +1,39 @@
-# Changelog
+## 2.1.7 - 2026-05-26
+This package uses Android metadata `versionCode 2170` and `versionName "2.1.7"`.
+
+### TXT encoding coverage
+
+- TXT automatic encoding detection is hardened for UTF-8 sample-boundary cases, UTF-16/UTF-32 BOM cases, BOM-less UTF-16 heuristics, Korean legacy TXT, Cyrillic legacy encodings, and additional legacy code pages.
+- Automatic detection now combines Android ICU, Mozilla/JUniversalChardet, an internal accuracy scorer, UTF-8 safe-boundary trimming, and a per-file auto-encoding cache keyed by path, file size, and last-modified time.
+- Korean legacy auto-detection normalizes EUC-KR/MS949/CP949-compatible results to windows-949 while keeping manual EUC-KR selection available.
+
+### TXT encoding UI
+
+- The TXT manual encoding picker uses a compact two-column layout with a fixed current-encoding status label, scrollable encoding cards, and a plain text Close button.
+
+### Viewer dialogs and PDF More
+
+- TXT/PDF/EPUB/Word File Info and Page Move action buttons are centered consistently.
+- The TXT Page Move Go button is slightly raised without changing the action-row layout.
+- The PDF More dialog no longer shows divider lines between Read Mode / Zoom Out and Reset Zoom / Settings.
+
+### TXT Display Rules
+
+- The TXT Display Rule add dialog uses Save / Cancel action ordering.
+
+### Build metadata
+
+- Updated Android app metadata to `versionCode 2170` and `versionName "2.1.7"`.
+- Kept documented build toolchain at Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
 
 ## 2.1.6 - 2026-05-24
 This package uses Android metadata `versionCode 2160` and `versionName "2.1.6"`.
 
 ### TXT encoding coverage
 
+- TXT legacy encoding detection now uses accuracy-first family-level scoring across Korean, CJK, Cyrillic, Western, Greek, Hebrew, Arabic, and Thai candidates instead of returning immediately from a Korean/Cyrillic priority pre-pass.
+- Detection sampling was expanded to 1 MiB to improve script-distribution accuracy; manual encoding remains available as a last-resort override.
+- ISO-8859-5 Cyrillic TXT detection now runs a Cyrillic-specific pre-pass before ICU/general scoring so ISO-8859-5 files are not misread as Windows-1251/KOI8 mojibake.
 - Expanded TXT encoding detection beyond CJK-focused legacy encodings to include Android ICU-assisted detection plus common Latin, Greek, Cyrillic, Turkish, Baltic, Hebrew, Arabic, and Thai single-byte encodings.
 - Added BOM-less UTF-16LE/UTF-16BE detection before strict UTF-8 acceptance so no-BOM UTF-16 TXT files with many embedded NUL bytes no longer open as broken UTF-8 text.
 - Updated fallback encoding scoring to consider broad alphabetic-script characters and common book punctuation, improving fallback selection for old TXT files across more writing systems.
@@ -81,7 +110,7 @@ This package uses Android metadata `versionCode 2150` and `versionName "2.1.5"`.
 - Updated Android app metadata to `versionCode 2150` and `versionName "2.1.5"`.
 - Kept documented build toolchain at Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
 
-## 2.1.4 - 2026-05-20
+## 2.1.4 - 2026-05-17
 This package uses Android metadata `versionCode 2140` and `versionName "2.1.4"`.
 
 ### Large TXT partition modes and page model

@@ -1,12 +1,20 @@
-# TextView Reader
+## 2.1.7 release summary
 
-TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
-
-Current version: **2.1.6**
+- Updated Android version metadata to `versionCode 2170` and `versionName "2.1.7"`.
+- TXT automatic encoding detection is hardened for UTF-8 sample-boundary cases, UTF-16/UTF-32 BOM cases, BOM-less UTF-16 heuristics, Korean legacy TXT, Cyrillic legacy encodings, and additional legacy code pages.
+- Automatic detection now combines Android ICU, Mozilla/JUniversalChardet, an internal accuracy scorer, UTF-8 safe-boundary trimming, and a per-file auto-encoding cache keyed by path, file size, and last-modified time.
+- Korean legacy auto-detection normalizes EUC-KR/MS949/CP949-compatible results to windows-949 while keeping manual EUC-KR selection available.
+- The TXT manual encoding picker uses a compact two-column layout with a fixed current-encoding status label, scrollable encoding cards, and a plain text Close button.
+- TXT/PDF/EPUB/Word File Info and Page Move action buttons are centered consistently; the TXT Page Move Go button is slightly raised without changing the action-row layout.
+- The PDF More dialog no longer shows divider lines between Read Mode / Zoom Out and Reset Zoom / Settings.
+- The TXT Display Rule add dialog uses Save / Cancel action ordering.
+- Public notes no longer include private or specific test filenames, and the source package includes repository-safe ignore rules plus the active JUniversalChardet third-party notice.
 
 ## 2.1.6 release summary
 
 - Updated Android version metadata to `versionCode 2160` and `versionName "2.1.6"`.
+- TXT legacy encoding detection now uses accuracy-first family-level scoring across Korean, CJK, Cyrillic, Western, Greek, Hebrew, Arabic, and Thai candidates instead of returning immediately from a Korean/Cyrillic priority pre-pass.
+- Detection sampling was expanded to 1 MiB to improve script-distribution accuracy; manual encoding remains available as a last-resort override.
 - Expanded TXT encoding detection beyond CJK-focused legacy encodings to include Android ICU-assisted detection plus common Latin, Greek, Cyrillic, Turkish, Baltic, Hebrew, Arabic, and Thai single-byte encodings.
 - Added heuristic detection for BOM-less UTF-16LE/UTF-16BE before accepting strict-valid UTF-8, reducing broken output for no-BOM UTF-16 text.
 - Fixed UTF-8 BOM / detected UTF-8 decode handling so broad fallback scoring cannot override explicit Unicode text and reopen Korean UTF-8 files as legacy-encoding mojibake.
