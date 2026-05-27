@@ -8,7 +8,7 @@
 - TXT/PDF/EPUB/Word File Info and Page Move action buttons are centered consistently; the TXT Page Move Go button is slightly raised without changing the action-row layout.
 - The PDF More dialog no longer shows divider lines between Read Mode / Zoom Out and Reset Zoom / Settings.
 - The TXT Display Rule add dialog uses Save / Cancel action ordering.
-- Public notes no longer include private or specific test filenames, and the source package includes repository-safe ignore rules plus the active JUniversalChardet third-party notice.
+- Preserved the Android build toolchain metadata at **Android Gradle Plugin 9.1.1** and **Gradle wrapper 9.3.1**.
 
 ## 2.1.6 release summary
 
