@@ -1,3 +1,102 @@
+## 2.1.9
+
+### Reading theme and TXT rule UI polish
+
+- Finalized the Deep Navy/custom-theme color alignment for main surfaces, drawer bottom icons, selected states, file-type buttons, reading-theme cards, and shortcut boxes.
+- The custom reading-theme editor now follows the active main theme surface colors, avoids navigation-bar overlap on the Save Theme button, and styles Choose Image / Clear / Save Theme as flat card-colored buttons with reduced rounding, no stroke, and no elevation.
+- Custom reading themes now include a toolbar background color, edited with the same RGB HEX/slider controls as background and text colors.
+- TXT viewer title/page status text now matches the reading-theme body text, while the custom reading-theme toolbar color applies to the actual reader toolbar surface.
+- The built-in Night Blue reading theme is now Deep Navy with background `#050D23`, text `#C3D2EA`, and fixed toolbar color `#041630`; other built-in toolbar fallback colors derive from the reading background hue with bright-background 0.25 inverse 4:2:4 intensity reduction, dark-background simple hue-preserving intensity increase, and Light/Dark-only 0.17 equal gray fallback.
+- Custom main-theme HEX inputs now accept only 6-digit RGB values (`RRGGBB` or `#RRGGBB`), matching the 0-255 RGB slider model.
+- Selected reading-theme cards now use tone-aware outlines: lighter on dark themes, darker on light themes, and synchronized with the adjacent check mark color.
+- TXT Display Rules and actual TXT edit/delete confirmation flows now use consistent dialog/card coloring and no-stroke action buttons.
+- Reader-side TXT Display Rule cards now derive their contrast from the active reading theme, while inline Up / Down / Off / Delete controls remain transparent and stroke-free.
+- PIN lock number-pad digits and the OK action text are larger for easier readability while keeping the OK action text-only.
+
+- Light main-theme panel/header surfaces now use a slightly grayer soft gray (`#F0F1F4`) for better separation from near-white content rows.
+- Renamed the former Dark Navy theme label to **Deep Navy** / **짙은 남색 테마**.
+- drawer inset handling now uses top padding plus a layered drawer background so the status area uses the app-bar color, the Recent folders header stays below it, and bottom drawer actions keep their normal position.
+- Drawer status/top inset coloring now uses the app-bar color without inserting an in-content spacer, preserving bottom action placement.
+- Drawer bottom inset below the fixed File Open / Bookmarks / Settings actions now keeps the normal drawer background while the top inset remains app-bar colored.
+- Drawer recent-folder top inset now uses the main app bar color, while the Recent folders header itself uses the same surface as the main Recent files header.
+
+- Recent-folder drawer top inset/header now matches the main Recent files header surface while folder rows keep the normal row surface.
+- Kept the recent-folder header on the same surface as the main Recent files header while recent-folder rows use the same plain surface treatment as recent-read file rows.
+
+
+- Drawer recent-folder rows no longer inherit the shortcut-box color setting; only the Recent folders header strip and the drawer top inset above it use the main Recent files header surface across all themes.
+- Tuned Deep Navy outline, selected, file-type button, and selected file-type button colors to `#042045`, `#0A1D42`, `#06163A`, and `#0A2455`.
+- Raised main file/folder long-hold dialogs, file info, recent-folder clear, and shortcut-remove dialogs slightly above the bottom file-type button area.
+- Added a custom main-theme Drawer action icon color for the bottom drawer File Open, Bookmarks, and Settings icons.
+- Matched Deep Navy drawer bottom action icons to the adjacent action text color.
+- Removed the visible ripple/effect from the top language radio rows during main-theme changes.
+- Drawer Recent folders header and its top inset now match the main Recent files header surface across all themes while keeping readable text contrast.
+- Custom-theme file long-hold highlights now use a softened theme-derived selected color instead of the raw selected color.
+- Custom main-theme RGB slider rows have wider vertical spacing for easier adjustment.
+- File-row long-hold highlight now rebinds on theme changes, preventing stale pressed colors from carrying across Light/Dark/Deep Navy/Custom modes.
+- Custom main-theme default base colors now follow the Deep Navy palette, including reading-card `#00091D` and shortcut-box `#001530` defaults.
+- Restored rounded progress mapping for font-size and line-spacing sliders so reopened settings match the value shown while adjusting.
+
+This 2.1.9 package is prepared as the current final-page navigation patch. It uses Android metadata `versionCode 2190` and `versionName "2.1.9"`.
+
+### Large TXT final-page navigation
+
+- Canonicalized large-TXT final-page programmatic navigation to the final exact page anchor instead of the physical visual EOF.
+- Kept Go to Page, toolbar/slider jumps, tap paging, queued partition jumps, and final-partition fallback paging aligned to the same exact-anchor page model.
+- Removed the 2.1.8 candidate's visual-EOF final-page clamp from ReaderActivity so the last page target remains consistent with bookmarks and exact page anchors.
+
+### Code cleanup
+
+- Removed unused private helper methods left over from older dialog positioning/styling, document spacing, bookmark beginner text, legacy encoding detection, and paging helper code paths.
+- Removed additional unused ReaderActivity exact-index estimate helpers and redundant large-TXT search wrapper methods after moving search logic into helper classes.
+- Reused the LargeTextSearchEngine full-file scan path for background large-TXT match counting, avoiding a second duplicate count loop.
+- Applied main-theme dialog colors, including dark navy, to PIN setup/change, settings import, and settings reset confirmation flows.
+- Changed the PIN lock OK action to text-only styling so only the label remains instead of a filled dark button.
+- Set Settings reading-theme card surfaces explicitly: Light uses a near-white soft gray card (`#FEFEFE`), Dark uses a deeper near-black `#030303` card, and Deep Navy remains `#00091D`.
+- Set navigation-drawer shortcut icon boxes to theme-matched surfaces, with Deep Navy using the fixed navy shortcut-box color #001530, and Custom main themes gaining separate Selected and Shortcut box color options.
+- Updated the drawer bottom Open File, Bookmarks, and Settings actions so their icon and text colors follow the active main theme instead of staying on fixed gray colors.
+- Added persistent inner padding to custom main theme HEX color fields so preview-card backgrounds no longer crowd the text.
+- Kept this cleanup limited to dead private/wrapper code so settings, bookmarks, reader state, backup/import data, and public runtime behavior remain unchanged.
+
+### Build metadata
+
+- README, changelog, and patch notes match the project build files: Android Gradle Plugin `9.1.1` and Gradle wrapper `9.3.1`.
+- Android app metadata is `versionCode 2190` and `versionName "2.1.9"`.
+
+- Deep Navy panel color changed to `#09122A`; Deep Navy outline/selection/file-type chip colors were tuned; light main cards use a slightly grayer surface; selected file-type chip text now chooses readable dark/light foreground; file long-press highlight follows the active theme; main file/folder action dialogs sit slightly higher above the bottom file-type button area.
+
+## 2.1.8
+
+This 2.1.8 package was prepared as a maintenance and refactoring patch. It used Android metadata `versionCode 2180` and `versionName "2.1.8"`.
+
+### Encoding detection test coverage
+
+- Added JVM unit tests for TXT encoding detection covering empty input, Korean UTF-8, UTF-8 sample-boundary truncation, Korean legacy EUC-KR normalization to windows-949, UTF-16LE/BE BOM handling, and BOM-less UTF-16LE detection.
+
+### Font scanning reliability
+
+- Updated asynchronous font scanning to shut down its worker executor after completion and to deliver callbacks through the main looper without casting the supplied context to an Activity.
+
+### ReaderActivity structure
+
+- Split ReaderActivity timer/search bookkeeping by moving auto page-turn timing, large-TXT search result/cache helpers, and full-file large-TXT search scanning into focused helper classes while preserving existing page-turn and search behavior.
+
+### Encoding scorer maintainability
+
+- Named the existing encoding scorer weights as constants so future TXT encoding tuning can be reviewed without changing current scoring behavior.
+
+### Defensive exception handling
+
+- Narrowed selected best-effort `Throwable` catches in TXT encoding detector reflection, font handling, TXT page-index cache bookkeeping, and large-TXT font/cache signatures so `Error` subclasses are not silently swallowed.
+
+### Backup compatibility
+
+- Kept the existing model ProGuard keep rule unchanged so bookmark, reader-state, and settings backup/import compatibility remain conservative for this patch.
+
+### Build metadata
+
+- Android app metadata is `versionCode 2180` and `versionName "2.1.8"`.
+
 ## 2.1.7
 
 This 2.1.7 package is prepared as the current release. It uses Android metadata `versionCode 2170` and `versionName "2.1.7"`.
@@ -21,6 +120,11 @@ This 2.1.7 package is prepared as the current release. It uses Android metadata 
 ### TXT Display Rules
 
 - The TXT Display Rule add dialog uses Save / Cancel action ordering.
+
+### Code cleanup
+
+- Removed unused private helper methods left over from older dialog positioning/styling, document spacing, bookmark beginner text, legacy encoding detection, and paging helper code paths.
+- Kept this cleanup limited to dead private code so settings, bookmarks, reader state, backup/import data, and public runtime behavior remain unchanged.
 
 ### Build metadata
 
@@ -56,17 +160,17 @@ This 2.1.5 package is prepared for GitHub upload. It uses Android metadata `vers
 
 ### Main dark navy theme and drawer polish
 
-- Added a **Dark Navy** app/main UI theme option to the Settings theme radio group.
+- Added a **Deep Navy** app/main UI theme option to the Settings theme radio group.
 - Added a **Custom** main UI theme option with HEX color fields for background, panel, app bar, text, secondary text, and outline colors.
 - Custom reading themes now accept direct HEX color input in addition to RGB sliders for background and text colors.
 - The theme uses a dedicated navy palette for background, app bar, panels, search field, file type chips, drawer rows, file-list rows, settings controls, and main rounded dialogs.
 - Text, secondary text, headers, strokes, icons, and selected controls are assigned explicit contrast-safe colors so labels remain readable and do not visually merge into the navy surfaces.
-- Dark Navy reading-theme preview cards use a darker navy card surface. Drawer bottom actions use flat drawer rows across all main themes instead of separate rounded card blocks.
+- Deep Navy reading-theme preview cards use a darker navy card surface. Drawer bottom actions use flat drawer rows across all main themes instead of separate rounded card blocks.
 - Drawer swipes update the drawer offset proportionally during the drag, use a lower start threshold with mild drag gain, and keep direction consistent: the left drawer follows rightward horizontal swipes only.
 - Drawer swipes are no longer limited to the left edge of the main screen. Releasing after pulling the drawer at least 30% open completes the open gesture; smaller partial pulls close cleanly back to the main screen.
 - Starting a drawer swipe cancels pending main-list long-press actions and clears visible pressed row states.
 - Drawer item taps start navigation immediately while the drawer closes.
-- All Bookmarks page now follows the selected main theme palette, including Dark Navy, instead of staying on the old black surface.
+- All Bookmarks page now follows the selected main theme palette, including Deep Navy, instead of staying on the old black surface.
 
 ### Build reliability
 
@@ -76,6 +180,11 @@ This 2.1.5 package is prepared for GitHub upload. It uses Android metadata `vers
 - Restored the full PrefsManager API surface while keeping Custom main theme HEX/RGB color support, fixing missing-method Java compile errors.
 
 - Custom main theme HEX fields now preview their own color directly, and the Settings text explains which UI surfaces each color controls.
+
+### Code cleanup
+
+- Removed unused private helper methods left over from older dialog positioning/styling, document spacing, bookmark beginner text, legacy encoding detection, and paging helper code paths.
+- Kept this cleanup limited to dead private code so settings, bookmarks, reader state, backup/import data, and public runtime behavior remain unchanged.
 
 ### Build metadata
 
@@ -110,6 +219,11 @@ This 2.1.5 package is prepared for GitHub upload. It uses Android metadata `vers
 - If the app remains hidden beyond the grace window, or Android reports stronger memory pressure such as `TRIM_MEMORY_BACKGROUND` or `TRIM_MEMORY_RUNNING_LOW`, the viewer trims heavy state more aggressively.
 - TXT saves the current character/page position and nearby anchor text, releases loaded text snapshots, large-TXT partition caches, exact page anchors, prefetch/search state, and in-flight generation tokens, then lazy-reloads the same file at the saved position on return.
 - PDF recycles the current single-page bitmap and clears vertical-continuous bitmap caches while keeping the PDF renderer itself available for faster redraw.
+
+### Code cleanup
+
+- Removed unused private helper methods left over from older dialog positioning/styling, document spacing, bookmark beginner text, legacy encoding detection, and paging helper code paths.
+- Kept this cleanup limited to dead private code so settings, bookmarks, reader state, backup/import data, and public runtime behavior remain unchanged.
 
 ### Build metadata
 

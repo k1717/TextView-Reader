@@ -1,11 +1,11 @@
 # Public release build checklist
 
-This source package is prepared for public GitHub distribution of TextView Reader 2.1.7.
+This source package is prepared for public GitHub distribution of TextView Reader 2.1.9.
 The app version metadata remains:
 
 ```text
-versionCode 2170
-versionName "2.1.7"
+versionCode 2190
+versionName "2.1.9"
 ```
 
 ## Keystore policy

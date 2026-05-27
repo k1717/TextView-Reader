@@ -1,34 +1,39 @@
-# TextView Reader 2.1.2 GitHub Upload Notes
+# TextView Reader 2.1.9 GitHub Upload Notes
 
-Use this package as the GitHub submission source for **TextView Reader 2.1.2**.
+Use this package as the GitHub submission source for **TextView Reader 2.1.9**.
 
-This source package keeps Android metadata at:
+This source package uses Android metadata:
 
-- `versionCode 212`
-- `versionName "2.1.2"`
+- `versionCode 2190`
+- `versionName "2.1.9"`
 - package ID `com.textview.reader`
 
-## 2.1.2 release summary
+## 2.1.9 release summary
 
-2.1.2 consolidates TXT Display Rules, optional actual TXT file editing, low-power TXT Auto Page Turn, large-TXT paging/search improvements, and the main-browser parent-folder button into one public release entry.
+2.1.9 is a UI/theme polish and large-TXT navigation maintenance release. The final uploaded source should include only the final behavior, not the intermediate trial patches.
 
 Highlights:
 
-- Added TXT Display Rules for non-destructive text masking/replacement while reading TXT files.
-- Added regex mode, case-sensitive matching, all-file/current-file scope, rule-source labels, rule ordering, and quick enable/disable/delete controls.
-- Added **More > Add display rule** and long-press word prefill inside the TXT viewer.
-- Added **Edit Actual TXT File** for deliberately applying enabled rules to the original TXT file or an overwritten `*_edited.txt` copy, with rounded confirmation UI and destructive-action warnings.
-- Added low-power TXT **Auto Page Turn** using a fixed seconds-per-page interval.
-- Added a right-side **← Parent folder** / **← 상위 폴더로** button to the main file-browser path bar.
-- Kept large TXT active rendering on fixed 4,000-logical-line partitions with lookahead, neighbor caching, and direction-aware prefetch.
-- Added estimated 4,000-line partition jumps for Go to Page / slider movement while exact page indexing is still building.
-- Replaced full-file exact indexing with chunked line-based exact indexing so high-line-count TXT files can still reach an accurate final page count.
-- Improved final-page EOF handling so the last page remains reachable by tap/page-down, with reduced flicker and less delay when the final partition is already active.
-- Improved large-TXT body search so it scans the full display-rule-applied TXT stream and jumps by logical line / partition without waiting for exact page indexing.
-- Added **Nth / n번째** search to jump directly to a selected occurrence.
-- Added **Reset settings** while preserving user data such as bookmarks, recent files, reading positions, custom themes, folder shortcuts, TXT Display Rules, and PIN lock.
+- Finalized Deep Navy / 짙은 남색 테마 colors across the main screen, drawer, shortcut boxes, file-type buttons, selected states, and reading-theme cards.
+- Added custom main-theme controls for selected surfaces, shortcut boxes, and drawer bottom icon color while keeping custom defaults aligned with the Deep Navy palette.
+- Custom main-theme HEX inputs are standardized to 6-digit RGB values (`RRGGBB` or `#RRGGBB`) to match the 0-255 RGB sliders.
+- Fixed drawer inset/header handling so the drawer top/status area, Recent folders header, recent-folder rows, and bottom drawer actions keep their intended surfaces.
+- Improved file/folder long-hold, file info, recent-folder clear, shortcut-remove, TXT rule, and actual TXT edit/delete confirmation dialogs for consistent themed card/dialog styling.
+- Increased PIN lock number-pad digit and OK action text sizes for better readability while keeping the OK action text-only.
+- Updated custom reading-theme creation so the editor follows the active main theme, the Save Theme button stays above the navigation bar, and Choose Image / Clear / Save Theme use flat card-colored rounded buttons without stroke or shadow.
+- Added custom reading-theme toolbar background control with 6-digit RGB HEX/slider input, and applied it to the actual reader toolbar surfaces.
+- TXT viewer title/page status text now follows the reading theme body text color.
+- Changed the built-in Night Blue reading theme to Deep Navy with background `#050D23`, text `#C3D2EA`, and fixed toolbar color `#041630`; other built-in toolbar fallback colors preserve the reading background hue with bright-background 0.25 inverse 4:2:4 intensity reduction, dark-background simple hue-preserving intensity increase, and Light/Dark-only 0.17 equal gray fallback.
+- Reading-theme selection cards now use tone-aware selected outlines: brighter than the normal outline on dark themes, darker than the normal outline on light themes, with the check mark using the same selected outline color.
+- TXT Display Rule cards inside the TXT viewer now derive their contrast from the active reading theme, and inline Up / Down / Off / Delete controls are transparent and stroke-free.
+- Large-TXT final-page navigation now targets the final exact page anchor consistently for Go to Page, toolbar/slider jumps, tap paging, queued partition jumps, and final-partition fallback paging.
+- Removed unused private helper paths and redundant large-TXT wrapper code while preserving settings, bookmarks, reader state, backup/import data, and runtime behavior.
 
-Use this checklist before replacing files on GitHub through the web interface.
+## Suggested commit message
+
+```text
+Update TextView Reader 2.1.9 source
+```
 
 ## Safe upload contents
 
@@ -92,24 +97,18 @@ captures/
 ## Web upload steps
 
 1. Unzip the clean source ZIP.
-2. Open the extracted folder.
-3. Select the files and folders **inside** the extracted folder.
+2. Open the extracted project folder.
+3. Select the files and folders inside the extracted folder.
 4. Do not select the outer extracted folder itself.
 5. Open the GitHub repository root page.
 6. Click **Add file > Upload files**.
 7. Drag the selected contents into GitHub.
 8. Wait until GitHub finishes processing the files.
-9. Commit with a message such as:
-
-```text
-Update TextView Reader 2.1.2 source
-```
+9. Commit with the suggested message above, or a similarly concise 2.1.9 update message.
 
 ## Important limitation
 
-GitHub web upload overwrites files with matching paths, but it does not automatically delete old files that are no longer in the upload.
-
-If obsolete files remain in the repository, delete them manually on GitHub and commit the deletion.
+GitHub web upload overwrites files with matching paths, but it does not automatically delete old files that are no longer in the upload. If obsolete files remain in the repository, delete them manually on GitHub and commit the deletion.
 
 Root-level duplicates to delete if they ever appear:
 
