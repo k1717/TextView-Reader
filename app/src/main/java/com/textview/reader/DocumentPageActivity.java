@@ -3778,7 +3778,10 @@ public class DocumentPageActivity extends AppCompatActivity {
 
     private WebResourceResponse interceptLocalResource(Uri uri) {
         if (uri == null) return null;
-        if (!LOCAL_HOST.equalsIgnoreCase(uri.getHost())) return null;
+        if (!LOCAL_HOST.equalsIgnoreCase(uri.getHost())) {
+            return new WebResourceResponse("text/plain", "UTF-8",
+                    new ByteArrayInputStream(new byte[0]));
+        }
         String path = uri.getPath();
         if (path == null) return null;
 
