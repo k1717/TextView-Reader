@@ -383,4 +383,12 @@
     <string name="main_custom_outline_label">외곽선 — 테두리, 구분선, 선택된 칩/카드 외곽선</string>
     <string name="main_custom_reading_card_hex">읽기 테마 카드 HEX, 예: #071220</string>
     <string name="main_custom_reading_card_label">읽기 테마 카드 — 설정의 읽기 테마 목록 행/카드</string>
+    <string name="text_encoding">텍스트 인코딩</string>
+    <string name="text_encoding_status_auto">현재: %1$s</string>
+    <string name="text_encoding_status_manual">현재: %1$s (수동). 자동 감지 결과: %2$s</string>
+    <string name="text_encoding_txt_only">TXT 파일에서만 텍스트 인코딩을 변경할 수 있습니다.</string>
+    <string name="text_encoding_manual_applied">인코딩을 적용하고 페이지 모델을 다시 계산합니다.</string>
+    <string name="text_encoding_auto_restored">자동 인코딩으로 되돌리고 페이지 모델을 다시 계산합니다.</string>
+    <string name="invalid_text_encoding">지원하지 않는 인코딩입니다.</string>
+    <string name="no_file_selected">선택된 파일이 없습니다.</string>
 </resources>

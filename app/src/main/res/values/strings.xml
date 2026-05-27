@@ -383,4 +383,12 @@ Rules: %2$d enabled rules</string>
     <string name="main_custom_outline_label">Outline — borders, dividers, selected-chip/card outlines</string>
     <string name="main_custom_reading_card_hex">Reading theme card HEX, e.g. #071220</string>
     <string name="main_custom_reading_card_label">Reading theme card — rows/cards in the Settings reading-theme list</string>
+    <string name="text_encoding">Text encoding</string>
+    <string name="text_encoding_status_auto">Current: %1$s</string>
+    <string name="text_encoding_status_manual">Current: %1$s (manual). Auto detection would choose: %2$s</string>
+    <string name="text_encoding_txt_only">Text encoding can be changed for TXT files only.</string>
+    <string name="text_encoding_manual_applied">Encoding applied. Page model rebuilt.</string>
+    <string name="text_encoding_auto_restored">Auto encoding restored. Page model rebuilt.</string>
+    <string name="invalid_text_encoding">Invalid encoding.</string>
+    <string name="no_file_selected">No file selected.</string>
 </resources>
