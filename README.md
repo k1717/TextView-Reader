@@ -54,7 +54,7 @@ Current version: **2.1.9**
 
 - Adjusted Deep Navy panel color to `#09122A`, tuned Deep Navy outline/selection/file-type chip colors, improved light-theme card contrast, fixed selected file-type chip text contrast, made file long-press highlight follow the active main theme, and raised main file/folder action dialogs slightly above the bottom file-type button area.
 
-## 2.1.8 release summary
+## 2.1.8 release summary (Not released)
 
 - Updated Android version metadata to `versionCode 2180` and `versionName "2.1.8"`.
 - Added JVM unit tests for TXT encoding detection covering Korean UTF-8, UTF-8 sample-boundary truncation, Korean legacy EUC-KR normalization, UTF-16 BOM handling, and BOM-less UTF-16LE detection.
