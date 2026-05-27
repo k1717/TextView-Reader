@@ -101,7 +101,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:background="#DD000000"
-        android:elevation="12dp"
+        android:elevation="0dp"
         android:orientation="vertical"
         android:paddingStart="20dp"
         android:paddingTop="8dp"

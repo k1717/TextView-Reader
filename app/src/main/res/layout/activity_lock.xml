@@ -50,7 +50,7 @@
         <Button android:id="@+id/btn_9" android:text="9" style="@style/Widget.MaterialComponents.Button.OutlinedButton" android:layout_width="72dp" android:layout_height="56dp" android:layout_margin="4dp" />
         <Button android:id="@+id/btn_delete" android:text="⌫" style="@style/Widget.MaterialComponents.Button.OutlinedButton" android:layout_width="72dp" android:layout_height="56dp" android:layout_margin="4dp" />
         <Button android:id="@+id/btn_0" android:text="0" style="@style/Widget.MaterialComponents.Button.OutlinedButton" android:layout_width="72dp" android:layout_height="56dp" android:layout_margin="4dp" />
-        <Button android:id="@+id/btn_confirm" android:text="OK" style="@style/Widget.MaterialComponents.Button" android:layout_width="72dp" android:layout_height="56dp" android:layout_margin="4dp" />
+        <Button android:id="@+id/btn_confirm" android:text="OK" style="@style/Widget.MaterialComponents.Button.TextButton" android:layout_width="72dp" android:layout_height="56dp" android:layout_margin="4dp" />
 
     </GridLayout>
 
