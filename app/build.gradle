@@ -2,6 +2,16 @@ plugins {
     id 'com.android.application'
 }
 
+// Public release builds read signing secrets from environment variables first,
+// then from ~/.gradle/gradle.properties. Do not commit keystores or passwords.
+def textviewSecret = { String name, String fallback = "" ->
+    String envValue = System.getenv(name)
+    if (envValue != null && !envValue.isEmpty()) return envValue
+    def propValue = project.findProperty(name)
+    if (propValue != null && !propValue.toString().isEmpty()) return propValue.toString()
+    return fallback
+}
+
 android {
     namespace 'com.textview.reader'
     compileSdk 35
@@ -14,10 +24,23 @@ android {
         versionName "2.1.7"
     }
 
+    signingConfigs {
+        release {
+            storeFile file(textviewSecret("TEXTVIEW_KEYSTORE_PATH", "release.keystore"))
+            storePassword textviewSecret("TEXTVIEW_KEYSTORE_PASSWORD")
+            keyAlias textviewSecret("TEXTVIEW_KEY_ALIAS", "textview")
+            keyPassword textviewSecret("TEXTVIEW_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled true
             shrinkResources true
+            debuggable false
+            jniDebuggable false
+            zipAlignEnabled true
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
