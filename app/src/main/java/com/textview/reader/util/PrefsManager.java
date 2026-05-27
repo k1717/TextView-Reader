@@ -1,5 +1,6 @@
 package com.textview.reader.util;
 
+import java.io.File;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -72,7 +73,10 @@ public class PrefsManager {
     // without a matching PIN can lock the user into a broken state, and exporting the
     // PIN would place sensitive data in a plain JSON backup file.
     private boolean isBackupExcludedKey(String key) {
-        return "lock_pin".equals(key) || "lock_enabled".equals(key);
+        return "lock_pin".equals(key)
+                || "lock_enabled".equals(key)
+                || (key != null && key.startsWith("auto_text_encoding::"))
+                || (key != null && key.startsWith("auto_text_encoding_label::"));
     }
 
     public JSONObject exportSettingsToJson() throws JSONException {
@@ -855,4 +859,82 @@ public class PrefsManager {
     }
     public int getPagingOverlapLines() { return prefs.getInt("paging_overlap_lines", 0); }
     public void setPagingOverlapLines(int lines) { prefs.edit().putInt("paging_overlap_lines", Math.max(0, Math.min(4, lines))).apply(); }
+
+    public String getManualTextEncodingForFile(File file) {
+        if (file == null) return null;
+        String value = prefs.getString(manualTextEncodingKey(file), null);
+        if (value == null || value.trim().isEmpty()) return null;
+        return value;
+    }
+
+    public void setManualTextEncodingForFile(File file, String encoding) {
+        if (file == null) return;
+        String key = manualTextEncodingKey(file);
+        if (encoding == null || encoding.trim().isEmpty() || "Auto".equalsIgnoreCase(encoding.trim())) {
+            prefs.edit().remove(key).apply();
+        } else {
+            prefs.edit().putString(key, encoding.trim()).apply();
+        }
+    }
+
+    public boolean hasManualTextEncodingForFile(File file) {
+        return getManualTextEncodingForFile(file) != null;
+    }
+
+    public String getCachedAutoTextEncodingForFile(File file) {
+        if (file == null) return null;
+        String value = prefs.getString(autoTextEncodingKey(file), null);
+        if (value == null || value.trim().isEmpty()) return null;
+        return value;
+    }
+
+    public String getCachedAutoTextEncodingLabelForFile(File file) {
+        if (file == null) return null;
+        String value = prefs.getString(autoTextEncodingLabelKey(file), null);
+        if (value == null || value.trim().isEmpty()) return null;
+        return value;
+    }
+
+    public void setCachedAutoTextEncodingForFile(File file, String encoding, String label) {
+        if (file == null || encoding == null || encoding.trim().isEmpty()) return;
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.putString(autoTextEncodingKey(file), encoding.trim());
+        if (label != null && !label.trim().isEmpty()) {
+            editor.putString(autoTextEncodingLabelKey(file), label.trim());
+        } else {
+            editor.remove(autoTextEncodingLabelKey(file));
+        }
+        editor.apply();
+    }
+
+    public void clearCachedAutoTextEncodingForFile(File file) {
+        if (file == null) return;
+        prefs.edit()
+                .remove(autoTextEncodingKey(file))
+                .remove(autoTextEncodingLabelKey(file))
+                .apply();
+    }
+
+    private String autoTextEncodingKey(File file) {
+        String path = file.getAbsolutePath();
+        long length = file.length();
+        long modified = file.lastModified();
+        return "auto_text_encoding::" + path + "::" + length + "::" + modified;
+    }
+
+    private String autoTextEncodingLabelKey(File file) {
+        String path = file.getAbsolutePath();
+        long length = file.length();
+        long modified = file.lastModified();
+        return "auto_text_encoding_label::" + path + "::" + length + "::" + modified;
+    }
+
+    private String manualTextEncodingKey(File file) {
+        String path = file.getAbsolutePath();
+        long length = file.length();
+        long modified = file.lastModified();
+        return "manual_text_encoding::" + path + "::" + length + "::" + modified;
+    }
+
+
 }

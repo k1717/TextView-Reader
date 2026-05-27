@@ -2463,7 +2463,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             addInfoRow(box, getString(R.string.file_info_modified), DateFormat.getDateTimeInstance().format(new Date(localFile.lastModified())));
         }
         addInfoRow(box, getString(R.string.bottom_page), String.format(Locale.getDefault(), "%d / %d", currentPage + 1, pages.size()));
-        showCustomDialog(box, getString(R.string.close), false);
+        showFileInfoDialogWithCenteredClose(box);
     }
 
     private void showGoToPageDialog() {
@@ -2520,7 +2520,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         });
 
         final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
-        addDialogBottomActions(box, getString(R.string.go), () -> {
+        addCenteredDialogBottomAction(box, getString(R.string.go), () -> {
             try {
                 int target = Integer.parseInt(input.getText().toString().trim());
                 if (target < 1 || target > pages.size()) {
@@ -2660,6 +2660,40 @@ public class DocumentPageActivity extends AppCompatActivity {
         row.setTextSize(14f);
         row.setPadding(0, dpToPx(5), 0, dpToPx(7));
         box.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+    }
+
+    private void showFileInfoDialogWithCenteredClose(LinearLayout box) {
+        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
+        addCenteredDialogBottomAction(box, getString(R.string.close), () -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+        });
+        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, false, false);
+        dialogRef[0].show();
+    }
+
+    private void addCenteredDialogBottomAction(LinearLayout box, String primaryText, Runnable primaryAction) {
+        if (box.findViewWithTag("dialog_actions") != null) return;
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setTag("dialog_actions");
+        actions.setGravity(android.view.Gravity.CENTER);
+        actions.setPadding(0, dpToPx(8), 0, 0);
+
+        TextView primary = new TextView(this);
+        primary.setText(primaryText);
+        primary.setTextColor(dialogFg());
+        primary.setTextSize(16f);
+        primary.setGravity(android.view.Gravity.CENTER);
+        primary.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        primary.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        primary.setPadding(dpToPx(18), 0, dpToPx(18), 0);
+        actions.addView(primary, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(46)));
+        box.addView(actions, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        primary.setOnClickListener(v -> primaryAction.run());
     }
 
     private void showCustomDialog(LinearLayout box, String closeText) {

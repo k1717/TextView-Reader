@@ -119,6 +119,8 @@ public class ReaderActivity extends AppCompatActivity {
     private static final int TXT_BOOKMARK_POPUP_Y_DP = 34;
     private static final int TXT_BOOKMARK_HINT_POPUP_Y_DP = 112;
     private static final String FONT_OPTION_SYSTEM_CURRENT = "system_current";
+    private String currentTextEncodingLabel = "";
+    private boolean currentTextEncodingManual = false;
 
     public static final String EXTRA_FILE_PATH = "file_path";
     public static final String EXTRA_FILE_URI = "file_uri";
@@ -2453,7 +2455,11 @@ public class ReaderActivity extends AppCompatActivity {
         actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
 
         TextView closeButton = makeReaderDialogActionText(getString(R.string.go), bubbleFg,
-                Gravity.CENTER_VERTICAL | Gravity.END);
+                Gravity.CENTER);
+        // Nudge only the TXT Page Move Go button upward slightly. Keep the
+        // original action-row height/layout so this does not reintroduce the
+        // previous compact-row alignment change.
+        closeButton.setTranslationY(-dpToPx(4));
         actionRow.addView(closeButton, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.MATCH_PARENT));
@@ -2573,6 +2579,7 @@ public class ReaderActivity extends AppCompatActivity {
         addMoreActionRow(list, getString(R.string.reset_font_size), fg, panel, this::resetFontSize, ref);
         addMoreActionRow(list, getString(R.string.txt_display_rule_quick_add), fg, panel, () -> showQuickTextDisplayRuleDialog("", true), ref);
         addMoreActionRow(list, getString(R.string.txt_display_rule_manage), fg, panel, this::showReaderTextDisplayRulesManagerDialog, ref);
+        addMoreActionRow(list, getString(R.string.text_encoding), fg, panel, this::showTextEncodingDialog, ref);
         addMoreActionRow(list, getString(R.string.file_info), fg, panel, this::showFileInfoDialog, ref);
 
         outer.addView(scroll, new LinearLayout.LayoutParams(
@@ -2625,6 +2632,243 @@ public class ReaderActivity extends AppCompatActivity {
         close.setOnClickListener(v -> dialog.dismiss());
 
         dialog.show();
+    }
+
+    private String resolveTextEncodingForFile(@NonNull File file) {
+        if (prefs != null) {
+            String manual = prefs.getManualTextEncodingForFile(file);
+            String normalized = FileUtils.normalizeManualEncodingName(manual);
+            if (normalized != null) {
+                currentTextEncodingLabel = normalized + " (manual)";
+                currentTextEncodingManual = true;
+                return normalized;
+            }
+
+            String cached = prefs.getCachedAutoTextEncodingForFile(file);
+            String normalizedCached = FileUtils.normalizeManualEncodingName(cached);
+            if (normalizedCached != null) {
+                currentTextEncodingLabel = prefs.getCachedAutoTextEncodingLabelForFile(file);
+                if (currentTextEncodingLabel == null || currentTextEncodingLabel.trim().isEmpty()) {
+                    currentTextEncodingLabel = normalizedCached + " (auto, cached)";
+                }
+                currentTextEncodingManual = false;
+                return normalizedCached;
+            } else if (cached != null) {
+                prefs.clearCachedAutoTextEncodingForFile(file);
+            }
+        }
+
+        FileUtils.EncodingResult result = FileUtils.detectEncodingDetailed(file);
+        currentTextEncodingLabel = result.displayLabel();
+        currentTextEncodingManual = false;
+        if (prefs != null) {
+            prefs.setCachedAutoTextEncodingForFile(file, result.charsetName, result.displayLabel());
+        }
+        return result.charsetName;
+    }
+
+    private void showTextEncodingDialog() {
+        if (filePath == null || filePath.isEmpty()) {
+            Toast.makeText(this, R.string.no_file_selected, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        File file = new File(filePath);
+        if (!FileUtils.isTextFile(file.getName())) {
+            Toast.makeText(this, R.string.text_encoding_txt_only, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        syncReaderDialogThemeSnapshot();
+        final int bg = readerDialogBgColor();
+        final int panel = readerDialogPanelColor();
+        final int fg = readerDialogTextColor(bg);
+        final int sub = readerDialogSubTextColor(bg);
+
+        LinearLayout outer = new LinearLayout(this);
+        outer.setOrientation(LinearLayout.VERTICAL);
+        outer.setBackgroundColor(Color.TRANSPARENT);
+
+        // Balanced compact title for the encoding picker. The normal reader dialog
+        // title is intentionally tall, but the previous compact version made the
+        // cards look squeezed, so keep this shorter without crushing the rows.
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.text_encoding));
+        title.setTextColor(fg);
+        title.setTextSize(19f);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setGravity(Gravity.CENTER);
+        title.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        title.setIncludeFontPadding(false);
+        title.setPadding(dpToPx(14), dpToPx(10), dpToPx(14), dpToPx(8));
+        title.setBackgroundColor(Color.TRANSPARENT);
+        outer.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(48)));
+
+        String manual = prefs != null ? prefs.getManualTextEncodingForFile(file) : null;
+        String cachedLabel = prefs != null ? prefs.getCachedAutoTextEncodingLabelForFile(file) : null;
+        String autoLabel = currentTextEncodingLabel;
+        if (autoLabel == null || autoLabel.trim().isEmpty() || currentTextEncodingManual) {
+            autoLabel = cachedLabel != null && !cachedLabel.trim().isEmpty() ? cachedLabel : "auto";
+        }
+        String status = manual != null
+                ? getString(R.string.text_encoding_status_manual, manual, autoLabel)
+                : getString(R.string.text_encoding_status_auto, autoLabel);
+        TextView statusView = new TextView(this);
+        statusView.setText(status);
+        statusView.setTextColor(sub);
+        statusView.setTextSize(12f);
+        statusView.setMaxLines(2);
+        statusView.setEllipsize(TextUtils.TruncateAt.END);
+        statusView.setGravity(Gravity.CENTER_VERTICAL);
+        statusView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        statusView.setIncludeFontPadding(false);
+        statusView.setPadding(dpToPx(14), 0, dpToPx(14), dpToPx(4));
+        statusView.setBackgroundColor(Color.TRANSPARENT);
+        outer.addView(statusView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(42)));
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        int pad = dpToPx(10);
+        list.setPadding(pad, dpToPx(6), pad, dpToPx(8));
+
+        final android.app.Dialog[] ref = new android.app.Dialog[1];
+        addEncodingOptionGrid(list, FileUtils.getManualTextEncodingOptions(), fg, panel, file, ref);
+
+        ScrollView scroll = new ScrollView(this);
+        constrainDialogScrollArea(scroll, list);
+        scroll.addView(list);
+
+        outer.addView(scroll, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(268)));
+
+        TextView closeButton = new TextView(this);
+        closeButton.setText(getString(R.string.close));
+        closeButton.setTextColor(fg);
+        closeButton.setTextSize(14f);
+        closeButton.setTypeface(Typeface.DEFAULT_BOLD);
+        closeButton.setGravity(Gravity.CENTER);
+        closeButton.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        closeButton.setIncludeFontPadding(false);
+        closeButton.setBackgroundColor(Color.TRANSPARENT);
+        closeButton.setPadding(dpToPx(12), 0, dpToPx(12), 0);
+        closeButton.setOnClickListener(v -> {
+            if (ref[0] != null) ref[0].dismiss();
+        });
+        LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(38));
+        closeLp.setMargins(dpToPx(12), dpToPx(4), dpToPx(12), dpToPx(8));
+        outer.addView(closeButton, closeLp);
+
+        android.app.Dialog dialog = createNarrowPositionedReaderDialog(
+                outer,
+                bg,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL,
+                TXT_TOOLBAR_POPUP_Y_DP,
+                0.84f,
+                500,
+                false);
+        ref[0] = dialog;
+        dialog.show();
+    }
+
+    private void addEncodingOptionGrid(@NonNull LinearLayout list,
+                                       @NonNull String[] options,
+                                       int fg,
+                                       int panel,
+                                       @NonNull File file,
+                                       @NonNull android.app.Dialog[] dialogRef) {
+        LinearLayout row = null;
+        for (int i = 0; i < options.length; i++) {
+            if (i % 2 == 0) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER);
+                row.setBackgroundColor(Color.TRANSPARENT);
+                list.addView(row, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        dpToPx(44)));
+            }
+
+            String option = options[i];
+            TextView cell = makeEncodingOptionCell(option, fg, panel);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    0,
+                    dpToPx(40),
+                    1f);
+            lp.setMargins(i % 2 == 0 ? 0 : dpToPx(4), dpToPx(2), i % 2 == 0 ? dpToPx(4) : 0, dpToPx(4));
+            cell.setOnClickListener(v -> {
+                if (dialogRef[0] != null) dialogRef[0].dismiss();
+                applyTextEncodingSelection(file, option);
+            });
+            row.addView(cell, lp);
+        }
+    }
+
+    private TextView makeEncodingOptionCell(@NonNull String label, int fg, int panel) {
+        TextView cell = new TextView(this);
+        cell.setText(label);
+        cell.setTextColor(fg);
+        cell.setTextSize(13f);
+        cell.setGravity(Gravity.CENTER);
+        cell.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        cell.setIncludeFontPadding(false);
+        cell.setSingleLine(true);
+        cell.setEllipsize(TextUtils.TruncateAt.END);
+        cell.setPadding(dpToPx(8), 0, dpToPx(8), 0);
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(panel);
+        bg.setCornerRadius(dpToPx(10));
+        bg.setStroke(0, Color.TRANSPARENT);
+        cell.setBackground(bg);
+        return cell;
+    }
+
+    private void applyTextEncodingSelection(@NonNull File file, @NonNull String option) {
+        String normalized = "Auto".equalsIgnoreCase(option) ? null : FileUtils.normalizeManualEncodingName(option);
+        if (!"Auto".equalsIgnoreCase(option) && normalized == null) {
+            Toast.makeText(this, R.string.invalid_text_encoding, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (prefs != null) {
+            prefs.setManualTextEncodingForFile(file, normalized);
+            prefs.clearCachedAutoTextEncodingForFile(file);
+        }
+
+        currentTextEncodingLabel = "";
+        currentTextEncodingManual = normalized != null;
+
+        // Encoding changes alter decoded text. Therefore every page/partition
+        // model derived from the previous decode must be treated as stale.
+        clearLoadedTextSnapshot();
+        resetLargeTextExactPageIndex();
+        clearLargeTextPartitionCache();
+        clearLargeTextSearchTotalCache();
+        clearLargeTextQueuedPageDelta();
+        resetLargeTextPageDirectionTracking();
+        largeTextEstimatedTotalPages = 0;
+        largeTextEstimatedBasePageOffset = 0;
+        pendingLargeTextCachedDisplayPage = 0;
+        pendingLargeTextCachedTotalPages = 0;
+
+        Intent reloadIntent = new Intent(getIntent());
+        reloadIntent.putExtra(EXTRA_FILE_PATH, file.getAbsolutePath());
+        reloadIntent.removeExtra(EXTRA_FILE_URI);
+        reloadIntent.putExtra(EXTRA_JUMP_TO_POSITION, 0);
+        reloadIntent.putExtra(EXTRA_JUMP_DISPLAY_PAGE, 0);
+        reloadIntent.putExtra(EXTRA_JUMP_TOTAL_PAGES, 0);
+
+        Toast.makeText(this,
+                normalized == null ? R.string.text_encoding_auto_restored : R.string.text_encoding_manual_applied,
+                Toast.LENGTH_SHORT).show();
+        loadFileFromIntent(reloadIntent);
     }
 
     private void openTextDisplayRuleSettings() {
@@ -2747,9 +2991,9 @@ public class ReaderActivity extends AppCompatActivity {
 
         TextView cancelButton = makeReaderDialogActionText(getString(R.string.cancel), sub, Gravity.CENTER);
         TextView saveButton = makeReaderDialogActionText(getString(R.string.save), fg, Gravity.CENTER);
-        actionRow.addView(cancelButton, new LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.MATCH_PARENT, 1f));
         actionRow.addView(saveButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        actionRow.addView(cancelButton, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.MATCH_PARENT, 1f));
         panel.addView(actionRow, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -3482,7 +3726,12 @@ public class ReaderActivity extends AppCompatActivity {
                     if (activityDestroyed || generation != loadGeneration.get() || previewOnly) return;
                 }
 
-                String rawContent = FileUtils.readReadableFile(appContext, fileToRead);
+                String rawContent;
+                if (FileUtils.isTextFile(fileToRead.getName())) {
+                    rawContent = FileUtils.readTextFile(fileToRead, resolveTextEncodingForFile(fileToRead));
+                } else {
+                    rawContent = FileUtils.readReadableFile(appContext, fileToRead);
+                }
                 final String content = TextDisplayRuleManager.apply(appContext, rawContent, finalFilePath);
                 final int lineCount = countLines(content);
 
@@ -4722,7 +4971,7 @@ public class ReaderActivity extends AppCompatActivity {
     }
 
     private BufferedReader openLargeTextReader(@NonNull File file) throws IOException {
-        String encoding = FileUtils.detectEncoding(file);
+        String encoding = resolveTextEncodingForFile(file);
         return new BufferedReader(new InputStreamReader(new FileInputStream(file), Charset.forName(encoding)), 64 * 1024);
     }
 
@@ -7696,7 +7945,7 @@ public class ReaderActivity extends AppCompatActivity {
         actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
 
         TextView ok = makeReaderDialogActionText(getString(R.string.ok), fg,
-                Gravity.CENTER_VERTICAL | Gravity.END);
+                Gravity.CENTER);
         actionRow.addView(ok, new LinearLayout.LayoutParams(
                 0,
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -9296,7 +9545,18 @@ public class ReaderActivity extends AppCompatActivity {
                 + "\n" + getString(R.string.file_info_size) + ": " + FileUtils.formatFileSize(file.length())
                 + "\n" + getString(R.string.file_info_type) + ": " + FileUtils.getReadableFileType(fileName);
         if (FileUtils.isTextFile(fileName)) {
-            info += "\n" + getString(R.string.file_info_encoding) + ": " + FileUtils.detectEncoding(file);
+            String encodingInfo = currentTextEncodingLabel;
+            if (encodingInfo == null || encodingInfo.trim().isEmpty()) {
+                String manualEncoding = prefs != null ? prefs.getManualTextEncodingForFile(file) : null;
+                String normalizedManual = FileUtils.normalizeManualEncodingName(manualEncoding);
+                encodingInfo = normalizedManual != null
+                        ? normalizedManual + " (manual)"
+                        : "auto";
+            }
+            // File Info must stay a pure display path. Do not run charset detection
+            // here: detection can scan a 192 KiB/512 KiB sample and run every
+            // legacy candidate, which caused visible freezes on large TXT files.
+            info += "\n" + getString(R.string.file_info_encoding) + ": " + encodingInfo;
         }
         info += "\n" + getString(R.string.characters) + ": " + totalChars
                 + "\n" + getString(R.string.lines) + ": " + totalLines
@@ -9335,7 +9595,7 @@ public class ReaderActivity extends AppCompatActivity {
         actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
 
         TextView ok = makeReaderDialogActionText(getString(R.string.ok), fg,
-                Gravity.CENTER_VERTICAL | Gravity.END);
+                Gravity.CENTER);
         actionRow.addView(ok, new LinearLayout.LayoutParams(
                 0,
                 LinearLayout.LayoutParams.MATCH_PARENT,

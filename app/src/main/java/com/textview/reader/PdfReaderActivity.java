@@ -1103,11 +1103,9 @@ public class PdfReaderActivity extends AppCompatActivity {
             refreshPdfSlideModeDialogRow(slideModeRowRef[0]);
         });
 
-        addDialogDivider(box);
         addDialogAction(box, getString(R.string.zoom_out), () -> setZoomSmooth(Math.max(0.55f, zoom - 0.2f)));
         addDialogAction(box, getString(R.string.zoom_in), () -> setZoomSmooth(Math.min(4.5f, zoom + 0.2f)));
         addDialogAction(box, getString(R.string.reset_zoom), this::resetZoomToOriginal);
-        addDialogDivider(box);
         addDialogAction(box, getString(R.string.settings), () -> {
             if (dialogRef[0] != null) dialogRef[0].dismiss();
             startActivity(new android.content.Intent(this, SettingsActivity.class));
@@ -1237,7 +1235,7 @@ public class PdfReaderActivity extends AppCompatActivity {
             addInfoRow(box, getString(R.string.file_info_modified), DateFormat.getDateTimeInstance().format(new Date(localFile.lastModified())));
         }
         addInfoRow(box, getString(R.string.bottom_page), String.format(Locale.getDefault(), "%d / %d", currentPage + 1, pageCount));
-        showCustomDialog(box, getString(R.string.close), false);
+        showFileInfoDialogWithCenteredClose(box);
     }
 
     private void showGoToPageDialog() {
@@ -1294,7 +1292,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         });
 
         final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
-        addDialogBottomActions(box, null, getString(R.string.go), () -> {
+        addCenteredDialogBottomAction(box, getString(R.string.go), () -> {
             try {
                 int target = Integer.parseInt(input.getText().toString().trim());
                 if (target < 1 || target > pageCount) {
@@ -1462,6 +1460,41 @@ public class PdfReaderActivity extends AppCompatActivity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Math.max(1, dpToPx(1)));
         lp.setMargins(0, dpToPx(4), 0, dpToPx(10));
         box.addView(line, lp);
+    }
+
+    private android.app.Dialog showFileInfoDialogWithCenteredClose(LinearLayout box) {
+        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
+        addCenteredDialogBottomAction(box, getString(R.string.close), () -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+        });
+        dialogRef[0] = createStablePositionedDialog(box, PDF_TOOLBAR_POPUP_Y_DP, false, false);
+        dialogRef[0].show();
+        return dialogRef[0];
+    }
+
+    private void addCenteredDialogBottomAction(LinearLayout box, String primaryText, Runnable primaryAction) {
+        if (box.findViewWithTag("dialog_actions") != null) return;
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setTag("dialog_actions");
+        actions.setGravity(android.view.Gravity.CENTER);
+        actions.setPadding(0, dpToPx(8), 0, 0);
+
+        TextView primary = new TextView(this);
+        primary.setText(primaryText);
+        primary.setTextColor(dialogFg());
+        primary.setTextSize(16f);
+        primary.setGravity(android.view.Gravity.CENTER);
+        primary.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        primary.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        primary.setPadding(dpToPx(18), 0, dpToPx(18), 0);
+        actions.addView(primary, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(46)));
+        box.addView(actions, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        primary.setOnClickListener(v -> primaryAction.run());
     }
 
     private android.app.Dialog showCustomDialog(LinearLayout box, String closeText) {
