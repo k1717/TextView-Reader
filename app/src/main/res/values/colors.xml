@@ -10,7 +10,7 @@
     <color name="md_theme_light_onSurfaceVariant">#5F6368</color>
     <color name="md_theme_light_outline">#8A9099</color>
 
-    <!-- Dark theme colors: TekView-like black/dark surfaces. -->
+    <!-- Dark theme colors: black/dark reader surfaces. -->
     <color name="md_theme_dark_primary">#000000</color>
     <color name="md_theme_dark_onPrimary">#E8EAED</color>
     <color name="md_theme_dark_primaryContainer">#111111</color>

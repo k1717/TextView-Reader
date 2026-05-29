@@ -160,7 +160,6 @@
     <string name="settings_section_security">보안</string>
     <string name="settings_section_theme">테마</string>
     <string name="show_hidden_files">숨김 파일 표시</string>
-    <string name="show_reading_notification">읽기 진행 알림 표시</string>
     <string name="show_status_bar">읽기 화면에서 상태바 표시</string>
     <string name="sort">정렬</string>
     <string name="sort_by">정렬 기준</string>

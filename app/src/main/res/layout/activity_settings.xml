@@ -756,7 +756,6 @@
                 android:background="@android:color/transparent"
                 android:popupBackground="?attr/colorSurface" />
 
-            <Switch android:id="@+id/switch_notification" android:layout_width="match_parent" android:layout_height="56dp" android:text="@string/show_reading_notification" android:textColor="?attr/colorOnSurface" android:textSize="16sp" />
             <Switch android:id="@+id/switch_volume_scroll" android:layout_width="match_parent" android:layout_height="56dp" android:text="@string/volume_keys_page" android:textColor="?attr/colorOnSurface" android:textSize="16sp" />
             <Switch android:id="@+id/switch_tap_paging" android:layout_width="match_parent" android:layout_height="56dp" android:text="@string/tap_top_bottom_page" android:textColor="?attr/colorOnSurface" android:textSize="16sp" />
 

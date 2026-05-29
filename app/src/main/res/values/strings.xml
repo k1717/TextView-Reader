@@ -160,7 +160,6 @@
     <string name="settings_section_security">Security</string>
     <string name="settings_section_theme">Theme</string>
     <string name="show_hidden_files">Show Hidden Files</string>
-    <string name="show_reading_notification">Show Reading Progress Notification</string>
     <string name="show_status_bar">Show Status Bar While Reading</string>
     <string name="sort">Sort</string>
     <string name="sort_by">Sort By</string>
