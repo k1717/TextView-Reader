@@ -38,7 +38,7 @@ public class Bookmark {
     private String filePath;
     private String fileName;
     private int charPosition;  // character offset in file
-    private int endPosition;   // end offset of excerpt/context, TekView-style start/end range
+    private int endPosition;   // end offset of excerpt/context, reader start/end range
     private int lineNumber;    // approximate line number
     private int pageNumber;    // cached displayed page number for fast large-file restore
     private int totalPages;    // cached displayed total page count when bookmark was saved

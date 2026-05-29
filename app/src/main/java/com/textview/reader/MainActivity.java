@@ -4,6 +4,7 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -35,9 +36,11 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.PopupWindow;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
+import android.widget.Space;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -168,6 +171,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private long lastBackPressedTime = 0L;
     /** Toolbar reference cached so onResume can re-apply the theme cheaply. */
     private Toolbar mainToolbar;
+    private ImageButton mainOverflowButton;
     private DrawerEntry pendingDrawerNavigationEntry;
     private boolean drawerNavigationPending = false;
     /**
@@ -284,6 +288,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         recentAdapter = new FileAdapter();
         recentAdapter.setListener(this);
         recentAdapter.setSortEnabled(false);
+        recentAdapter.setShowReadingProgress(true);
         recentRecyclerView.setLayoutManager(new LinearLayoutManager(this));
         recentRecyclerView.setAdapter(recentAdapter);
 
@@ -741,6 +746,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                 }
                 updateFileTypeChips();
                 loadRecentFiles();
+                updateMainOverflowButtonVisibility();
                 invalidateOptionsMenu();
                 return;
             }
@@ -788,6 +794,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             setPathBarVisible(true);
             loadDirectory(visibleFolder);
             rebuildDrawerStorageEntries();
+            updateMainOverflowButtonVisibility();
             invalidateOptionsMenu();
             return;
         }
@@ -1063,6 +1070,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         emptyText.setVisibility(results.isEmpty() ? View.VISIBLE : View.GONE);
         if (results.isEmpty()) emptyText.setText(getString(R.string.no_file_search_results));
         updateFileSearchClearButtonVisibility();
+        updateMainOverflowButtonVisibility();
         invalidateOptionsMenu();
     }
 
@@ -1484,6 +1492,48 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         toolbar.setNavigationOnClickListener(v -> {
             if (drawerLayout != null) drawerLayout.openDrawer(GravityCompat.START);
         });
+
+        ensureMainOverflowButton(toolbar);
+        updateMainOverflowButtonVisibility();
+    }
+
+    private void ensureMainOverflowButton(@NonNull Toolbar toolbar) {
+        if (mainOverflowButton != null && mainOverflowButton.getParent() == toolbar) {
+            tintMainOverflowButton();
+            return;
+        }
+        if (mainOverflowButton != null && mainOverflowButton.getParent() instanceof ViewGroup) {
+            ((ViewGroup) mainOverflowButton.getParent()).removeView(mainOverflowButton);
+        }
+
+        mainOverflowButton = new ImageButton(this);
+        mainOverflowButton.setBackgroundColor(Color.TRANSPARENT);
+        mainOverflowButton.setContentDescription(getString(R.string.more));
+        mainOverflowButton.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));
+        mainOverflowButton.setScaleType(ImageView.ScaleType.CENTER);
+        mainOverflowButton.setOnClickListener(v -> showMainOverflowDialog());
+        tintMainOverflowButton();
+
+        Toolbar.LayoutParams lp = new Toolbar.LayoutParams(dpToPx(48), dpToPx(48), Gravity.END | Gravity.CENTER_VERTICAL);
+        lp.setMarginEnd(dpToPx(2));
+        toolbar.addView(mainOverflowButton, lp);
+    }
+
+    private void tintMainOverflowButton() {
+        if (mainOverflowButton == null) return;
+        Drawable icon = ContextCompat.getDrawable(this, R.drawable.ic_more_vert);
+        if (icon != null) {
+            Drawable wrapped = DrawableCompat.wrap(icon.mutate());
+            DrawableCompat.setTint(wrapped, Color.WHITE);
+            mainOverflowButton.setImageDrawable(wrapped);
+        }
+    }
+
+    private void updateMainOverflowButtonVisibility() {
+        if (mainOverflowButton == null) return;
+        boolean inBrowse = !homeMode && !searchMode;
+        mainOverflowButton.setVisibility(inBrowse ? View.VISIBLE : View.GONE);
+        mainOverflowButton.setEnabled(inBrowse);
     }
 
     private void widenDrawerEdgeDragArea(@NonNull DrawerLayout layout, int desiredPx) {
@@ -1941,6 +1991,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             getSupportActionBar().setTitle(R.string.app_name);
         }
         loadRecentFiles();
+        updateMainOverflowButtonVisibility();
         invalidateOptionsMenu();
     }
 
@@ -1955,6 +2006,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         updateFileSearchClearButtonVisibility();
         if (prefs != null) prefs.addRecentFolder(dir.getAbsolutePath());
         loadDirectory(dir);
+        updateMainOverflowButtonVisibility();
         invalidateOptionsMenu();
     }
 
@@ -2114,6 +2166,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             toolbar.setTitleTextColor(Color.WHITE);
             tintMainToolbarIcons(toolbar, Color.WHITE);
             installToolbarMenuButton(toolbar);
+            updateMainOverflowButtonVisibility();
         }
 
         getWindow().setStatusBarColor(bar);
@@ -2315,6 +2368,64 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         });
     }
 
+    private void refreshCurrentDirectoryWithoutClearing(File dir) {
+        if (dir == null) return;
+
+        final int generation = folderLoadGeneration.incrementAndGet();
+        final File targetDir = dir;
+        final boolean showHidden = prefs != null && prefs.getShowHiddenFiles();
+        final int sortMode = prefs != null ? prefs.getSortMode() : PrefsManager.SORT_NAME_ASC;
+
+        currentDirectory = targetDir;
+        if (prefs != null) {
+            prefs.setLastDirectory(targetDir.getAbsolutePath());
+            prefs.addRecentFolder(targetDir.getAbsolutePath());
+        }
+        if (pathText != null) pathText.setText(targetDir.getAbsolutePath());
+        updateParentFolderButtonState();
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setTitle(targetDir.getName().isEmpty() ? "/" : targetDir.getName());
+        }
+        if (fileAdapter != null) {
+            fileAdapter.setSortModeSilently(sortMode);
+        }
+
+        folderLoadExecutor.execute(() -> {
+            List<File> fileList = new ArrayList<>();
+            try {
+                File[] fileArray = targetDir.listFiles();
+                if (fileArray != null) {
+                    for (File f : fileArray) {
+                        if (activityDestroyed || generation != folderLoadGeneration.get()) return;
+                        if (!showHidden && f.getName().startsWith(".")) continue;
+                        if (f.isDirectory() || FileUtils.isSupportedReadableFile(f.getName())) {
+                            fileList.add(f);
+                        }
+                    }
+                }
+                sortFilesForMainList(fileList, sortMode);
+            } catch (SecurityException ignored) {
+                fileList.clear();
+            }
+
+            fileSearchHandler.post(() -> {
+                if (activityDestroyed || generation != folderLoadGeneration.get()) return;
+                if (!targetDir.equals(currentDirectory)) return;
+
+                if (fileAdapter != null) {
+                    fileAdapter.setSortModeSilently(sortMode);
+                    fileAdapter.setFiles(fileList);
+                }
+                if (emptyText != null) {
+                    emptyText.setVisibility(fileList.isEmpty() ? View.VISIBLE : View.GONE);
+                    if (fileList.isEmpty()) {
+                        emptyText.setText(getString(R.string.no_text_files_in_directory));
+                    }
+                }
+            });
+        });
+    }
+
     private void sortFilesForMainList(@NonNull List<File> target, int sortMode) {
         target.sort((a, b) -> {
             if (a.isDirectory() && !b.isDirectory()) return -1;
@@ -2372,6 +2483,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         }
 
         if (recentAdapter != null) {
+            recentAdapter.setReadingProgressStates(recent);
             int recentSort = prefs != null ? prefs.getRecentSortMode() : PrefsManager.SORT_RECENT_READ;
             if (recentSort == PrefsManager.SORT_RECENT_READ) {
                 // BookmarkManager already returns the list by last-read time, newest first.
@@ -2382,6 +2494,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                 recentAdapter.setSortMode(recentSort);
             }
             recentAdapter.setFiles(recentFiles);
+            recentAdapter.refreshReadingProgress();
             scrollListToTop(recentRecyclerView);
         }
         if (recentEmptyText != null) {
@@ -2930,27 +3043,204 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         box.addView(row, lp);
     }
 
+    private void showMainOverflowDialog() {
+        if (homeMode || searchMode || mainOverflowButton == null) return;
+        final boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
+        final int panel = prefs != null ? prefs.getMainPanelColor(this) : (dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245));
+        final int fg = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36));
+        final int line = prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210));
+
+        final int popupWidth = dpToPx(170);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(0, dpToPx(3), 0, dpToPx(3));
+        GradientDrawable bgShape = new GradientDrawable();
+        bgShape.setColor(panel);
+        bgShape.setCornerRadius(dpToPx(8));
+        box.setBackground(bgShape);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            box.setClipToOutline(true);
+        }
+
+        PopupWindow popup = new PopupWindow(
+                box,
+                popupWidth,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                true);
+        popup.setOutsideTouchable(true);
+        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            popup.setElevation(dpToPx(3));
+        }
+
+        addMainOverflowPopupRow(box, getString(R.string.new_folder), fg, () -> {
+            popup.dismiss();
+            showNewFolderDialog();
+        });
+
+        final TextView[] hiddenCheckRef = new TextView[1];
+        hiddenCheckRef[0] = addMainOverflowHiddenRow(box, fg, line, () -> {
+            boolean newVal = prefs == null || !prefs.getShowHiddenFiles();
+            if (prefs != null) prefs.setShowHiddenFiles(newVal);
+            updateHiddenFilesIndicator(hiddenCheckRef[0], line);
+            if (currentDirectory != null) refreshCurrentDirectoryWithoutClearing(currentDirectory);
+        });
+
+        int xoff = -(popupWidth - mainOverflowButton.getWidth());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            popup.showAsDropDown(mainOverflowButton, xoff, 0, Gravity.NO_GRAVITY);
+        } else {
+            popup.showAsDropDown(mainOverflowButton, xoff, 0);
+        }
+    }
+
+    private TextView addMainOverflowHiddenRow(@NonNull LinearLayout box, int textColor, int outlineColor, @NonNull Runnable action) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dpToPx(12), 0, dpToPx(10), 0);
+        row.setBackgroundColor(Color.TRANSPARENT);
+        row.setClickable(true);
+        row.setOnClickListener(v -> action.run());
+
+        TextView label = new TextView(this);
+        label.setText(getString(R.string.show_hidden_files));
+        label.setTextColor(textColor);
+        label.setTextSize(15f);
+        label.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        label.setSingleLine(true);
+        label.setIncludeFontPadding(false);
+        // Keep the O/X indicator in the same horizontal slot for English and Korean.
+        // The Korean label is shorter, so a fixed label column prevents the marker
+        // from jumping left while still leaving enough room for "Show hidden files".
+        LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(dpToPx(124), LinearLayout.LayoutParams.MATCH_PARENT);
+        row.addView(label, labelLp);
+
+        TextView indicator = new TextView(this);
+        indicator.setText("");
+        indicator.setGravity(Gravity.CENTER);
+        indicator.setIncludeFontPadding(false);
+        indicator.setMinWidth(0);
+        indicator.setMinHeight(0);
+        LinearLayout.LayoutParams indicatorLp = new LinearLayout.LayoutParams(dpToPx(14), LinearLayout.LayoutParams.MATCH_PARENT);
+        indicatorLp.setMargins(dpToPx(3), 0, 0, 0);
+        row.addView(indicator, indicatorLp);
+
+        Space tailSpace = new Space(this);
+        row.addView(tailSpace, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+
+        updateHiddenFilesIndicator(indicator, outlineColor);
+
+        box.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(44)));
+        return indicator;
+    }
+
+    private void updateHiddenFilesIndicator(TextView indicator, int outlineColor) {
+        if (indicator == null) return;
+        boolean showHidden = prefs != null && prefs.getShowHiddenFiles();
+        int inactive = prefs != null ? prefs.getMainSubTextColor(this) : outlineColor;
+        indicator.setBackgroundColor(Color.TRANSPARENT);
+        indicator.setText(showHidden ? "O" : "X");
+        indicator.setTextColor(inactive);
+        indicator.setTextSize(14f);
+        indicator.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        indicator.setGravity(Gravity.CENTER);
+        indicator.setIncludeFontPadding(false);
+    }
+
+    private TextView addMainOverflowPopupRow(@NonNull LinearLayout box, @NonNull String label, int textColor, @NonNull Runnable action) {
+        TextView row = new TextView(this);
+        row.setText(label);
+        row.setTextColor(textColor);
+        row.setTextSize(15f);
+        row.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        row.setSingleLine(true);
+        row.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+        row.setBackgroundColor(Color.TRANSPARENT);
+        box.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(44)));
+        row.setOnClickListener(v -> action.run());
+        return row;
+    }
+
     private void showNewFolderDialog() {
         if (currentDirectory == null) return;
+        final boolean dark = prefs == null || prefs.shouldUseDarkColors(this);
+        final int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(33, 33, 33) : Color.rgb(255, 255, 255));
+        final int panel = prefs != null ? prefs.getMainPanelColor(this) : (dark ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245));
+        final int fg = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(245, 245, 245) : Color.rgb(32, 33, 36));
+        final int sub = prefs != null ? prefs.getMainSubTextColor(this) : (dark ? Color.rgb(190, 190, 190) : Color.rgb(95, 99, 104));
+        final int line = prefs != null ? prefs.getMainOutlineColor(this) : (dark ? Color.rgb(92, 92, 92) : Color.rgb(210, 210, 210));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dpToPx(18), dpToPx(16), dpToPx(18), dpToPx(10));
+        GradientDrawable bgShape = new GradientDrawable();
+        bgShape.setColor(bg);
+        bgShape.setCornerRadius(dpToPx(18));
+        bgShape.setStroke(Math.max(1, dpToPx(1)), line);
+        box.setBackground(bgShape);
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.new_folder));
+        title.setTextColor(fg);
+        title.setTextSize(21f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setGravity(Gravity.CENTER);
+        title.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        title.setPadding(dpToPx(6), 0, dpToPx(6), dpToPx(12));
+        box.addView(title, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
         EditText input = new EditText(this);
         input.setHint(getString(R.string.folder_name));
+        input.setSingleLine(true);
+        input.setTextColor(fg);
+        input.setHintTextColor(sub);
+        input.setTextSize(16f);
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        input.setPadding(dpToPx(14), 0, dpToPx(14), 0);
+        GradientDrawable inputBg = new GradientDrawable();
+        inputBg.setColor(panel);
+        inputBg.setCornerRadius(dpToPx(12));
+        inputBg.setStroke(Math.max(1, dpToPx(1)), line);
+        input.setBackground(inputBg);
+        LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(52));
+        inputLp.setMargins(0, 0, 0, dpToPx(12));
+        box.addView(input, inputLp);
 
-        new AlertDialog.Builder(this)
-                .setTitle(getString(R.string.new_folder))
-                .setView(input)
-                .setPositiveButton(getString(R.string.create), (d, w) -> {
-                    String name = input.getText().toString().trim();
-                    if (name.isEmpty()) return;
-                    File newDir = new File(currentDirectory, name);
-                    if (newDir.mkdirs()) {
-                        loadDirectory(currentDirectory);
-                        Toast.makeText(this, getString(R.string.folder_created), Toast.LENGTH_SHORT).show();
-                    } else {
-                        Toast.makeText(this, getString(R.string.folder_create_failed), Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setNegativeButton(getString(R.string.cancel), null)
-                .show();
+        final android.app.Dialog[] ref = new android.app.Dialog[1];
+        addFileOpsRow(box, getString(R.string.create), fg, panel, () -> {
+            String name = input.getText().toString().trim();
+            if (name.isEmpty()) return;
+            File newDir = new File(currentDirectory, name);
+            if (newDir.mkdirs()) {
+                if (ref[0] != null) ref[0].dismiss();
+                loadDirectory(currentDirectory);
+                Toast.makeText(this, getString(R.string.folder_created), Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, getString(R.string.folder_create_failed), Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        TextView cancel = new TextView(this);
+        cancel.setText(getString(R.string.cancel));
+        cancel.setTextColor(sub);
+        cancel.setTextSize(16f);
+        cancel.setGravity(Gravity.CENTER);
+        cancel.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        box.addView(cancel, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(48)));
+
+        android.app.Dialog dialog = createStableBottomDialog(box, mainFileTypeAlignedDialogYOffsetPx(), 0.22f);
+        ref[0] = dialog;
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        dialog.setOnShowListener(d -> {
+            input.requestFocus();
+            android.view.Window window = dialog.getWindow();
+            if (window != null) {
+                window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                        | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+            }
+        });
+        dialog.show();
     }
 
     private void showSortDialog() {
@@ -3138,23 +3428,15 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     @Override
     public boolean onCreateOptionsMenu(@NonNull Menu menu) {
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        MenuItem hidden = menu.findItem(R.id.action_show_hidden);
-        if (hidden != null) hidden.setChecked(prefs.getShowHiddenFiles());
-        tintMenuIcons(menu, Color.WHITE);
+        // The folder actions use a themed custom overflow dialog instead of the
+        // platform overflow popup so Deep Navy / Custom main colors apply.
+        menu.clear();
         return true;
     }
 
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
-        // Sort/new-folder/show-hidden are folder-only actions, hide them on home/search views.
-        boolean inBrowse = !homeMode && !searchMode;
-        MenuItem sort = menu.findItem(R.id.action_sort);
-        MenuItem newFolder = menu.findItem(R.id.action_new_folder);
-        MenuItem hidden = menu.findItem(R.id.action_show_hidden);
-        if (sort != null) sort.setVisible(inBrowse);
-        if (newFolder != null) newFolder.setVisible(inBrowse);
-        if (hidden != null) hidden.setVisible(inBrowse);
+        updateMainOverflowButtonVisibility();
         return super.onPrepareOptionsMenu(menu);
     }
 
@@ -3162,16 +3444,6 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         if (drawerToggle != null && drawerToggle.onOptionsItemSelected(item)) return true;
 
-        int id = item.getItemId();
-        if (id == R.id.action_sort) { showSortDialog(); return true; }
-        else if (id == R.id.action_new_folder) { showNewFolderDialog(); return true; }
-        else if (id == R.id.action_show_hidden) {
-            boolean newVal = !item.isChecked();
-            item.setChecked(newVal);
-            prefs.setShowHiddenFiles(newVal);
-            if (currentDirectory != null) loadDirectory(currentDirectory);
-            return true;
-        }
         return super.onOptionsItemSelected(item);
     }
 

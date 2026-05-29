@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.os.Handler;
+import android.text.TextUtils;
 import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -12,19 +13,23 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 import com.textview.reader.R;
+import com.textview.reader.model.ReaderState;
 import com.textview.reader.util.FileUtils;
 import com.textview.reader.util.PrefsManager;
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
 
@@ -38,9 +43,35 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
     private int sortMode = PrefsManager.SORT_NAME_ASC;
     private boolean sortEnabled = true;
     private int touchCancelGeneration = 0;
+    private boolean showReadingProgress = false;
+    private final Map<String, Integer> readingProgressByPath = new HashMap<>();
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
 
     public void setListener(OnFileClickListener listener) { this.listener = listener; }
+
+    public void setShowReadingProgress(boolean enabled) {
+        if (this.showReadingProgress == enabled) return;
+        this.showReadingProgress = enabled;
+        if (!enabled) readingProgressByPath.clear();
+        if (getItemCount() > 0) notifyItemRangeChanged(0, getItemCount());
+    }
+
+    public void setReadingProgressStates(List<ReaderState> states) {
+        readingProgressByPath.clear();
+        if (states != null) {
+            for (ReaderState state : states) {
+                if (state == null || state.getFilePath() == null) continue;
+                int pct = calculateReadingProgressPercent(state);
+                if (pct >= 0) readingProgressByPath.put(state.getFilePath(), pct);
+            }
+        }
+    }
+
+    public void refreshReadingProgress() {
+        if (showReadingProgress && getItemCount() > 0) {
+            notifyItemRangeChanged(0, getItemCount());
+        }
+    }
 
     public void cancelPendingPresses() {
         touchCancelGeneration++;
@@ -180,9 +211,26 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
         files.clear();
     }
 
+    private static int calculateReadingProgressPercent(@NonNull ReaderState state) {
+        int current = state.getPageNumber();
+        int total = state.getTotalPages();
+        if (total > 1 && current > 0) {
+            int clampedCurrent = Math.max(1, Math.min(total, current));
+            return Math.max(0, Math.min(100, Math.round((clampedCurrent * 100f) / total)));
+        }
+
+        long length = state.getFileLength();
+        int charPosition = state.getCharPosition();
+        if (length > 0 && charPosition > 0) {
+            return Math.max(0, Math.min(100, Math.round((charPosition * 100f) / length)));
+        }
+        return -1;
+    }
+
     public class ViewHolder extends RecyclerView.ViewHolder {
         ImageView icon;
-        TextView name, info;
+        LinearLayout textContainer;
+        TextView name, info, progress;
 
         private final Handler touchHandler = new Handler(Looper.getMainLooper());
         private float downX;
@@ -195,8 +243,10 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
         ViewHolder(View v) {
             super(v);
             icon = v.findViewById(R.id.file_icon);
+            textContainer = v.findViewById(R.id.file_text_container);
             name = v.findViewById(R.id.file_name);
             info = v.findViewById(R.id.file_info);
+            progress = v.findViewById(R.id.file_progress);
             tapSlop = Math.max(10, ViewConfiguration.get(v.getContext()).getScaledTouchSlop());
 
             v.setOnTouchListener((view, event) -> {
@@ -290,8 +340,18 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
             int iconTint = dark ? prefs.getMainTextColor(itemView.getContext()) : Color.rgb(72, 76, 82);
 
             name.setText(file.getName());
+            name.setSingleLine(true);
+            name.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+            name.setHorizontallyScrolling(false);
             name.setTextColor(primaryText);
+            info.setSingleLine(true);
+            info.setEllipsize(TextUtils.TruncateAt.END);
             info.setTextColor(secondaryText);
+            if (progress != null) {
+                progress.setTextColor(secondaryText);
+                progress.setGravity(android.view.Gravity.END | android.view.Gravity.CENTER_VERTICAL);
+                progress.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_END);
+            }
 
             if (file.isDirectory()) {
                 icon.setImageResource(R.drawable.ic_folder);
@@ -306,11 +366,65 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                 String type = FileUtils.getReadableFileType(file.getName());
                 info.setText(String.format(Locale.getDefault(), "%s  •  %s  •  %s", type, size, date));
             }
+            updateReadingProgressBadge(file);
             icon.setImageTintList(ColorStateList.valueOf(iconTint));
             itemView.setPressed(false);
             itemView.setSelected(false);
             itemView.setActivated(false);
             itemView.setBackground(makeFileRowBackground(prefs));
+        }
+
+        private void updateReadingProgressBadge(@NonNull File file) {
+            if (progress == null) return;
+            Integer pct = showReadingProgress && !file.isDirectory()
+                    ? readingProgressByPath.get(file.getAbsolutePath())
+                    : null;
+            if (pct == null) {
+                setTextReserveEnd(0);
+                progress.setVisibility(View.GONE);
+                progress.setText("");
+                progress.setBackgroundColor(Color.TRANSPARENT);
+                return;
+            }
+
+            progress.setBackgroundColor(Color.TRANSPARENT);
+            progress.setText(String.format(Locale.getDefault(), "%d%%", Math.max(0, Math.min(100, pct))));
+            progress.setVisibility(View.VISIBLE);
+
+            int badgeWidth = getMaxProgressBadgeWidth();
+            ViewGroup.LayoutParams layoutParams = progress.getLayoutParams();
+            if (layoutParams != null && layoutParams.width != badgeWidth) {
+                layoutParams.width = badgeWidth;
+                progress.setLayoutParams(layoutParams);
+            }
+
+            int marginEnd = 0;
+            if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+                marginEnd = ((ViewGroup.MarginLayoutParams) layoutParams).getMarginEnd();
+            }
+            int progressReserve = badgeWidth + marginEnd + dpToPx(5);
+            setTextReserveEnd(progressReserve);
+        }
+
+        private void setTextReserveEnd(int reservePx) {
+            if (textContainer != null) {
+                textContainer.setPadding(
+                        textContainer.getPaddingLeft(),
+                        textContainer.getPaddingTop(),
+                        reservePx,
+                        textContainer.getPaddingBottom());
+            }
+            name.setPadding(name.getPaddingLeft(), name.getPaddingTop(), 0, name.getPaddingBottom());
+            info.setPadding(info.getPaddingLeft(), info.getPaddingTop(), 0, info.getPaddingBottom());
+        }
+
+        private int getMaxProgressBadgeWidth() {
+            int textWidth = (int) Math.ceil(progress.getPaint().measureText("100%"));
+            return textWidth + progress.getPaddingLeft() + progress.getPaddingRight();
+        }
+
+        private int dpToPx(int dp) {
+            return Math.round(dp * itemView.getResources().getDisplayMetrics().density);
         }
 
         private StateListDrawable makeFileRowBackground(@NonNull PrefsManager prefs) {

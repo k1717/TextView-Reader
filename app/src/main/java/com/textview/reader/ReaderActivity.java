@@ -73,7 +73,6 @@ import com.textview.reader.util.FileUtils;
 import com.textview.reader.util.FontManager;
 import com.textview.reader.util.PrefsManager;
 import com.textview.reader.util.PageIndexCacheManager;
-import com.textview.reader.util.ReadingNotificationHelper;
 import com.textview.reader.util.ThemeManager;
 import com.textview.reader.util.TextDisplayRule;
 import com.textview.reader.util.TextDisplayRuleManager;
@@ -269,7 +268,6 @@ public class ReaderActivity extends AppCompatActivity {
     private BookmarkManager bookmarkManager;
     private PrefsManager prefs;
     private ThemeManager themeManager;
-    private ReadingNotificationHelper notificationHelper;
 
     private boolean toolbarVisible = false;
     private int currentReaderBackgroundColor = Color.BLACK;
@@ -473,7 +471,6 @@ public class ReaderActivity extends AppCompatActivity {
 
         bookmarkManager = BookmarkManager.getInstance(this);
         themeManager = ThemeManager.getInstance(this);
-        notificationHelper = new ReadingNotificationHelper(this);
         largeTextSearchEngine = new LargeTextSearchEngine(getApplicationContext(), this::openLargeTextReader);
         autoPageTurnController = new AutoPageTurnController(handler, new AutoPageTurnController.Callback() {
             @Override public boolean isDestroyed() { return activityDestroyed; }
@@ -529,9 +526,9 @@ public class ReaderActivity extends AppCompatActivity {
         });
 
         if (prefs.getBrightnessOverride()) {
-            WindowManager.LayoutParams lp = getWindow().getAttributes();
-            lp.screenBrightness = prefs.getBrightnessValue();
-            getWindow().setAttributes(lp);
+            applyReaderBrightnessOverride(prefs.getBrightnessValue());
+        } else {
+            clearReaderBrightnessOverride();
         }
 
         if (!restoreLoadedTextSnapshotIfAvailable(getIntent(), savedInstanceState)) {
@@ -3564,7 +3561,22 @@ public class ReaderActivity extends AppCompatActivity {
     }
 
     private void startAutoPageTurn() {
+        enterBodyReadingModeForAutoPageTurn();
         if (autoPageTurnController != null) autoPageTurnController.start();
+    }
+
+    private void enterBodyReadingModeForAutoPageTurn() {
+        toolbarVisible = false;
+        if (toolbar != null) toolbar.setVisibility(View.GONE);
+        if (bottomBar != null) bottomBar.setVisibility(View.GONE);
+        if (readerPageStatus != null) readerPageStatus.setVisibility(View.VISIBLE);
+        updateReaderFileTitleVisibility();
+        updateBottomMenuBackground();
+        handler.post(() -> {
+            if (activityDestroyed) return;
+            if (readerRoot != null) ViewCompat.requestApplyInsets(readerRoot);
+            updateNavigationBarForBottomMenu();
+        });
     }
 
     private void stopAutoPageTurn(boolean showToast) {
@@ -5205,9 +5217,6 @@ public class ReaderActivity extends AppCompatActivity {
         handler.postDelayed(() -> {
             scrollUpdateScheduled = false;
             updatePositionLabel();
-            if (prefs.getShowNotification() && filePath != null) {
-                notificationHelper.showReading(fileName, getProgressPercent(), filePath);
-            }
         }, 80);
     }
 
@@ -7348,6 +7357,19 @@ public class ReaderActivity extends AppCompatActivity {
     // --- Brightness ---
 
 
+    private void applyReaderBrightnessOverride(float brightness) {
+        float clamped = Math.max(0f, Math.min(1f, brightness));
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+        lp.screenBrightness = clamped;
+        getWindow().setAttributes(lp);
+    }
+
+    private void clearReaderBrightnessOverride() {
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+        lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+        getWindow().setAttributes(lp);
+    }
+
     private void showBrightnessDialog() {
         final int bg = readerDialogBgColor();
         final int fg = readerDialogTextColor(bg);
@@ -7377,6 +7399,9 @@ public class ReaderActivity extends AppCompatActivity {
         seekbar.setMax(100);
         seekbar.setProgress((int) (prefs.getBrightnessValue() * 100));
         styleSeekBarForReaderDialog(seekbar, bg, sub);
+        boolean brightnessOverrideEnabled = prefs.getBrightnessOverride();
+        seekbar.setEnabled(brightnessOverrideEnabled);
+        seekbar.setAlpha(brightnessOverrideEnabled ? 1f : 0.55f);
         box.addView(seekbar, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dpToPx(44)));
@@ -7384,7 +7409,7 @@ public class ReaderActivity extends AppCompatActivity {
         SwitchCompat switchOverride = new SwitchCompat(this);
         switchOverride.setText(getString(R.string.override_system_brightness));
         switchOverride.setTextSize(14f);
-        switchOverride.setChecked(prefs.getBrightnessOverride());
+        switchOverride.setChecked(brightnessOverrideEnabled);
         styleCompoundForReaderDialog(switchOverride, bg, fg);
         box.addView(switchOverride, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -7428,9 +7453,9 @@ public class ReaderActivity extends AppCompatActivity {
                 if (fromUser) {
                     float brightness = progress / 100f;
                     prefs.setBrightnessValue(brightness);
-                    WindowManager.LayoutParams lp = getWindow().getAttributes();
-                    lp.screenBrightness = brightness;
-                    getWindow().setAttributes(lp);
+                    if (switchOverride.isChecked()) {
+                        applyReaderBrightnessOverride(brightness);
+                    }
                 }
             }
             @Override public void onStartTrackingTouch(SeekBar sb) {}
@@ -7439,10 +7464,12 @@ public class ReaderActivity extends AppCompatActivity {
 
         switchOverride.setOnCheckedChangeListener((v, checked) -> {
             prefs.setBrightnessOverride(checked);
-            if (!checked) {
-                WindowManager.LayoutParams lp = getWindow().getAttributes();
-                lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
-                getWindow().setAttributes(lp);
+            seekbar.setEnabled(checked);
+            seekbar.setAlpha(checked ? 1f : 0.55f);
+            if (checked) {
+                applyReaderBrightnessOverride(prefs.getBrightnessValue());
+            } else {
+                clearReaderBrightnessOverride();
             }
         });
 
@@ -9187,7 +9214,6 @@ public class ReaderActivity extends AppCompatActivity {
         if (!backgroundTextMemoryReleased) {
             cacheLoadedTextSnapshot();
         }
-        if (notificationHelper != null) notificationHelper.dismiss();
         releaseReaderMemory();
         executor.shutdownNow();
         largeTextPartitionExecutor.shutdownNow();

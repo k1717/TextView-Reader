@@ -29,7 +29,7 @@ import java.util.Set;
 import java.util.Date;
 
 /**
- * TekView-style bookmark list:
+ * Bookmark list:
  * file folder header -> expandable bookmarks inside each text file.
  */
 public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {

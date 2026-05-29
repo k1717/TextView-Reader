@@ -1767,9 +1767,6 @@ public class SettingsActivity extends AppCompatActivity {
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        Switch switchNotification = findViewById(R.id.switch_notification);
-        switchNotification.setChecked(prefs.getShowNotification());
-        switchNotification.setOnCheckedChangeListener((v, c) -> prefs.setShowNotification(c));
 
         Switch switchVolume = findViewById(R.id.switch_volume_scroll);
         switchVolume.setChecked(prefs.getVolumeKeyScroll());

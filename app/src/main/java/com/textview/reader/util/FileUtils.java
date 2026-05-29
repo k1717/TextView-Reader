@@ -48,8 +48,9 @@ import org.w3c.dom.NodeList;
  * - Western/Central European/Turkish/Baltic single-byte encodings: Windows-1252/1250/1254/1257 and ISO-8859 variants
  * - Greek/Cyrillic/Hebrew/Arabic/Thai legacy encodings: Windows-1253/1251/1255/1256/874 and ISO/KOI8 variants
  * - Korean legacy: MS949 / windows-949 / CP949 / EUC-KR
- * - Japanese legacy: Shift_JIS / windows-31j, EUC-JP, ISO-2022-JP
- * - Chinese legacy: GB18030, GBK, Big5
+ * - Japanese legacy: Shift_JIS / windows-31j, EUC-JP; ISO-2022-JP only when strict 7-bit ISO-2022 shifts are present
+ * - Korean legacy: ISO-2022-KR only when strict 7-bit designation plus SO/SI shifts are present
+ * - Chinese legacy: GB18030, GBK, Big5; HZ-GB-2312 only when strict 7-bit HZ escapes are present
  *
  * Bad or unmappable bytes are decoded with replacement instead of crashing.
  */
@@ -87,6 +88,14 @@ public class FileUtils {
     private static final double KOREAN_WEAK_SIGNAL_PENALTY = 900.0;
     private static final double KOREAN_SUPERSET_BONUS = 35.0;
     private static final double KOREAN_EUC_KR_TIE_PENALTY = 10.0;
+    // When the same bytes decode to substantially more Han characters under a
+    // Chinese charset than they produce Hangul under CP949, the "Korean" decode
+    // is almost certainly Chinese mojibake. In that case the big sustained/strong
+    // Korean bonuses are suppressed and a penalty is applied so the correct
+    // Chinese family can win. The ratio guards against penalizing genuine Korean
+    // text, which is Hangul-dominant rather than Han-dominant.
+    private static final double KOREAN_HAN_DOMINANCE_RATIO = 1.30;
+    private static final double KOREAN_FAKE_HANGUL_PENALTY = 1500.0;
     private static final double CYRILLIC_CHAR_BONUS = 1.8;
     private static final double CYRILLIC_NATURALNESS_BONUS = 4.2;
     private static final double CYRILLIC_ODD_CHAR_PENALTY = 45.0;
@@ -106,11 +115,40 @@ public class FileUtils {
     private static final double SINGLE_SCRIPT_CHAR_BONUS = 2.1;
     private static final double SINGLE_SCRIPT_SUSTAINED_SIGNAL_BONUS = 240.0;
     private static final double SINGLE_SCRIPT_WEAK_SIGNAL_PENALTY = 450.0;
+    // Short high-byte samples (titles, first lines, memos) carry weak
+    // statistical signal, so single-byte code pages can spuriously beat the
+    // correct multibyte CJK encoding by treating every byte as a valid
+    // character. When the sample is short, contains high bytes, and a
+    // multibyte CJK charset decodes the same bytes with almost no replacement
+    // characters, penalize single-byte alphabetic families so the multibyte
+    // interpretation is preferred.
+    private static final int SHORT_SAMPLE_BYTE_LIMIT = 256;
+    private static final int SHORT_SAMPLE_DETECTOR_TRUST_MIN_BYTES = 24;
+    private static final double SHORT_SAMPLE_SINGLE_BYTE_PENALTY = 600.0;
+    // When a statistical detector (ICU or Mozilla) reports a multibyte CJK
+    // encoding, a single-byte alphabetic candidate is almost certainly that CJK
+    // text misread one byte at a time. Single-byte code pages accept nearly any
+    // byte as a valid letter, so a Chinese/Japanese/Korean file can score well
+    // as "clean" Cyrillic / Thai / Greek text. Penalize that mismatch so the
+    // detector-confirmed CJK family wins regardless of sample length.
+    private static final double DETECTOR_CJK_VS_SINGLE_BYTE_PENALTY = 6000.0;
+    // Per-character component so the mismatch penalty outweighs single-byte
+    // character bonuses plus their sustained/naturalness bonuses on long files.
+    // Set above the largest per-character bonus in the scorer (6.7) so a
+    // detector-confirmed CJK family reliably beats any single-byte misdecode.
+    private static final double DETECTOR_CJK_VS_SINGLE_BYTE_PER_CHAR_PENALTY = 8.0;
+    // Detector-confirmed single-byte vs a DIFFERENT single-byte family. Smaller
+    // than the CJK penalty because the two scripts are closer in plausibility,
+    // but still length-scaled so it overcomes per-character bonuses on long
+    // files. Per-char value sits just above the single-byte char bonuses (<=2.4).
+    private static final double DETECTOR_SINGLE_BYTE_CROSS_FAMILY_PENALTY = 400.0;
+    private static final double DETECTOR_SINGLE_BYTE_CROSS_FAMILY_PER_CHAR_PENALTY = 3.0;
     private static final double VIETNAMESE_SIGNAL_BONUS = 2.4;
     private static final double VIETNAMESE_SUSTAINED_SIGNAL_BONUS = 260.0;
     private static final double VIETNAMESE_WEAK_SIGNAL_PENALTY = 220.0;
     private static final double WESTERN_ASCII_LIKE_BONUS = 150.0;
     private static final double WESTERN_SCRIPT_MISMATCH_PENALTY = 400.0;
+    private static final double STATEFUL_SIGNATURE_MISSING_PENALTY = 100000.0;
 
     private static final String[] TEXT_ENCODING_CANDIDATES = new String[]{
             "UTF-8",
@@ -415,6 +453,7 @@ public class FileUtils {
 
         for (String candidate : TEXT_ENCODING_CANDIDATES) {
             if (!Charset.isSupported(candidate)) continue;
+            if (isStatefulEncodingName(candidate) && !hasRequiredStatefulSignature(candidate, data)) continue;
             DecodeResult result = decodeCandidate(data, candidate);
             double adjusted = accuracyAdjustedScore(result, data, icuDetected, mozillaDetected);
 
@@ -441,11 +480,24 @@ public class FileUtils {
         boolean koreanSignalOverride = false;
         if (bestKorean != null && hasOverwhelmingKoreanSignal(bestKorean)
                 && !"korean".equals(guessEncodingFamily(best.charsetName))) {
-            second = best;
-            secondScore = bestScore;
-            best = bestKorean;
-            bestScore = bestKoreanScore;
-            koreanSignalOverride = true;
+            // Do not let the Korean override fire when the same bytes are
+            // Han-dominant under a Chinese charset, or a detector reports a
+            // Chinese encoding — that means bestKorean is Chinese mojibake whose
+            // incidental Hangul tripped the signal test.
+            int chineseHan = maxChineseHanCount(data);
+            boolean detectorSaysChinese =
+                    (icuDetected != null && "chinese".equals(guessEncodingFamily(icuDetected)))
+                    || (mozillaDetected != null && "chinese".equals(guessEncodingFamily(mozillaDetected)));
+            boolean chineseDominates = bestKorean.hangulCount > 0
+                    && (chineseHan >= bestKorean.hangulCount * KOREAN_HAN_DOMINANCE_RATIO
+                        || detectorSaysChinese);
+            if (!chineseDominates) {
+                second = best;
+                secondScore = bestScore;
+                best = bestKorean;
+                bestScore = bestKoreanScore;
+                koreanSignalOverride = true;
+            }
         }
 
         int confidence = accuracyConfidence(best, bestScore, second, secondScore);
@@ -474,6 +526,13 @@ public class FileUtils {
         int length = Math.max(1, result.text.length());
         String family = guessEncodingFamily(result.charsetName);
 
+        // Stateful 7-bit East Asian encodings are accepted only with their
+        // concrete shift/designation signatures. Detector hints alone are not
+        // enough because random legacy text can contain short ESC/~ sequences.
+        if (isStatefulEncodingName(result.charsetName) && !hasRequiredStatefulSignature(result.charsetName, data)) {
+            score += STATEFUL_SIGNATURE_MISSING_PENALTY;
+        }
+
         if (icuDetected != null && result.charsetName.equalsIgnoreCase(icuDetected)) {
             score -= DETECTOR_ICU_EXACT_BONUS;
         }
@@ -494,6 +553,42 @@ public class FileUtils {
             score -= DETECTOR_AGREEING_FAMILY_BONUS;
         }
 
+        // Detector-confirmed CJK vs single-byte alphabetic mismatch. If ICU or
+        // Mozilla reports a multibyte CJK family but this candidate is a
+        // single-byte alphabetic code page, the candidate is almost certainly
+        // the CJK text misread byte-by-byte. Single-byte pages accept nearly
+        // every byte as a valid letter, so such a decode looks "clean" and can
+        // otherwise win on raw character-count bonuses — which grow with length.
+        // The penalty therefore scales with text length so it overcomes those
+        // bonuses on long files as well as short ones.
+        if (isSingleByteAlphabeticFamily(resultFamily)) {
+            boolean icuSaysCjk = icuDetected != null && isCjkFamily(guessEncodingFamily(icuDetected));
+            boolean mozillaSaysCjk = mozillaDetected != null && isCjkFamily(guessEncodingFamily(mozillaDetected));
+            boolean detectorSupportsThisSingleByte = detectorConfidentlySupportsFamily(icuDetected, mozillaDetected, resultFamily, data);
+            if ((icuSaysCjk || mozillaSaysCjk) && !detectorSupportsThisSingleByte) {
+                score += DETECTOR_CJK_VS_SINGLE_BYTE_PENALTY
+                        + length * DETECTOR_CJK_VS_SINGLE_BYTE_PER_CHAR_PENALTY;
+            }
+        }
+
+        // Detector-confirmed single-byte family vs a different single-byte
+        // family. Single-byte code pages accept almost any 0x80-0xFF byte as a
+        // valid letter, so e.g. Greek text decodes just as "cleanly" as Cyrillic
+        // and can win on raw character-count bonuses even though a detector
+        // correctly identified the real script. When ICU/Mozilla gives a
+        // confident single-byte family and there is no detector disagreement,
+        // respect that family directly instead of applying the regional
+        // preference order. CJK-vs-single-byte conflicts are still handled by
+        // the CJK guard above.
+        if (isSingleByteAlphabeticFamily(resultFamily)) {
+            String detectorSingleByteFamily = detectorSingleByteFamily(icuDetected, mozillaDetected, data);
+            if (detectorSingleByteFamily != null
+                    && !detectorSingleByteFamily.equals(resultFamily)) {
+                score += DETECTOR_SINGLE_BYTE_CROSS_FAMILY_PENALTY
+                        + length * DETECTOR_SINGLE_BYTE_CROSS_FAMILY_PER_CHAR_PENALTY;
+            }
+        }
+
         // Heavy penalties for decoded text that is technically valid Unicode but
         // structurally implausible.
         score += Math.max(0, result.replacementCount - Math.max(2, length / 500)) * SCORE_REPLACEMENT_PENALTY;
@@ -504,12 +599,38 @@ public class FileUtils {
             case "korean": {
                 int signal = result.hangulCount + result.cjkCount;
                 double density = signal / (double) length;
-                // Hangul is a very strong signal because random legacy
-                // mojibake rarely forms sustained valid Korean syllables.
-                score -= result.hangulCount * KOREAN_HANGUL_BONUS;
-                score -= result.cjkCount * KOREAN_CJK_BONUS;
-                if (result.hangulCount >= 8 && density >= 0.04) score -= KOREAN_SUSTAINED_SIGNAL_BONUS;
-                if (result.hangulCount >= 80 && density >= 0.18) score -= KOREAN_STRONG_SIGNAL_BONUS;
+
+                // Guard against Chinese mojibake. If the same bytes decode to
+                // substantially more Han characters under a Chinese charset than
+                // they yield Hangul here, OR a statistical detector reports a
+                // Chinese encoding, this "Korean" decode is incidental mojibake
+                // from a Chinese (GBK/Big5/GB18030) file. Suppress the large
+                // Korean signal bonuses and apply a penalty so the real Chinese
+                // family can win. Genuine Korean text is Hangul-dominant and is
+                // not flagged by the char-count ratio, and detectors report it
+                // as Korean rather than Chinese.
+                int chineseHan = maxChineseHanCount(data);
+                boolean detectorSaysChinese =
+                        (icuDetected != null && "chinese".equals(guessEncodingFamily(icuDetected)))
+                        || (mozillaDetected != null && "chinese".equals(guessEncodingFamily(mozillaDetected)));
+                boolean chineseDominates = result.hangulCount > 0
+                        && (chineseHan >= result.hangulCount * KOREAN_HAN_DOMINANCE_RATIO
+                            || detectorSaysChinese);
+
+                if (chineseDominates) {
+                    // Incidental Hangul from Chinese mojibake: do not award the
+                    // per-character Hangul/CJK bonuses (they would otherwise let
+                    // a Chinese file win as Korean), and apply a penalty.
+                    score -= result.cjkCount * KOREAN_CJK_BONUS;
+                    score += KOREAN_FAKE_HANGUL_PENALTY;
+                } else {
+                    // Hangul is a very strong signal because random legacy
+                    // mojibake rarely forms sustained valid Korean syllables.
+                    score -= result.hangulCount * KOREAN_HANGUL_BONUS;
+                    score -= result.cjkCount * KOREAN_CJK_BONUS;
+                    if (result.hangulCount >= 8 && density >= 0.04) score -= KOREAN_SUSTAINED_SIGNAL_BONUS;
+                    if (result.hangulCount >= 80 && density >= 0.18) score -= KOREAN_STRONG_SIGNAL_BONUS;
+                }
                 if (result.hangulCount == 0 && result.cjkCount < 4) score += KOREAN_WEAK_SIGNAL_PENALTY;
 
                 // CP949/MS949 is the practical superset for old Korean TXT. When
@@ -625,7 +746,164 @@ public class FileUtils {
                 break;
         }
 
+        // Short high-byte samples: damp single-byte alphabetic families when the
+        // same bytes decode cleanly as multibyte CJK. This corrects short Korean
+        // CP949 titles being scattered across Thai/Greek/Cyrillic/Western, etc.
+        if (isSingleByteAlphabeticFamily(family)
+                && data != null && data.length <= SHORT_SAMPLE_BYTE_LIMIT
+                && shortSampleLooksMultibyteCjk(data)) {
+            boolean detectorSupportsThisSingleByte = data.length >= SHORT_SAMPLE_DETECTOR_TRUST_MIN_BYTES
+                    && detectorConfidentlySupportsFamily(icuDetected, mozillaDetected, family, data);
+            // Do not let the short-sample CJK guard override a direct confident
+            // detector match for a real single-byte text once the sample is long
+            // enough for that detector hint to be meaningful. Very tiny samples
+            // still keep the CJK guard because detector guesses can scatter short
+            // CP949 Korean titles into Thai/Western/etc.
+            if (!detectorSupportsThisSingleByte) {
+                score += SHORT_SAMPLE_SINGLE_BYTE_PENALTY;
+            }
+        }
+
         return score;
+    }
+
+    /**
+     * For short samples, returns true if the bytes contain high bytes AND at
+     * least one multibyte CJK charset decodes them with almost no replacement
+     * characters. Such a sample is far more likely to be CJK than a single-byte
+     * code page that merely tolerates every byte. Used to damp single-byte
+     * families on short inputs (see SHORT_SAMPLE_SINGLE_BYTE_PENALTY).
+     */
+    private static boolean shortSampleLooksMultibyteCjk(byte[] data) {
+        if (data == null || data.length == 0 || data.length > SHORT_SAMPLE_BYTE_LIMIT) return false;
+
+        boolean hasHighByte = false;
+        for (byte b : data) {
+            if ((b & 0xFF) >= 0x80) { hasHighByte = true; break; }
+        }
+        if (!hasHighByte) return false;
+
+        for (String cjk : new String[]{"windows-949", "GB18030", "Shift_JIS", "Big5", "EUC-JP"}) {
+            if (!Charset.isSupported(cjk)) continue;
+            try {
+                DecodeResult r = decodeCandidate(data, cjk);
+                int len = Math.max(1, r.text.length());
+                boolean clean = r.replacementCount <= Math.max(1, len / 40)
+                        && r.nulCount == 0;
+                int cjkSignal = r.cjkCount + r.hangulCount + r.kanaCount;
+                if (clean && cjkSignal >= 2) return true;
+            } catch (Exception ignored) {
+                // Charset present but decode failed — try the next candidate.
+            }
+        }
+        return false;
+    }
+
+    private static boolean isCjkFamily(String family) {
+        return "korean".equals(family) || "japanese".equals(family) || "chinese".equals(family);
+    }
+
+    private static boolean detectorReportsCjkFamily(String icuDetected, String mozillaDetected) {
+        return (icuDetected != null && isCjkFamily(guessEncodingFamily(icuDetected)))
+                || (mozillaDetected != null && isCjkFamily(guessEncodingFamily(mozillaDetected)));
+    }
+
+    private static boolean detectorReportsFamily(String icuDetected, String mozillaDetected, String family) {
+        if (family == null || family.isEmpty()) return false;
+        return (icuDetected != null && family.equals(guessEncodingFamily(icuDetected)))
+                || (mozillaDetected != null && family.equals(guessEncodingFamily(mozillaDetected)));
+    }
+
+    private static boolean detectorConfidentlySupportsFamily(String icuDetected, String mozillaDetected, String family, byte[] data) {
+        if (family == null || family.isEmpty()) return false;
+        if (isSingleByteAlphabeticFamily(family)) {
+            return family.equals(detectorConfidentSingleByteFamily(icuDetected, data))
+                    || family.equals(detectorConfidentSingleByteFamily(mozillaDetected, data));
+        }
+        return detectorReportsFamily(icuDetected, mozillaDetected, family);
+    }
+
+    /**
+     * Returns a confident single-byte alphabetic detector family, or null if the
+     * detector path is absent, weak, non-single-byte, or internally conflicting.
+     * Regional preference is not used here: if ICU and Mozilla name different
+     * confident single-byte families, scoring is left to the normal accuracy
+     * path instead of forcing a higher-priority region over a lower-priority one.
+     */
+    private static String detectorSingleByteFamily(String icuDetected, String mozillaDetected, byte[] data) {
+        String icuFam = detectorConfidentSingleByteFamily(icuDetected, data);
+        String mozFam = detectorConfidentSingleByteFamily(mozillaDetected, data);
+
+        if (icuFam != null && mozFam != null) {
+            return icuFam.equals(mozFam) ? icuFam : null;
+        }
+        if (icuFam != null) return icuFam;
+        return mozFam;
+    }
+
+    /**
+     * Maps a detector result to a confident single-byte family, or null.
+     * Western is accepted only when the detector names an explicit Western
+     * legacy charset such as Windows-1252 / ISO-8859-1 / ISO-8859-15 / MacRoman.
+     * US-ASCII and generic/unknown fallbacks are still ignored. This intentionally
+     * lets clearly detected Western Latin text win over Southeast Asian Latin or
+     * Thai-looking single-byte candidates, while avoiding the weakest ASCII
+     * fallback signal.
+     */
+    private static String detectorConfidentSingleByteFamily(String detected) {
+        if (detected == null) return null;
+        String fam = guessEncodingFamily(detected);
+        if (!isSingleByteAlphabeticFamily(fam)) return null;
+        if ("western".equals(fam) && !isExplicitWesternDetectorName(detected)) return null;
+        return fam;
+    }
+
+    /**
+     * Byte-aware call site kept for consistency with the CJK and short-sample
+     * guards. At the family-confidence level, however, explicit Western detector
+     * names are trusted instead of being overridden by a Vietnamese heuristic.
+     * This matches the selected policy: if ICU/Mozilla confidently reports a
+     * concrete single-byte family, that detector family should be respected;
+     * weak US-ASCII/generic Western fallbacks are still ignored by
+     * detectorConfidentSingleByteFamily(String).
+     */
+    private static String detectorConfidentSingleByteFamily(String detected, byte[] data) {
+        return detectorConfidentSingleByteFamily(detected);
+    }
+
+    private static boolean isExplicitWesternDetectorName(String detected) {
+        if (detected == null) return false;
+        String n = detected.trim().toUpperCase(Locale.ROOT)
+                .replace('_', '-')
+                .replace(' ', '-');
+        if (n.equals("US-ASCII") || n.equals("ASCII") || n.equals("ANSI-X3.4-1968")) return false;
+        return n.equals("WINDOWS-1252")
+                || n.equals("CP1252")
+                || n.equals("MS-ANSI")
+                || n.equals("ISO-8859-1")
+                || n.equals("ISO-8859-15")
+                || n.equals("MACROMAN")
+                || n.equals("X-MACROMAN")
+                || n.equals("IBM819")
+                || n.equals("CP819")
+                || n.equals("LATIN1")
+                || n.equals("LATIN-1")
+                || n.equals("L1");
+    }
+
+    private static boolean isSingleByteAlphabeticFamily(String family) {
+        switch (family) {
+            case "cyrillic":
+            case "greek":
+            case "hebrew":
+            case "arabic":
+            case "thai":
+            case "western":
+            case "vietnamese":
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static boolean hasOverwhelmingKoreanSignal(DecodeResult result) {
@@ -831,7 +1109,8 @@ public class FileUtils {
         if (n.equals("WINDOWS-1258") || n.equals("VISCII")) return "vietnamese";
         if (n.equals("WINDOWS-1255") || n.equals("ISO-8859-8") || n.contains("MACHEBREW")) return "hebrew";
         if (n.equals("WINDOWS-1256") || n.equals("ISO-8859-6") || n.contains("MACARABIC")) return "arabic";
-        if (n.equals("WINDOWS-874") || n.equals("ISO-8859-11")) return "thai";
+        if (n.equals("WINDOWS-874") || n.equals("ISO-8859-11")
+                || n.contains("TIS620") || n.contains("TIS-620") || n.contains("X-WINDOWS-874")) return "thai";
         return "western";
     }
 
@@ -906,12 +1185,21 @@ public class FileUtils {
             String name = normalizeDetectedCharset((String) nameObj);
             int confidence = (Integer) confidenceObj;
             if (name == null || confidence < 40 || !Charset.isSupported(name)) return null;
+            if (isStatefulEncodingName(name) && !hasRequiredStatefulSignature(name, data)) return null;
 
             DecodeResult result = decodeCandidate(data, name);
             int length = Math.max(1, result.text.length());
             if (result.replacementCount > Math.max(2, length / 100)) return null;
             if (result.nulCount > Math.max(1, length / 200)) return null;
-            if (result.badControlCount > Math.max(2, length / 80)) return null;
+            // Control bytes (e.g. literal ESC 0x1B) present in the source survive
+            // any decode, so badControlCount has little discriminating power for a
+            // charset that ICU already reports with high confidence. Only apply
+            // the badControl rejection to lower-confidence ICU hints; a strong ICU
+            // result (>= 90) is trusted even when the text carries stray controls.
+            // Stateful ISO-2022 encodings are excluded from this leniency because
+            // their detection is handled separately and is escape-sensitive.
+            boolean strongIcuHint = confidence >= 90 && !isStatefulEncodingName(name);
+            if (!strongIcuHint && result.badControlCount > Math.max(2, length / 80)) return null;
             return name;
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             return null;
@@ -970,6 +1258,7 @@ public class FileUtils {
             if (!(detected instanceof String)) return null;
             String name = normalizeDetectedCharset((String) detected);
             if (name == null || !Charset.isSupported(name)) return null;
+            if (isStatefulEncodingName(name) && !hasRequiredStatefulSignature(name, data)) return null;
 
             DecodeResult result = decodeCandidate(data, name);
             int length = Math.max(1, result.text.length());
@@ -994,6 +1283,7 @@ public class FileUtils {
         if (upper.equals("MS949") || upper.equals("CP949") || upper.equals("X-WINDOWS-949")
                 || upper.equals("KS-C-5601") || upper.equals("KS-C-5601-1987")) return "windows-949";
         if (upper.equals("ISO2022KR") || upper.equals("ISO-2022-KR")) return "ISO-2022-KR";
+        if (upper.equals("ISO2022JP") || upper.equals("ISO-2022-JP")) return "ISO-2022-JP";
         if (upper.equals("WINDOWS-31J") || upper.equals("MS932") || upper.equals("CP932")) return "windows-31j";
         if (upper.equals("SHIFT-JIS") || upper.equals("SHIFT_JIS") || upper.equals("SJIS")) return "Shift_JIS";
         if (upper.equals("CP1250")) return "windows-1250";
@@ -1105,6 +1395,7 @@ public class FileUtils {
         DecodeResult best = null;
         for (String candidate : TEXT_ENCODING_CANDIDATES) {
             if (!Charset.isSupported(candidate)) continue;
+            if (isStatefulEncodingName(candidate) && !hasRequiredStatefulSignature(candidate, body)) continue;
             DecodeResult result = decodeCandidate(body, candidate);
             if (best == null || result.score < best.score) {
                 best = result;
@@ -1116,6 +1407,32 @@ public class FileUtils {
         }
 
         return sanitizeDecodedText(best.text);
+    }
+
+    /**
+     * Decodes the same bytes through the strongest available Chinese charsets
+     * and returns the largest Han (CJK ideograph) count produced. Used to
+     * detect "Korean" decodes that are actually Chinese mojibake: genuine
+     * Korean text is Hangul-dominant, whereas Chinese text misread as CP949
+     * yields incidental Hangul but a much larger true Han count under GB18030 /
+     * GBK / Big5. Returns 0 if no Chinese charset is available.
+     */
+    private static int maxChineseHanCount(byte[] data) {
+        int best = 0;
+        for (String cn : new String[]{"GB18030", "GBK", "Big5"}) {
+            if (!Charset.isSupported(cn)) continue;
+            try {
+                DecodeResult cnResult = decodeCandidate(data, cn);
+                // Skip decodes that are mostly replacement characters — those
+                // are not a credible Chinese interpretation.
+                int len = Math.max(1, cnResult.text.length());
+                if (cnResult.replacementCount > Math.max(2, len / 20)) continue;
+                if (cnResult.cjkCount > best) best = cnResult.cjkCount;
+            } catch (Exception ignored) {
+                // Charset present but decode failed — ignore this candidate.
+            }
+        }
+        return best;
     }
 
     private static DecodeResult decodeCandidate(byte[] data, String charsetName) {
@@ -1386,39 +1703,204 @@ public class FileUtils {
     }
 
     private static boolean looksLikeIso2022Jp(byte[] data) {
-        for (int i = 0; i < data.length - 2; i++) {
-            if ((data[i] & 0xFF) == 0x1B) {
-                int b1 = data[i + 1] & 0xFF;
-                int b2 = data[i + 2] & 0xFF;
+        if (data == null || data.length < 8 || containsRawHighBytes(data)) return false;
 
-                if (b1 == 0x24 && (b2 == 0x40 || b2 == 0x42)) return true; // ESC $ @ / ESC $ B
-                if (b1 == 0x28 && (b2 == 0x42 || b2 == 0x4A || b2 == 0x49)) return true; // ESC ( B/J/I
+        // ISO-2022-JP is stateful and 7-bit. A single ESC $ B byte trio is not
+        // enough evidence because unrelated legacy/binary snippets may contain
+        // that ASCII sequence. Require a real transition into JIS state, valid
+        // 7-bit text while shifted, and a transition back out.
+        int state = 0; // 0 = ASCII/Roman, 1 = JIS X 0208 two-byte, 2 = JIS kana
+        boolean sawJisShift = false;
+        boolean sawAsciiReset = false;
+        int jisPairs = 0;
+        int kanaBytes = 0;
+        int invalidEscape = 0;
+
+        for (int i = 0; i < data.length; i++) {
+            int b = data[i] & 0xFF;
+            if (b == 0x1B) {
+                if (i + 2 >= data.length) return false;
+                int b1 = data[++i] & 0xFF;
+                int b2 = data[++i] & 0xFF;
+                if (b1 == 0x24 && (b2 == 0x40 || b2 == 0x42)) {
+                    state = 1;
+                    sawJisShift = true;
+                    continue;
+                }
+                if (b1 == 0x28 && (b2 == 0x42 || b2 == 0x4A)) {
+                    if (state != 0) sawAsciiReset = true;
+                    state = 0;
+                    continue;
+                }
+                if (b1 == 0x28 && b2 == 0x49) {
+                    state = 2;
+                    sawJisShift = true;
+                    continue;
+                }
+                invalidEscape++;
+                continue;
+            }
+
+            if (state == 1) {
+                if (b == '\n' || b == '\r' || b == '\t' || b == ' ') continue;
+                if (b < 0x21 || b > 0x7E || i + 1 >= data.length) return false;
+                int b2 = data[++i] & 0xFF;
+                if (b2 < 0x21 || b2 > 0x7E) return false;
+                jisPairs++;
+            } else if (state == 2) {
+                if (b == '\n' || b == '\r' || b == '\t' || b == ' ') continue;
+                if (b < 0x21 || b > 0x5F) return false;
+                kanaBytes++;
             }
         }
-        return false;
+
+        return sawJisShift && sawAsciiReset && state == 0
+                && (jisPairs >= 2 || kanaBytes >= 4)
+                && invalidEscape == 0;
     }
 
     private static boolean looksLikeIso2022Kr(byte[] data) {
-        for (int i = 0; i < data.length - 3; i++) {
-            if ((data[i] & 0xFF) == 0x1B
-                    && (data[i + 1] & 0xFF) == 0x24
-                    && (data[i + 2] & 0xFF) == 0x29
-                    && (data[i + 3] & 0xFF) == 0x43) {
-                return true; // ESC $ ) C
+        if (data == null || data.length < 10 || containsRawHighBytes(data)) return false;
+
+        // ISO-2022-KR requires the ESC $ ) C designation and SO/SI shifted
+        // KSC 5601 byte pairs. Treat the designation alone as insufficient.
+        boolean sawDesignation = false;
+        boolean inKorean = false;
+        boolean sawShiftIn = false;
+        boolean sawShiftOut = false;
+        int kscPairs = 0;
+
+        for (int i = 0; i < data.length; i++) {
+            int b = data[i] & 0xFF;
+            if (b == 0x1B) {
+                if (i + 3 >= data.length) return false;
+                int b1 = data[++i] & 0xFF;
+                int b2 = data[++i] & 0xFF;
+                int b3 = data[++i] & 0xFF;
+                if (b1 == 0x24 && b2 == 0x29 && b3 == 0x43) {
+                    sawDesignation = true;
+                    continue;
+                }
+                return false;
             }
+
+            if (b == 0x0E) { // SO: shift to Korean
+                if (!sawDesignation) return false;
+                inKorean = true;
+                sawShiftIn = true;
+                continue;
+            }
+            if (b == 0x0F) { // SI: shift back to ASCII
+                if (!inKorean) return false;
+                inKorean = false;
+                sawShiftOut = true;
+                continue;
+            }
+
+            if (inKorean) {
+                if (b == '\n' || b == '\r' || b == '\t' || b == ' ') continue;
+                if (b < 0x21 || b > 0x7E || i + 1 >= data.length) return false;
+                int b2 = data[++i] & 0xFF;
+                if (b2 < 0x21 || b2 > 0x7E) return false;
+                kscPairs++;
+            }
+        }
+
+        return sawDesignation && sawShiftIn && sawShiftOut && !inKorean && kscPairs >= 2;
+    }
+
+    private static boolean containsRawHighBytes(byte[] data) {
+        if (data == null) return false;
+        for (byte raw : data) {
+            if ((raw & 0xFF) >= 0x80) return true;
         }
         return false;
     }
 
+    private static boolean isIso2022JpName(String charsetName) {
+        if (charsetName == null) return false;
+        String n = charsetName.toUpperCase(Locale.ROOT).replace("_", "-");
+        return n.equals("ISO2022JP") || n.equals("ISO-2022-JP") || n.equals("CSISO2022JP");
+    }
+
+    private static boolean isIso2022KrName(String charsetName) {
+        if (charsetName == null) return false;
+        String n = charsetName.toUpperCase(Locale.ROOT).replace("_", "-");
+        return n.equals("ISO2022KR") || n.equals("ISO-2022-KR") || n.equals("CSISO2022KR");
+    }
+
+    private static boolean isStatefulEncodingName(String charsetName) {
+        return isHzGb2312Name(charsetName) || isIso2022JpName(charsetName) || isIso2022KrName(charsetName);
+    }
+
+    private static boolean hasRequiredStatefulSignature(String charsetName, byte[] data) {
+        if (isHzGb2312Name(charsetName)) return looksLikeHzGb2312(data);
+        if (isIso2022JpName(charsetName)) return looksLikeIso2022Jp(data);
+        if (isIso2022KrName(charsetName)) return looksLikeIso2022Kr(data);
+        return true;
+    }
+
+    private static boolean isHzGb2312Name(String charsetName) {
+        if (charsetName == null) return false;
+        String n = charsetName.toUpperCase(Locale.ROOT).replace("_", "-");
+        return n.equals("HZ") || n.equals("HZGB2312") || n.equals("HZ-GB2312") || n.equals("HZ-GB-2312");
+    }
+
     private static boolean looksLikeHzGb2312(byte[] data) {
-        for (int i = 0; i < data.length - 1; i++) {
-            int b0 = data[i] & 0xFF;
-            int b1 = data[i + 1] & 0xFF;
-            if (b0 == '~' && (b1 == '{' || b1 == '}' || b1 == '~' || b1 == '\n')) {
-                return true;
+        if (data == null || data.length < 6) return false;
+
+        // HZ-GB-2312 is 7-bit. If the sample contains raw high bytes, it is
+        // much more likely to be CP949/GBK/Big5/etc. than HZ. This is the main
+        // guard against Korean Windows-949 being stolen as HZ-GB-2312.
+        for (byte raw : data) {
+            if ((raw & 0xFF) >= 0x80) return false;
+        }
+
+        boolean inGb = false;
+        boolean sawShiftIn = false;
+        boolean sawShiftOut = false;
+        int gbBytePairs = 0;
+        int invalidEscape = 0;
+
+        for (int i = 0; i < data.length; i++) {
+            int b = data[i] & 0xFF;
+            if (b == '~') {
+                if (i + 1 >= data.length) return false;
+                int next = data[++i] & 0xFF;
+                if (next == '{') {
+                    inGb = true;
+                    sawShiftIn = true;
+                    continue;
+                }
+                if (next == '}') {
+                    if (!inGb) invalidEscape++;
+                    inGb = false;
+                    sawShiftOut = true;
+                    continue;
+                }
+                if (next == '~' || next == '\n' || next == '\r') {
+                    continue;
+                }
+                invalidEscape++;
+                continue;
+            }
+
+            if (inGb) {
+                if (b == '\n' || b == '\r' || b == '\t' || b == ' ') {
+                    continue;
+                }
+                if (b < 0x21 || b > 0x7E || i + 1 >= data.length) {
+                    return false;
+                }
+                int b2 = data[++i] & 0xFF;
+                if (b2 < 0x21 || b2 > 0x7E) {
+                    return false;
+                }
+                gbBytePairs++;
             }
         }
-        return false;
+
+        return sawShiftIn && sawShiftOut && !inGb && gbBytePairs >= 2 && invalidEscape == 0;
     }
 
 
@@ -1458,18 +1940,23 @@ public class FileUtils {
         // Strong ASCII/newline evidence. This covers the common no-BOM UTF-16
         // files that previously looked like strict-valid UTF-8 with embedded NULs.
         if ((zeroOddRatio >= 0.30 && leAsciiRatio >= 0.25 && leAsciiPairs >= beAsciiPairs * 2)
-                || (leNewlinePairs >= 2 && leNewlinePairs > beNewlinePairs)) {
+                || (zeroOddRatio >= 0.20 && leAsciiRatio >= 0.15
+                && leNewlinePairs >= 2 && leNewlinePairs > beNewlinePairs)) {
             return "UTF-16LE";
         }
         if ((zeroEvenRatio >= 0.30 && beAsciiRatio >= 0.25 && beAsciiPairs >= leAsciiPairs * 2)
-                || (beNewlinePairs >= 2 && beNewlinePairs > leNewlinePairs)) {
+                || (zeroEvenRatio >= 0.20 && beAsciiRatio >= 0.15
+                && beNewlinePairs >= 2 && beNewlinePairs > leNewlinePairs)) {
             return "UTF-16BE";
         }
 
-        // CJK UTF-16 may not have much ASCII, but one byte lane often still shows
-        // a meaningful amount of zeroes. Decode both endiannesses and choose the
-        // more plausible text result only when there is enough UTF-16-like evidence.
-        if (Math.max(zeroEvenRatio, zeroOddRatio) < 0.18) {
+        // Non-ASCII no-BOM UTF-16 is deliberately conservative. Pure CJK UTF-16
+        // without ASCII/NUL lane structure is hard to distinguish from arbitrary
+        // legacy bytes, so do not force a Unicode result unless the byte lanes
+        // still show a strong UTF-16 signature and one endian clearly decodes
+        // better than the other.
+        if (Math.max(zeroEvenRatio, zeroOddRatio) < 0.24
+                || Math.abs(zeroEven - zeroOdd) < Math.max(4, pairs / 12)) {
             return null;
         }
 
@@ -1478,29 +1965,40 @@ public class FileUtils {
         boolean lePlausible = isPlausibleUtf16Text(le);
         boolean bePlausible = isPlausibleUtf16Text(be);
 
-        if (lePlausible && !bePlausible) return "UTF-16LE";
-        if (bePlausible && !lePlausible) return "UTF-16BE";
         if (!lePlausible && !bePlausible) return null;
 
-        int leSignal = le.asciiCount + le.cjkCount + le.kanaCount + le.hangulCount + le.alphabeticScriptCount;
-        int beSignal = be.asciiCount + be.cjkCount + be.kanaCount + be.hangulCount + be.alphabeticScriptCount;
-        if (leSignal >= beSignal + Math.max(4, pairs / 20)) return "UTF-16LE";
-        if (beSignal >= leSignal + Math.max(4, pairs / 20)) return "UTF-16BE";
+        int leSignal = utf16TextSignal(le);
+        int beSignal = utf16TextSignal(be);
+        int signalMargin = Math.max(8, pairs / 12);
 
-        if (zeroOddRatio >= zeroEvenRatio * 1.35) return "UTF-16LE";
-        if (zeroEvenRatio >= zeroOddRatio * 1.35) return "UTF-16BE";
+        if (lePlausible && !bePlausible && zeroOddRatio >= zeroEvenRatio * 1.60) return "UTF-16LE";
+        if (bePlausible && !lePlausible && zeroEvenRatio >= zeroOddRatio * 1.60) return "UTF-16BE";
+        if (lePlausible && zeroOddRatio >= zeroEvenRatio * 1.60 && leSignal >= beSignal + signalMargin) return "UTF-16LE";
+        if (bePlausible && zeroEvenRatio >= zeroOddRatio * 1.60 && beSignal >= leSignal + signalMargin) return "UTF-16BE";
 
-        return le.score <= be.score ? "UTF-16LE" : "UTF-16BE";
+        // Ambiguous no-BOM UTF-16 should not be guessed just because both
+        // decoders produced some plausible Unicode. Let legacy scoring handle it
+        // rather than forcing a loose Unicode decision.
+        return null;
     }
 
     private static boolean isPlausibleUtf16Text(DecodeResult result) {
         if (result == null || result.text == null || result.text.isEmpty()) return false;
         int length = Math.max(1, result.text.length());
-        if (result.replacementCount > Math.max(2, length / 100)) return false;
-        if (result.nulCount > Math.max(1, length / 200)) return false;
-        if (result.badControlCount > Math.max(2, length / 80)) return false;
-        int textSignal = result.asciiCount + result.cjkCount + result.kanaCount + result.hangulCount + result.alphabeticScriptCount;
-        return textSignal >= Math.max(2, length / 8);
+        if (result.replacementCount > Math.max(2, length / 120)) return false;
+        if (result.nulCount > Math.max(1, length / 300)) return false;
+        if (result.badControlCount > Math.max(2, length / 120)) return false;
+        return utf16TextSignal(result) >= Math.max(4, length / 5);
+    }
+
+    private static int utf16TextSignal(DecodeResult result) {
+        if (result == null) return 0;
+        return result.asciiCount
+                + result.cjkCount
+                + result.kanaCount
+                + result.hangulCount
+                + result.alphabeticScriptCount
+                + result.usefulPunctuationCount;
     }
 
     private static boolean isLikelySingleByteText(int b) {

@@ -204,7 +204,6 @@ public class PrefsManager {
                 "show_hidden",
                 "brightness_override",
                 "brightness_value",
-                "show_notification",
                 "volume_key_scroll",
                 "tap_paging_enabled",
                 "tap_zone_mode",
@@ -896,15 +895,12 @@ public class PrefsManager {
     public float getBrightnessValue() { return prefs.getFloat("brightness_value", 0.5f); }
     public void setBrightnessValue(float v) { prefs.edit().putFloat("brightness_value", v).apply(); }
 
-    // Notification
-    public boolean getShowNotification() { return prefs.getBoolean("show_notification", false); }
-    public void setShowNotification(boolean v) { prefs.edit().putBoolean("show_notification", v).apply(); }
 
     // Volume key paging
     public boolean getVolumeKeyScroll() { return prefs.getBoolean("volume_key_scroll", false); }
     public void setVolumeKeyScroll(boolean v) { prefs.edit().putBoolean("volume_key_scroll", v).apply(); }
 
-    // TekView-style tap paging
+    // Tap paging
     public boolean getTapPagingEnabled() { return prefs.getBoolean("tap_paging_enabled", true); }
     public void setTapPagingEnabled(boolean v) { prefs.edit().putBoolean("tap_paging_enabled", v).apply(); }
     public int getTapZoneMode() { return prefs.getInt("tap_zone_mode", TAP_ZONE_HORIZONTAL); }

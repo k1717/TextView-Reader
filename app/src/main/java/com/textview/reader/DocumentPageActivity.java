@@ -103,7 +103,7 @@ public class DocumentPageActivity extends AppCompatActivity {
     public static final String EXTRA_FILE_URI = "file_uri";
     public static final String EXTRA_JUMP_TO_PAGE = "jump_page";
 
-    private static final String LOCAL_HOST = "tekview.local";
+    private static final String LOCAL_HOST = "textview.local";
     private static final String EPUB_PREFIX = "/epub/";
     private static final String WORD_PREFIX = "/word/";
     private static final String FONT_PREFIX = "/font/";
@@ -511,7 +511,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             webView.setOnTouchListener(null);
             webView.setOnScrollChangeListener(null);
             webView.setWebViewClient(null);
-            webView.removeJavascriptInterface("TekviewSelectionBridge");
+            webView.removeJavascriptInterface("TextViewSelectionBridge");
             webView.stopLoading();
             webView.loadUrl("about:blank");
             webView.clearHistory();
@@ -570,7 +570,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         webView.setLongClickable(true);
         webView.setHapticFeedbackEnabled(true);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        webView.addJavascriptInterface(new WordSelectionBridge(), "TekviewSelectionBridge");
+        webView.addJavascriptInterface(new WordSelectionBridge(), "TextViewSelectionBridge");
         webView.setFindListener((activeMatchOrdinal, numberOfMatches, isDoneCounting) -> {
             if (!isDoneCounting) return;
             activeDocumentSearchPage = currentPage;
@@ -931,7 +931,7 @@ public class DocumentPageActivity extends AppCompatActivity {
     private void checkWordSelectionAfterScroll() {
         if (activityDestroyed || !"Word".equals(docType) || webView == null) return;
         webView.evaluateJavascript(
-                "(function(){try{return !!(window.__tekviewClearSelectionIfOffscreen&&window.__tekviewClearSelectionIfOffscreen());}catch(e){return false;}})()",
+                "(function(){try{return !!(window.__textviewClearSelectionIfOffscreen&&window.__textviewClearSelectionIfOffscreen());}catch(e){return false;}})()",
                 value -> {
                     if ("true".equals(value)) {
                         wordSelectionActive = false;
@@ -943,12 +943,12 @@ public class DocumentPageActivity extends AppCompatActivity {
         if (activityDestroyed || !"Word".equals(docType) || webView == null) return;
         webView.evaluateJavascript(
                 "(function(){try{"
-                        + "if(window.__tekviewSelectionCleanupInstalled){return true;}"
-                        + "window.__tekviewSelectionCleanupInstalled=true;"
+                        + "if(window.__textviewSelectionCleanupInstalled){return true;}"
+                        + "window.__textviewSelectionCleanupInstalled=true;"
                         + "function sel(){return window.getSelection?window.getSelection():null;}"
                         + "function active(){var s=sel();return !!(s&&!s.isCollapsed&&s.rangeCount>0&&String(s).length>0);}"
-                        + "function notify(){try{if(window.TekviewSelectionBridge){window.TekviewSelectionBridge.onSelectionChanged(active());}}catch(e){}}"
-                        + "window.__tekviewClearSelectionIfOffscreen=function(){"
+                        + "function notify(){try{if(window.TextViewSelectionBridge){window.TextViewSelectionBridge.onSelectionChanged(active());}}catch(e){}}"
+                        + "window.__textviewClearSelectionIfOffscreen=function(){"
                         + "try{var s=sel();if(!s||s.isCollapsed||s.rangeCount===0||String(s).length===0){notify();return false;}"
                         + "var r=s.getRangeAt(0);var rects=Array.prototype.slice.call(r.getClientRects()).filter(function(x){return x&&x.width>0&&x.height>0;});"
                         + "if(!rects.length){s.removeAllRanges();notify();return true;}"
@@ -958,7 +958,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                         + "document.addEventListener('selectionchange',function(){setTimeout(notify,0);},true);"
                         + "document.addEventListener('touchend',function(){setTimeout(notify,70);},true);"
                         + "document.addEventListener('mouseup',function(){setTimeout(notify,70);},true);"
-                        + "window.addEventListener('scroll',function(){clearTimeout(window.__tekviewScrollCleanupTimer);window.__tekviewScrollCleanupTimer=setTimeout(window.__tekviewClearSelectionIfOffscreen,80);},{passive:true});"
+                        + "window.addEventListener('scroll',function(){clearTimeout(window.__textviewScrollCleanupTimer);window.__textviewScrollCleanupTimer=setTimeout(window.__textviewClearSelectionIfOffscreen,80);},{passive:true});"
                         + "setTimeout(notify,120);return true;}catch(e){return false;}})()",
                 null);
     }
@@ -1972,8 +1972,8 @@ public class DocumentPageActivity extends AppCompatActivity {
         String filePath = resolveDocumentFontFilePath(value);
         if (filePath != null) {
             selectedDocumentFontFile = new File(filePath);
-            family = "'TekviewSelectedDocumentFont', " + fallback;
-            return "@font-face{font-family:'TekviewSelectedDocumentFont';src:url('https://" + LOCAL_HOST + FONT_PREFIX + "selected');}" +
+            family = "'TextViewSelectedDocumentFont', " + fallback;
+            return "@font-face{font-family:'TextViewSelectedDocumentFont';src:url('https://" + LOCAL_HOST + FONT_PREFIX + "selected');}" +
                     documentFontRule(family);
         }
         if (FontManager.isSystemFamilyValue(value)) {
@@ -2919,7 +2919,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         // Keep CSS minimal.  Do not force user-select/caret/handle behavior here:
         // WebView must own selection geometry or selection handles drift while the
         // document scrolls.
-        String css = "<style id=\"tekview-reader-theme\">" +
+        String css = "<style id=\"textview-reader-theme\">" +
                 "html,body{background:" + cssColor(readerBg) + " !important;color:" + cssColor(readerFg) +
                 " !important;}" +
                 "a{color:" + cssColor(linkColor) + " !important;}" +
@@ -3779,7 +3779,7 @@ public class DocumentPageActivity extends AppCompatActivity {
             int bottomMargin = margins[2];
             int minWidth = viewport[0] + (leftRight * 2);
             int minHeight = viewport[1] + topMargin + bottomMargin;
-            css = "<style id=\"tekview-fixed-layout-center\">"
+            css = "<style id=\"textview-fixed-layout-center\">"
                     + "html{margin:0 !important;padding:0 !important;width:auto !important;"
                     + "min-width:" + minWidth + "px !important;min-height:" + minHeight + "px !important;"
                     + "background:" + cssColor(readerBg) + " !important;overflow:auto !important;}"
@@ -3791,7 +3791,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                     + "body>img:only-child,body>svg:only-child{display:block;margin:0 auto;}"
                     + "</style>";
         } else {
-            css = "<style id=\"tekview-fixed-layout-center\">"
+            css = "<style id=\"textview-fixed-layout-center\">"
                     + "html{margin:0 !important;padding:0 !important;width:100vw !important;height:100vh !important;"
                     + "display:flex !important;align-items:center !important;justify-content:center !important;"
                     + "background:" + cssColor(readerBg) + " !important;overflow:auto !important;}"
@@ -3880,7 +3880,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         if (activityDestroyed) return;
         if (!fixedLayoutFindOffsetActive) {
             evaluateFixedLayoutCssJavascript(
-                    "(function(){var s=document.getElementById('tekview-fixed-layout-find-offset');if(s&&s.parentNode){s.parentNode.removeChild(s);}})();");
+                    "(function(){var s=document.getElementById('textview-fixed-layout-find-offset');if(s&&s.parentNode){s.parentNode.removeChild(s);}})();");
             return;
         }
         if (currentPage < 0 || currentPage >= pages.size()) return;
@@ -3903,8 +3903,8 @@ public class DocumentPageActivity extends AppCompatActivity {
                 + "padding:0 !important;box-sizing:border-box !important;position:relative !important;"
                 + "overflow:visible !important;background:transparent !important;}";
         String js = "(function(){var css='" + cssQuote(css) + "';"
-                + "var s=document.getElementById('tekview-fixed-layout-find-offset');"
-                + "if(!s){s=document.createElement('style');s.id='tekview-fixed-layout-find-offset';"
+                + "var s=document.getElementById('textview-fixed-layout-find-offset');"
+                + "if(!s){s=document.createElement('style');s.id='textview-fixed-layout-find-offset';"
                 + "(document.head||document.documentElement).appendChild(s);}"
                 + "s.textContent=css;})();";
         evaluateFixedLayoutCssJavascript(js);

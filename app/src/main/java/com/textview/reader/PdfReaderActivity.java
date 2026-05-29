@@ -232,11 +232,12 @@ public class PdfReaderActivity extends AppCompatActivity {
             @Override public void handleOnBackPressed() { finish(); }
         });
 
-        if (prefs.getBrightnessOverride()) {
-            WindowManager.LayoutParams lp = getWindow().getAttributes();
-            lp.screenBrightness = prefs.getBrightnessValue();
-            getWindow().setAttributes(lp);
-        }
+        // Brightness override is intentionally TXT-reader-only. PDF should always
+        // use the system brightness rather than inheriting a saved TXT brightness
+        // override from ReaderActivity.
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+        lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+        getWindow().setAttributes(lp);
 
         loadPdfFromIntent();
     }

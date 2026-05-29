@@ -25,7 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * TekView-style custom scroll reader.
+ * Custom scroll reader.
  *
  * This intentionally avoids RecyclerView for the main TXT body. The whole rendered text
  * has one fixed StaticLayout height, so page count is stable:
