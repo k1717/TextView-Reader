@@ -1,8 +1,25 @@
 # TextView Reader
 
-TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow inspired by TekView.
+TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow.
 
-Current version: **2.1.9**
+Current version: **2.2.0**
+
+
+## 2.2.0 release summary
+
+- Updated Android version metadata to `versionCode 2200` and `versionName "2.2.0"`.
+- Recent-file rows now show compact reading-progress percentages beside saved files, and long filenames remain clipped within the title area so the progress badge does not cover partially visible title text.
+- Starting TXT Auto Page Turn now closes the bottom toolbar and returns the TXT viewer to body reading mode before the timer begins.
+- Hardened legacy CJK encoding disambiguation so Chinese GBK / GB18030 / Big5 text is no longer pulled into Korean `windows-949` or single-byte code pages just because the wrong decode produces clean-looking characters.
+- Encoding-family conflict resolution now respects confident ICU/Mozilla family hints instead of forcing a fixed regional priority order. CJK hints still protect multibyte Chinese/Japanese/Korean text from single-byte theft, while confident single-byte hints for Western Latin, Greek, Cyrillic, Hebrew, Arabic, Thai, or Vietnamese are accepted when the detector path is not weak or internally conflicting. Weak US-ASCII fallback hints are still ignored. Concrete Western detector hints are accepted rather than being overridden by a Vietnamese heuristic; this matches the current policy of trusting explicit ICU/Mozilla family results while still ignoring weak US-ASCII-style fallbacks.
+- Vietnamese remains supported through `windows-1258` scoring/detection, but explicit Western detector hints are accepted by policy instead of being overridden by a Vietnamese heuristic.
+- Added detector-confirmed CJK safeguards: when Android ICU or Mozilla/JUniversalChardet reports a multibyte CJK family, alphabetic single-byte candidates such as Cyrillic, Greek, Hebrew, Arabic, Thai, Western, and Vietnamese are penalized by sample length so long Chinese text cannot be stolen by raw character-count bonuses.
+- Improved short high-byte sample handling so short Korean CP949 titles, first lines, and memo-like text resolve to Korean instead of scattering across Thai, Greek, Cyrillic, Western, or Vietnamese candidates, while sufficiently long direct detector matches for real short single-byte texts are protected from the CJK short-sample guard.
+- Tightened stateful 7-bit East Asian auto-detection. HZ-GB-2312, ISO-2022-JP, and ISO-2022-KR are now accepted automatically only when their real shift/designation signatures and valid 7-bit byte pairs are present. This prevents Korean Windows-949/CP949 and other legacy samples containing short `~{` or `ESC`-like ASCII from being misidentified as stateful encodings.
+- Kept manual HZ-GB-2312 / ISO-2022-JP / ISO-2022-KR selection available while removing loose stateful guesses from automatic legacy scoring and external detector hints.
+- Hardened loose no-BOM UTF-16 detection by requiring stronger zero-byte lane evidence, stronger decoded-text plausibility, and a clear endian winner before returning UTF-16LE/BE.
+- Fixed the TXT brightness dialog so the brightness slider changes the actual TXT window brightness only when **Override system brightness** / **시스템 밝기 대신 사용** is enabled. PDF, EPUB, and Word readers now remain on system brightness instead of inheriting TXT brightness override settings.
+- Restored the main folder overflow as a compact 170dp popup anchored to the three-dot button, with theme-colored surfaces, lightly rounded corners, no outline stroke, and only folder actions inside. Sort stays on the existing bottom sort button, Show hidden files toggles in place without closing the popup, using a compact muted O/X indicator in a fixed label/indicator column so English and Korean layouts stay aligned, while hidden-file toggles refresh the folder list without clearing it first, and New Folder opens the rounded main-theme action dialog.
 
 ## 2.1.9 release summary
 
@@ -54,7 +71,7 @@ Current version: **2.1.9**
 
 - Adjusted Deep Navy panel color to `#09122A`, tuned Deep Navy outline/selection/file-type chip colors, improved light-theme card contrast, fixed selected file-type chip text contrast, made file long-press highlight follow the active main theme, and raised main file/folder action dialogs slightly above the bottom file-type button area.
 
-## 2.1.8 release summary (Not released)
+## 2.1.8 release summary
 
 - Updated Android version metadata to `versionCode 2180` and `versionName "2.1.8"`.
 - Added JVM unit tests for TXT encoding detection covering Korean UTF-8, UTF-8 sample-boundary truncation, Korean legacy EUC-KR normalization, UTF-16 BOM handling, and BOM-less UTF-16LE detection.

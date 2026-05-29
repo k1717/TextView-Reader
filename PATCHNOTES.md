@@ -1,4 +1,51 @@
+## 2.2.0
+This 2.2.0 package is prepared as the current final-page navigation patch. It uses Android metadata `versionCode 2200` and `versionName "2.2.0"`.
+
+### CJK encoding disambiguation
+
+- Chinese GBK / GB18030 / Big5 text is no longer misidentified as Korean `windows-949` when CP949 misdecoding happens to produce many incidental Hangul code points.
+- Encoding-family conflict resolution now respects confident ICU/Mozilla family hints instead of forcing a fixed regional priority order. CJK hints still protect multibyte Chinese/Japanese/Korean text from single-byte theft, while confident single-byte hints for Western Latin, Greek, Cyrillic, Hebrew, Arabic, Thai, or Vietnamese are accepted when the detector path is not weak or internally conflicting. Weak US-ASCII fallback hints are still ignored. Concrete Western detector hints are accepted rather than being overridden by a Vietnamese heuristic; this matches the current policy of trusting explicit ICU/Mozilla family results while still ignoring weak US-ASCII-style fallbacks.
+- Vietnamese remains supported when the detector/scorer path identifies `windows-1258`; however, if ICU/Mozilla explicitly reports a Western family such as `windows-1252`, the current policy accepts that detector family rather than applying a separate Vietnamese override.
+- Korean scoring now cross-checks Chinese legacy decodes and detector family hints before accepting a strong Hangul signal, preventing fake-Hangul output from overpowering the correct Chinese family.
+- When Android ICU or Mozilla/JUniversalChardet reports a multibyte CJK family, alphabetic single-byte candidates such as Cyrillic, Greek, Hebrew, Arabic, Thai, Western, and Vietnamese receive a length-scaled penalty so CJK text does not win as apparently clean single-byte text.
+- Short high-byte samples now prefer a clean multibyte CJK interpretation over weak single-byte guesses. Short Korean CP949 titles and first lines now resolve to Korean instead of Thai / Greek / Cyrillic / Western / Vietnamese, while sufficiently long direct detector matches for real short single-byte texts such as Hebrew are not overridden by the CJK short-sample guard.
+- High-confidence Android ICU hints are no longer discarded only because the decoded text still contains literal control bytes; stateful ISO-2022 encodings remain excluded from this leniency and still require strict signatures.
+
+### Encoding detection hardening
+
+- Stateful 7-bit East Asian auto-detection now requires strict signatures: HZ-GB-2312 needs HZ shift-in/out, ISO-2022-JP needs real JIS state transitions, and ISO-2022-KR needs ESC designation plus SO/SI shifted byte pairs.
+- Korean Windows-949/CP949 and other legacy samples that merely contain `~{` or `ESC`-like ASCII no longer get accepted as HZ/ISO-2022 by automatic detection or detector-family hints.
+- Manual HZ-GB-2312, ISO-2022-JP, and ISO-2022-KR remain available in the encoding picker.
+- No-BOM UTF-16 detection now requires stronger zero-lane evidence, stronger decoded-text plausibility, and a clear endian winner before returning UTF-16LE/BE.
+
+### Tests and known limitation
+
+- Added regression coverage for Chinese GBK / GB18030 / Big5 across short, mid-length, and long samples; short Korean CP949 title/sentence samples; and existing Korean, Japanese, Cyrillic, and Unicode paths.
+- The CJK disambiguation tests are intended to cover the Android-ICU-present path and the Android-ICU-absent path where Mozilla/JUniversalChardet still provides detector hints. The package does not claim that the internal fallback-only scorer can perfectly classify Chinese legacy text when both detector paths are unavailable.
+- Two synthetic ESC-heavy CP949 tests remain `@Ignore`d because the base scorer can still prefer a windows-874 misdecode when hundreds of literal ESC bytes are injected. The ISO-2022 misdetection itself is blocked by the strict stateful-signature guard, and the pattern is tracked as a low-risk future base-scoring refinement.
+
+### Brightness dialog
+
+- The TXT brightness slider now changes the actual screen brightness only when **Override system brightness** is enabled.
+- Enabling the switch applies the saved brightness immediately; disabling it clears the TXT window override and returns to system brightness.
+- PDF, EPUB, and Word readers stay on system brightness instead of inheriting TXT brightness override settings.
+
+### Recent-list progress and TXT auto-turn reading mode
+
+- Recent-file rows now show a compact reading-progress percentage beside files with saved reading state, using the cached page/total or saved character position without affecting normal folder rows. Long filenames remain clipped inside their row text area so the progress badge does not cover partially visible title text.
+- Starting TXT Auto Page Turn now closes the bottom toolbar and returns the TXT viewer to body reading mode before the timer begins.
+
+### Main folder action UI
+
+- Restored the main folder overflow as a compact 170dp popup anchored to the three-dot button, with theme-colored surfaces, lightly rounded corners, no outline stroke, and only folder actions inside. Sort remains on the existing bottom sort button.
+- Changed New Folder so selecting it from the overflow popup opens the same rounded main-theme UI style used by the other file/folder action dialogs, while Show hidden files toggles on/off in place without closing the popup and uses a compact muted O/X indicator in a fixed label/indicator column so English and Korean layouts stay aligned, and toggles hidden files by refreshing the current directory without clearing the visible list first.
+
+### Build metadata
+
+- Android app metadata is `versionCode 2200` and `versionName "2.2.0"`.
+
 ## 2.1.9
+This 2.1.9 package is prepared as the current final-page navigation patch. It uses Android metadata `versionCode 2190` and `versionName "2.1.9"`.
 
 ### Reading theme and TXT rule UI polish
 
@@ -36,8 +83,6 @@
 - File-row long-hold highlight now rebinds on theme changes, preventing stale pressed colors from carrying across Light/Dark/Deep Navy/Custom modes.
 - Custom main-theme default base colors now follow the Deep Navy palette, including reading-card `#00091D` and shortcut-box `#001530` defaults.
 - Restored rounded progress mapping for font-size and line-spacing sliders so reopened settings match the value shown while adjusting.
-
-This 2.1.9 package is prepared as the current final-page navigation patch. It uses Android metadata `versionCode 2190` and `versionName "2.1.9"`.
 
 ### Large TXT final-page navigation
 

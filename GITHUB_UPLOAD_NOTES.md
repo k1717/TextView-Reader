@@ -1,18 +1,34 @@
-# TextView Reader 2.1.9 GitHub Upload Notes
+# TextView Reader 2.2.0 GitHub Upload Notes
 
-Use this package as the GitHub submission source for **TextView Reader 2.1.9**.
+Use this package as the GitHub submission source for **TextView Reader 2.2.0**.
 
 This source package uses Android metadata:
 
-- `versionCode 2190`
-- `versionName "2.1.9"`
+- `versionCode 2200`
+- `versionName "2.2.0"`
 - package ID `com.textview.reader`
 
-## 2.1.9 release summary
+## 2.2.0 release summary
 
-2.1.9 is a UI/theme polish and large-TXT navigation maintenance release. The final uploaded source should include only the final behavior, not the intermediate trial patches.
+2.2.0 is an encoding-detection hardening and brightness-override maintenance release based on the finalized 2.1.9 UI/theme source. The final uploaded source should include only the final behavior, not the intermediate trial patches.
 
 Highlights:
+
+- Updated Android metadata to `versionCode 2200` and `versionName "2.2.0"`.
+- Recent-file rows now show compact reading-progress percentages beside saved files, and long filenames remain clipped within the title area so the progress badge does not cover partially visible title text.
+- Starting TXT Auto Page Turn now closes the bottom toolbar and returns the TXT viewer to body reading mode before the timer begins.
+- Hardened CJK legacy disambiguation so Chinese GBK / GB18030 / Big5 text is not pulled into Korean `windows-949` or alphabetic single-byte encodings by fake-clean decoded output.
+- Encoding-family conflict resolution now respects confident ICU/Mozilla family hints instead of forcing a fixed regional priority order. CJK hints still protect multibyte Chinese/Japanese/Korean text from single-byte theft, while confident single-byte hints for Western Latin, Greek, Cyrillic, Hebrew, Arabic, Thai, or Vietnamese are accepted when the detector path is not weak or internally conflicting. Weak US-ASCII fallback hints are still ignored. Concrete Western detector hints are accepted rather than being overridden by a Vietnamese heuristic; this matches the current policy of trusting explicit ICU/Mozilla family results while still ignoring weak US-ASCII-style fallbacks.
+- Vietnamese remains supported when the detector/scorer path identifies `windows-1258`; however, if ICU/Mozilla explicitly reports a Western family such as `windows-1252`, the current policy accepts that detector family rather than applying a separate Vietnamese override.
+- Added detector-confirmed CJK safeguards using Android ICU and Mozilla/JUniversalChardet family hints; when a multibyte CJK family is detected, Cyrillic / Greek / Hebrew / Arabic / Thai / Western / Vietnamese single-byte candidates are penalized by sample length.
+- Improved short high-byte handling so short Korean CP949 titles and first lines resolve to Korean instead of weak Thai / Greek / Cyrillic / Western / Vietnamese guesses, while sufficiently long direct detector matches for real short single-byte texts are protected from the CJK short-sample guard.
+- Tightened stateful 7-bit East Asian auto-detection so HZ-GB-2312, ISO-2022-JP, and ISO-2022-KR require concrete shift/designation signatures before auto-selection; manual selection remains available.
+- Hardened loose no-BOM UTF-16 detection by requiring stronger zero-byte lane evidence, stronger decoded-text plausibility, and a clear endian winner before returning UTF-16LE/BE.
+- Fixed the TXT brightness dialog so **Override system brightness** controls whether the app applies the slider value to the TXT window; PDF, EPUB, and Word readers stay on system brightness.
+- Restored the main folder overflow as a compact 170dp popup anchored to the three-dot button, kept Sort on the existing bottom sort button, used lightly rounded theme-colored popup surfaces without an outline stroke, made Show hidden files toggle in place with a compact muted O/X indicator in a fixed label/indicator column so English and Korean layouts stay aligned, and hidden-file toggles refresh the folder list without the full-list clearing flicker, and made New Folder open the rounded main-theme UI used by other file/folder action dialogs.
+- Regression tests cover CJK disambiguation, short Korean CP949 samples, and existing Korean / Japanese / Cyrillic / Unicode paths. Two synthetic ESC-heavy CP949 tests remain marked as known low-risk base-scoring limitations because strict stateful signatures already block the ISO-2022 misdetection they were meant to catch.
+
+2.1.9 UI/theme baseline retained:
 
 - Finalized Deep Navy / 짙은 남색 테마 colors across the main screen, drawer, shortcut boxes, file-type buttons, selected states, and reading-theme cards.
 - Added custom main-theme controls for selected surfaces, shortcut boxes, and drawer bottom icon color while keeping custom defaults aligned with the Deep Navy palette.
@@ -32,7 +48,7 @@ Highlights:
 ## Suggested commit message
 
 ```text
-Update TextView Reader 2.1.9 source
+Update TextView Reader 2.2.0 source
 ```
 
 ## Safe upload contents
@@ -104,7 +120,7 @@ captures/
 6. Click **Add file > Upload files**.
 7. Drag the selected contents into GitHub.
 8. Wait until GitHub finishes processing the files.
-9. Commit with the suggested message above, or a similarly concise 2.1.9 update message.
+9. Commit with the suggested message above, or a similarly concise 2.2.0 update message.
 
 ## Important limitation
 

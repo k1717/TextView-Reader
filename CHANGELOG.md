@@ -1,5 +1,47 @@
+## 2.2.0 - 2026-05-28
+This package uses Android metadata `versionCode 2200` and `versionName "2.2.0"`.
+
+### CJK encoding disambiguation
+
+- Vietnamese remains supported when the detector/scorer path identifies `windows-1258`; however, if ICU/Mozilla explicitly reports a Western family such as `windows-1252`, the current policy accepts that detector family rather than applying a separate Vietnamese override.
+- Fixed a family of detection weaknesses where East Asian and other multibyte text could be misread as the wrong family because single-byte and CP949 misdecodes produce "clean"-looking but wrong characters that the scorer rewarded.
+- Encoding-family conflict resolution now respects confident ICU/Mozilla family hints instead of forcing a fixed regional priority order. CJK hints still protect multibyte Chinese/Japanese/Korean text from single-byte theft, while confident single-byte hints for Western Latin, Greek, Cyrillic, Hebrew, Arabic, Thai, or Vietnamese are accepted when the detector path is not weak or internally conflicting. Weak US-ASCII fallback hints are still ignored.
+- Chinese legacy text (GBK / GB18030 / Big5) is no longer misidentified as Korean `windows-949`. Reading Chinese bytes through CP949 yields many incidental Hangul code points; a cross-check now decodes the same bytes through the strongest available Chinese charset and, together with ICU/Mozilla detector agreement, suppresses the spurious Korean signal so the correct Chinese family wins. Genuine Hangul-dominant Korean text is unaffected.
+- Generalized this into a detector-driven guard: when ICU or Mozilla reports a multibyte CJK encoding but a candidate is a single-byte alphabetic code page (Cyrillic, Greek, Hebrew, Arabic, Thai, Western, Vietnamese), that candidate is penalized by an amount that scales with length, so CJK text cannot win as "clean" single-byte text on raw character-count bonuses. GBK / GB18030 / Big5 now resolve to Chinese across short, medium, and long samples.
+- Short high-byte samples (titles, first lines, memos) no longer scatter across single-byte code pages: when a short sample decodes cleanly as a multibyte CJK charset, single-byte families are penalized so the multibyte interpretation is preferred. Short Korean CP949 titles now resolve to Korean instead of Thai/Greek/Cyrillic/Western, while sufficiently long direct detector matches for real short single-byte text, such as Hebrew Windows-1255, are protected from the CJK short-sample guard.
+- `detectWithAndroidIcu` no longer discards a high-confidence (>= 90) ICU result solely because the decoded text contains literal control bytes, which survive any decode and carry little discriminating power. Stateful ISO-2022 encodings remain excluded from this leniency.
+- Extended detector-driven disambiguation to single-byte scripts without a fixed regional override: when ICU/Mozilla confidently identifies one single-byte family and the detector path is not conflicting, other single-byte families are penalized by sample length so the detector-identified script can win over raw character-count bonuses. If ICU and Mozilla disagree on different confident single-byte families, the fixed priority shortcut is not used and normal accuracy scoring decides. Weak US-ASCII-style Western fallback hints are still ignored.
+- A confident Western pick (an explicitly named Windows-1252 / ISO-8859-1 / ISO-8859-15 / MacRoman hint) is respected so genuine Western Latin text is no longer pulled into Greek or Cyrillic. Weak US-ASCII-style fallback hints remain ignored, but concrete ICU/Mozilla single-byte family hints are not overridden by a separate regional priority rule. This intentionally favors detector-confirmed Western text over Southeast Asian-looking alternatives when the detector path is explicit.
+
+### Tests
+
+- Added regression coverage for Chinese GBK / GB18030 / Big5 across short, mid-length ~800 byte, and long samples; short Korean CP949 titles/sentences; and existing Korean, Japanese, Cyrillic, and Unicode paths. These tests cover the Android-ICU-present path and the Android-ICU-absent path where Mozilla/JUniversalChardet still supplies detector hints; they do not claim perfect Chinese classification from the internal fallback-only scorer when both detector paths are unavailable.
+- Two pre-existing escape-sequence tests (`detect_koreanWindows949WithIso2022JpEscape`, `detect_koreanWindows949WithIso2022KrDesignation`) are `@Ignore`d. ICU now correctly identifies the input as EUC-KR, but base scoring still favors the windows-874 misdecode for text saturated with hundreds of literal ESC bytes — a synthetic pattern that does not occur in real Korean files. The ISO-2022 misdetection these tests guard against does not occur. Tracked for a future base-scoring refinement.
+
+### Encoding detection hardening
+
+- Tightened stateful 7-bit East Asian automatic detection so HZ-GB-2312, ISO-2022-JP, and ISO-2022-KR require their concrete shift/designation signatures and valid byte-pair structure before auto-selection.
+- Prevented Korean Windows-949/CP949 and other legacy text containing short `~{` or `ESC`-like ASCII from being stolen by HZ/ISO-2022 detector hints or automatic legacy scoring.
+- Manual HZ-GB-2312, ISO-2022-JP, and ISO-2022-KR selection remains available.
+- Hardened no-BOM UTF-16 heuristics by requiring stronger zero-byte lane evidence, stronger decoded-text plausibility, and a clear endian winner before returning UTF-16LE/BE.
+
+### Brightness override
+
+- Fixed the TXT brightness dialog so moving the slider updates the TXT window brightness only while **Override system brightness** / **시스템 밝기 대신 사용** is enabled.
+- Turning the override on immediately applies the saved app brightness, while turning it off clears the TXT window override back to system brightness.
+- PDF, EPUB, and Word readers stay on system brightness instead of inheriting TXT brightness override settings.
+
+### Recent-list progress and TXT auto-turn reading mode
+
+- Recent-file rows now show a compact reading-progress percentage beside files with saved reading state, using the cached page/total or saved character position without affecting normal folder rows. Long filenames remain clipped inside their row text area so the progress badge does not cover partially visible title text.
+- Starting TXT Auto Page Turn now closes the bottom toolbar and returns the TXT viewer to body reading mode before the timer begins.
+
+### Main folder action UI
+
+- Restored the main folder overflow as a compact 170dp popup anchored to the three-dot button, with theme-colored surfaces, lightly rounded corners, no outline stroke, and only folder actions inside. Sort remains on the existing bottom sort button.
+- Changed New Folder so selecting it from the overflow popup opens the same rounded main-theme UI style used by the other file/folder action dialogs, while Show hidden files toggles on/off in place without closing the popup and uses a compact muted O/X indicator in a fixed label/indicator column so English and Korean layouts stay aligned, and toggles hidden files by refreshing the current directory without clearing the visible list first.
+
 ## 2.1.9 - 2026-05-26
-This package used Android metadata `versionCode 2190` and `versionName "2.1.9"`.
 
 ### Reading theme and TXT rule UI polish
 
@@ -35,6 +77,8 @@ This package used Android metadata `versionCode 2190` and `versionName "2.1.9"`.
 - Custom main-theme default base colors now follow the Deep Navy palette, including reading-card `#00091D` and shortcut-box `#001530` defaults.
 - Restored rounded progress mapping for font-size and line-spacing sliders so reopened settings match the value shown while adjusting.
 
+This package uses Android metadata `versionCode 2190` and `versionName "2.1.9"`.
+
 ### Large TXT final-page navigation
 
 - Canonicalized large-TXT final-page programmatic navigation to the final exact page anchor instead of the physical visual EOF.
@@ -61,7 +105,7 @@ This package used Android metadata `versionCode 2190` and `versionName "2.1.9"`.
 - Adjusted Deep Navy panel color to `#09122A`, tuned Deep Navy outline/selection/file-type chip colors, improved light-theme card surfaces, fixed selected file-type chip text contrast, made file long-press highlight follow the active main theme, and raised main file/folder action dialogs slightly above the bottom file-type button area.
 
 ## 2.1.8 - 2026-05-26
-This version was not published
+This package used Android metadata `versionCode 2180` and `versionName "2.1.8"`.
 
 ### Encoding detection test coverage
 
