@@ -19,7 +19,6 @@ import android.text.Editable;
 import android.text.InputFilter;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
-import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
@@ -74,10 +73,10 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_TXT_ACTUAL_FILE_EDIT_LAST_MODIFIED = "modified_last_modified";
     private static final long TXT_ACTUAL_FILE_EDIT_LARGE_WARNING_BYTES = 32L * 1024L * 1024L;
 
-    private PrefsManager prefs;
+    PrefsManager prefs;
     private BookmarkManager bookmarkManager;
     private ThemeManager themeManager;
-    private String currentTxtFilePath;
+    String currentTxtFilePath;
 
     private final ActivityResultLauncher<String> exportLauncher =
             registerForActivityResult(new ActivityResultContracts.CreateDocument("application/json"),
@@ -120,15 +119,9 @@ public class SettingsActivity extends AppCompatActivity {
         suppressLanguageRadioEffects();
         setupDarkMode();
         setupCustomMainThemeColors();
-        setupFontSize();
-        setupLineSpacing();
-        setupTextZoneTuning();
-        setupLargeTextPartitionMode();
+        setupReaderControls();
         setupTextDisplayRules();
         setupTextDisplayRulesActualFile();
-        setupEpubBoundary();
-        setupEpubPageBehavior();
-        setupSwitches();
         setupLock();
         setupExportImport();
         setupResetSettings();
@@ -236,604 +229,40 @@ public class SettingsActivity extends AppCompatActivity {
         });
     }
 
+    private SettingsMainCustomThemeController mainCustomThemeController() {
+        return new SettingsMainCustomThemeController(this);
+    }
+
     private void setupCustomMainThemeColors() {
-        EditText bg = findViewById(R.id.main_custom_bg_hex);
-        EditText panel = findViewById(R.id.main_custom_panel_hex);
-        EditText bar = findViewById(R.id.main_custom_bar_hex);
-        EditText text = findViewById(R.id.main_custom_text_hex);
-        EditText sub = findViewById(R.id.main_custom_sub_hex);
-        EditText outline = findViewById(R.id.main_custom_outline_hex);
-        EditText selected = findViewById(R.id.main_custom_selected_hex);
-        EditText fileTypeChip = findViewById(R.id.main_custom_file_type_chip_hex);
-        EditText selectedFileTypeChip = findViewById(R.id.main_custom_file_type_chip_selected_hex);
-        EditText readingCard = findViewById(R.id.main_custom_reading_card_hex);
-        EditText shortcutBox = findViewById(R.id.main_custom_shortcut_box_hex);
-        EditText drawerActionIcon = findViewById(R.id.main_custom_drawer_action_icon_hex);
-        MaterialButton apply = findViewById(R.id.btn_apply_custom_main_theme);
-        if (bg == null || panel == null || bar == null || text == null || sub == null || outline == null || selected == null || fileTypeChip == null || selectedFileTypeChip == null || readingCard == null || shortcutBox == null || drawerActionIcon == null || apply == null) return;
-
-        bg.setText(colorToHex(prefs.getMainCustomBgColor()));
-        panel.setText(colorToHex(prefs.getMainCustomPanelColor()));
-        bar.setText(colorToHex(prefs.getMainCustomBarColor()));
-        text.setText(colorToHex(prefs.getMainCustomTextColor()));
-        sub.setText(colorToHex(prefs.getMainCustomSubTextColor()));
-        outline.setText(colorToHex(prefs.getMainCustomOutlineColor()));
-        selected.setText(colorToHex(prefs.getMainCustomSelectedColor()));
-        fileTypeChip.setText(colorToHex(prefs.getMainCustomFileTypeChipColor()));
-        selectedFileTypeChip.setText(colorToHex(prefs.getMainCustomFileTypeChipSelectedColor()));
-        readingCard.setText(colorToHex(prefs.getMainCustomReadingThemeCardColor()));
-        shortcutBox.setText(colorToHex(prefs.getMainCustomShortcutBoxColor()));
-        drawerActionIcon.setText(colorToHex(prefs.getMainCustomDrawerActionIconColor()));
-
-        for (EditText customHexField : new EditText[]{bg, panel, bar, text, sub, outline, selected, fileTypeChip, selectedFileTypeChip, readingCard, shortcutBox, drawerActionIcon}) {
-            configureMainCustomHexInput(customHexField);
-            applyMainCustomHexFieldPadding(customHexField);
-        }
-
-        attachMainCustomRgbSliders(bg, prefs.getMainCustomBgColor());
-        attachMainCustomRgbSliders(panel, prefs.getMainCustomPanelColor());
-        attachMainCustomRgbSliders(bar, prefs.getMainCustomBarColor());
-        attachMainCustomRgbSliders(text, prefs.getMainCustomTextColor());
-        attachMainCustomRgbSliders(sub, prefs.getMainCustomSubTextColor());
-        attachMainCustomRgbSliders(outline, prefs.getMainCustomOutlineColor());
-        attachMainCustomRgbSliders(selected, prefs.getMainCustomSelectedColor());
-        attachMainCustomRgbSliders(fileTypeChip, prefs.getMainCustomFileTypeChipColor());
-        attachMainCustomRgbSliders(selectedFileTypeChip, prefs.getMainCustomFileTypeChipSelectedColor());
-        attachMainCustomRgbSliders(readingCard, prefs.getMainCustomReadingThemeCardColor());
-        attachMainCustomRgbSliders(shortcutBox, prefs.getMainCustomShortcutBoxColor());
-        attachMainCustomRgbSliders(drawerActionIcon, prefs.getMainCustomDrawerActionIconColor());
-
-        apply.setOnClickListener(v -> {
-            Integer bgColor = readHexColor(bg);
-            Integer panelColor = readHexColor(panel);
-            Integer barColor = readHexColor(bar);
-            Integer textColor = readHexColor(text);
-            Integer subColor = readHexColor(sub);
-            Integer outlineColor = readHexColor(outline);
-            Integer selectedColor = readHexColor(selected);
-            Integer fileTypeChipColor = readHexColor(fileTypeChip);
-            Integer selectedFileTypeChipColor = readHexColor(selectedFileTypeChip);
-            Integer readingCardColor = readHexColor(readingCard);
-            Integer shortcutBoxColor = readHexColor(shortcutBox);
-            Integer drawerActionIconColor = readHexColor(drawerActionIcon);
-            if (bgColor == null || panelColor == null || barColor == null
-                    || textColor == null || subColor == null || outlineColor == null || selectedColor == null
-                    || fileTypeChipColor == null || selectedFileTypeChipColor == null
-                    || readingCardColor == null || shortcutBoxColor == null || drawerActionIconColor == null) {
-                Toast.makeText(this, R.string.invalid_hex_color, Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            prefs.setMainCustomColors(bgColor, panelColor, barColor, textColor, subColor, outlineColor, selectedColor, readingCardColor, shortcutBoxColor, drawerActionIconColor);
-            prefs.setMainCustomFileTypeChipColors(fileTypeChipColor, selectedFileTypeChipColor);
-            if (prefs.getDarkMode() != PrefsManager.DARK_MODE_CUSTOM) {
-                prefs.setDarkMode(PrefsManager.DARK_MODE_CUSTOM);
-            } else {
-                prefs.applyDarkMode(PrefsManager.DARK_MODE_CUSTOM);
-            }
-            Toast.makeText(this, R.string.custom_main_theme_applied, Toast.LENGTH_SHORT).show();
-            recreate();
-        });
-
-        updateCustomMainThemeSectionVisibility();
-    }
-
-    private void attachMainCustomRgbSliders(@NonNull EditText field, int initialColor) {
-        ViewParent rawParent = field.getParent();
-        if (!(rawParent instanceof LinearLayout)) return;
-        LinearLayout parent = (LinearLayout) rawParent;
-        final boolean[] suppress = new boolean[]{false};
-
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(16));
-
-        TextView sliderHint = new TextView(this);
-        sliderHint.setText(getString(R.string.main_custom_rgb_sliders));
-        sliderHint.setTextSize(12f);
-        sliderHint.setTextColor(prefs != null ? prefs.getMainSubTextColor(this) : Color.rgb(120, 120, 120));
-        sliderHint.setPadding(0, 0, 0, dpToPx(6));
-        box.addView(sliderHint, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        SeekBar red = new SeekBar(this);
-        SeekBar green = new SeekBar(this);
-        SeekBar blue = new SeekBar(this);
-        TextView redValue = new TextView(this);
-        TextView greenValue = new TextView(this);
-        TextView blueValue = new TextView(this);
-
-        addMainCustomColorSliderRow(box, "R", red, redValue);
-        addMainCustomColorSliderRow(box, "G", green, greenValue);
-        addMainCustomColorSliderRow(box, "B", blue, blueValue);
-
-        SeekBar[] bars = new SeekBar[]{red, green, blue};
-        TextView[] values = new TextView[]{redValue, greenValue, blueValue};
-        for (SeekBar bar : bars) {
-            bar.setMax(255);
-        }
-
-        Runnable updateHexFromSliders = () -> {
-            int color = Color.rgb(red.getProgress(), green.getProgress(), blue.getProgress());
-            suppress[0] = true;
-            field.setText(colorToHex(color));
-            field.setSelection(field.getText().length());
-            suppress[0] = false;
-            field.setError(null);
-            applyMainCustomHexFieldPreview(field, color);
-        };
-
-        SeekBar.OnSeekBarChangeListener listener = new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                updateMainCustomSliderValueLabels(bars, values);
-                if (fromUser && !suppress[0]) updateHexFromSliders.run();
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-        };
-        red.setOnSeekBarChangeListener(listener);
-        green.setOnSeekBarChangeListener(listener);
-        blue.setOnSeekBarChangeListener(listener);
-
-        setMainCustomSlidersFromColor(bars, values, initialColor, suppress);
-        applyMainCustomHexFieldPreview(field, initialColor);
-
-        field.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence text, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence text, int start, int before, int count) {
-                if (suppress[0]) return;
-                Integer parsed = parseHexColor(text != null ? text.toString() : null);
-                if (parsed != null) {
-                    setMainCustomSlidersFromColor(bars, values, parsed, suppress);
-                    applyMainCustomHexFieldPreview(field, parsed);
-                    field.setError(null);
-                } else {
-                    applyMainCustomHexFieldInvalidPreview(field);
-                }
-            }
-            @Override public void afterTextChanged(Editable editable) {}
-        });
-
-        field.setOnFocusChangeListener((v, hasFocus) -> {
-            if (!hasFocus) {
-                Integer parsed = parseHexColor(field.getText().toString());
-                if (parsed != null) {
-                    suppress[0] = true;
-                    field.setText(colorToHex(parsed));
-                    field.setSelection(field.getText().length());
-                    suppress[0] = false;
-                    setMainCustomSlidersFromColor(bars, values, parsed, suppress);
-                    applyMainCustomHexFieldPreview(field, parsed);
-                    field.setError(null);
-                }
-            }
-        });
-
-        int index = parent.indexOfChild(field);
-        if (index >= 0) {
-            parent.addView(box, index + 1);
-        }
-    }
-
-    private void applyMainCustomHexFieldPadding(@NonNull EditText field) {
-        field.setMinHeight(dpToPx(48));
-        field.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
-        field.setPadding(dpToPx(18), 0, dpToPx(18), 0);
-        field.setIncludeFontPadding(false);
-    }
-
-    private void applyMainCustomHexFieldPreview(@NonNull EditText field, int color) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(color);
-        bg.setCornerRadius(dpToPx(10));
-        int stroke = readableTextColorForMainCustomColor(color);
-        bg.setStroke(Math.max(1, dpToPx(1)), blendColorForMainPreview(color, stroke, 0.52f));
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            field.setBackgroundTintList(null);
-        }
-        field.setBackground(bg);
-        applyMainCustomHexFieldPadding(field);
-
-        int textColor = readableTextColorForMainCustomColor(color);
-        field.setTextColor(textColor);
-        field.setHintTextColor(blendColorForMainPreview(color, textColor, 0.68f));
-        field.invalidate();
-    }
-
-    private void applyMainCustomHexFieldInvalidPreview(@NonNull EditText field) {
-        GradientDrawable bg = new GradientDrawable();
-        int base = prefs != null ? prefs.getMainPanelColor(this) : Color.rgb(245, 245, 245);
-        int fg = prefs != null ? prefs.getMainTextColor(this) : Color.rgb(32, 33, 36);
-        bg.setColor(base);
-        bg.setCornerRadius(dpToPx(10));
-        bg.setStroke(Math.max(1, dpToPx(1)), Color.rgb(190, 70, 70));
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            field.setBackgroundTintList(null);
-        }
-        field.setBackground(bg);
-        applyMainCustomHexFieldPadding(field);
-        field.setTextColor(fg);
-        field.setHintTextColor(prefs != null ? prefs.getMainSubTextColor(this) : Color.rgb(120, 120, 120));
-        field.invalidate();
-    }
-
-    private boolean isMainCustomHexField(@NonNull EditText field) {
-        int id = field.getId();
-        return id == R.id.main_custom_bg_hex
-                || id == R.id.main_custom_panel_hex
-                || id == R.id.main_custom_bar_hex
-                || id == R.id.main_custom_text_hex
-                || id == R.id.main_custom_sub_hex
-                || id == R.id.main_custom_outline_hex
-                || id == R.id.main_custom_selected_hex
-                || id == R.id.main_custom_file_type_chip_hex
-                || id == R.id.main_custom_file_type_chip_selected_hex
-                || id == R.id.main_custom_reading_card_hex
-                || id == R.id.main_custom_shortcut_box_hex
-                || id == R.id.main_custom_drawer_action_icon_hex;
+        mainCustomThemeController().setupCustomMainThemeColors();
     }
 
     private void refreshMainCustomHexFieldPreviews() {
-        int[] ids = new int[]{
-                R.id.main_custom_bg_hex,
-                R.id.main_custom_panel_hex,
-                R.id.main_custom_bar_hex,
-                R.id.main_custom_text_hex,
-                R.id.main_custom_sub_hex,
-                R.id.main_custom_outline_hex,
-                R.id.main_custom_selected_hex,
-                R.id.main_custom_file_type_chip_hex,
-                R.id.main_custom_file_type_chip_selected_hex,
-                R.id.main_custom_reading_card_hex,
-                R.id.main_custom_shortcut_box_hex,
-                R.id.main_custom_drawer_action_icon_hex
-        };
-        for (int id : ids) {
-            EditText field = findViewById(id);
-            if (field == null) continue;
-            Integer parsed = parseHexColor(field.getText() != null ? field.getText().toString() : null);
-            if (parsed != null) {
-                applyMainCustomHexFieldPreview(field, parsed);
-            } else {
-                applyMainCustomHexFieldInvalidPreview(field);
-            }
-        }
-    }
-
-    private int readableTextColorForMainCustomColor(int color) {
-        double luminance = (0.299 * Color.red(color)
-                + 0.587 * Color.green(color)
-                + 0.114 * Color.blue(color)) / 255.0;
-        return luminance > 0.56 ? Color.rgb(24, 28, 34) : Color.rgb(238, 246, 255);
-    }
-
-    private int blendColorForMainPreview(int bottomColor, int topColor, float topAlpha) {
-        topAlpha = Math.max(0f, Math.min(1f, topAlpha));
-        float bottomAlpha = 1f - topAlpha;
-        int r = Math.round(Color.red(topColor) * topAlpha + Color.red(bottomColor) * bottomAlpha);
-        int g = Math.round(Color.green(topColor) * topAlpha + Color.green(bottomColor) * bottomAlpha);
-        int b = Math.round(Color.blue(topColor) * topAlpha + Color.blue(bottomColor) * bottomAlpha);
-        return Color.rgb(r, g, b);
-    }
-
-    private void addMainCustomColorSliderRow(@NonNull LinearLayout parent,
-                                             @NonNull String label,
-                                             @NonNull SeekBar seekBar,
-                                             @NonNull TextView value) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dpToPx(2), 0, dpToPx(6));
-
-        TextView labelView = new TextView(this);
-        labelView.setText(label);
-        labelView.setGravity(Gravity.CENTER);
-        labelView.setTextSize(12f);
-        labelView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        labelView.setTextColor(prefs != null ? prefs.getMainTextColor(this) : Color.rgb(32, 33, 36));
-        row.addView(labelView, new LinearLayout.LayoutParams(dpToPx(24), LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        row.addView(seekBar, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-
-        value.setGravity(Gravity.CENTER);
-        value.setTextSize(12f);
-        value.setSingleLine(true);
-        value.setTextColor(prefs != null ? prefs.getMainSubTextColor(this) : Color.rgb(120, 120, 120));
-        row.addView(value, new LinearLayout.LayoutParams(dpToPx(42), LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        parent.addView(row, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-    }
-
-    private void setMainCustomSlidersFromColor(@NonNull SeekBar[] bars,
-                                               @NonNull TextView[] values,
-                                               int color,
-                                               @NonNull boolean[] suppress) {
-        suppress[0] = true;
-        bars[0].setProgress(Color.red(color));
-        bars[1].setProgress(Color.green(color));
-        bars[2].setProgress(Color.blue(color));
-        suppress[0] = false;
-        updateMainCustomSliderValueLabels(bars, values);
-    }
-
-    private void updateMainCustomSliderValueLabels(@NonNull SeekBar[] bars,
-                                                   @NonNull TextView[] values) {
-        for (int i = 0; i < bars.length && i < values.length; i++) {
-            values[i].setText(String.valueOf(bars[i].getProgress()));
-        }
+        mainCustomThemeController().refreshMainCustomHexFieldPreviews();
     }
 
     private void updateCustomMainThemeSectionVisibility() {
-        View section = findViewById(R.id.main_custom_theme_section);
-        if (section != null) {
-            section.setVisibility(prefs != null && prefs.getDarkMode() == PrefsManager.DARK_MODE_CUSTOM
-                    ? View.VISIBLE
-                    : View.GONE);
-        }
-    }
-
-    private void configureMainCustomHexInput(@NonNull EditText field) {
-        field.setSingleLine(true);
-        field.setFilters(new InputFilter[]{new InputFilter.LengthFilter(7)});
-        field.setKeyListener(DigitsKeyListener.getInstance("#0123456789abcdefABCDEF"));
-    }
-
-    private Integer readHexColor(EditText field) {
-        Integer color = parseHexColor(field != null ? field.getText().toString() : null);
-        if (field != null) field.setError(color == null ? getString(R.string.invalid_hex_color) : null);
-        return color;
+        mainCustomThemeController().updateCustomMainThemeSectionVisibility();
     }
 
     private Integer parseHexColor(String raw) {
-        if (raw == null) return null;
-        String value = raw.trim();
-        if (value.startsWith("#")) value = value.substring(1);
-        if (value.length() != 6 || !value.matches("[0-9a-fA-F]{6}")) return null;
-        try {
-            return Color.rgb(
-                    Integer.parseInt(value.substring(0, 2), 16),
-                    Integer.parseInt(value.substring(2, 4), 16),
-                    Integer.parseInt(value.substring(4, 6), 16));
-        } catch (NumberFormatException e) {
-            return null;
-        }
+        return SettingsMainCustomThemeController.parseHexColor(raw);
     }
 
-    private String colorToHex(int color) {
-        return String.format(Locale.US, "#%02X%02X%02X", Color.red(color), Color.green(color), Color.blue(color));
+    private void applyMainCustomHexFieldPreview(@NonNull EditText field, int color) {
+        mainCustomThemeController().applyMainCustomHexFieldPreview(field, color);
     }
 
-    private void setupFontSize() {
-        SeekBar sb = findViewById(R.id.font_size_seekbar);
-        TextView label = findViewById(R.id.font_size_label);
-        float current = prefs.getFontSize();
-        sb.setMax(40);
-        sb.setProgress(Math.round(current - 8f));
-        label.setText(String.format(getString(R.string.font_size_format), current));
-        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
-                float size = p + 8f;
-                label.setText(String.format(getString(R.string.font_size_format), size));
-                if (fromUser) prefs.setFontSize(size);
-            }
-            @Override public void onStartTrackingTouch(SeekBar s) {}
-            @Override public void onStopTrackingTouch(SeekBar s) {}
-        });
+    private void applyMainCustomHexFieldInvalidPreview(@NonNull EditText field) {
+        mainCustomThemeController().applyMainCustomHexFieldInvalidPreview(field);
     }
 
-    private void setupLineSpacing() {
-        SeekBar sb = findViewById(R.id.line_spacing_seekbar);
-        TextView label = findViewById(R.id.line_spacing_label);
-        float current = prefs.getLineSpacing();
-        sb.setMax(20);
-        sb.setProgress(Math.round((current - 1.0f) * 10f));
-        label.setText(String.format(getString(R.string.line_spacing_format), current));
-        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
-                float spacing = 1.0f + p / 10f;
-                label.setText(String.format(getString(R.string.line_spacing_format), spacing));
-                if (fromUser) prefs.setLineSpacing(spacing);
-            }
-            @Override public void onStartTrackingTouch(SeekBar s) {}
-            @Override public void onStopTrackingTouch(SeekBar s) {}
-        });
+    private boolean isMainCustomHexField(@NonNull EditText field) {
+        return mainCustomThemeController().isMainCustomHexField(field);
     }
 
-    private void setupTapZoneRatioControl() {
-        SeekBar leadingSeekBar = findViewById(R.id.tap_zone_leading_seekbar);
-        SeekBar trailingSeekBar = findViewById(R.id.tap_zone_trailing_seekbar);
-        TextView ratioLabel = findViewById(R.id.tap_zone_ratio_label);
-        TextView leadingLabel = findViewById(R.id.tap_zone_leading_label);
-        TextView trailingLabel = findViewById(R.id.tap_zone_trailing_label);
-        if (leadingSeekBar == null || trailingSeekBar == null || ratioLabel == null
-                || leadingLabel == null || trailingLabel == null) return;
-
-        // Two tunable endpoints:
-        // leading = top/left previous-page zone, trailing = bottom/right next-page zone,
-        // middle/menu = 100 - leading - trailing.
-        final boolean[] suppress = new boolean[]{false};
-
-        int leading = clampTapEdgePercent(prefs.getTapLeadingZonePercent());
-        int trailing = clampTapEdgePercent(prefs.getTapTrailingZonePercent());
-        if (leading + trailing > 90) trailing = Math.max(5, 90 - leading);
-
-        leadingSeekBar.setMax(75);    // progress 0..75 => 5..80%
-        trailingSeekBar.setMax(75);   // progress 0..75 => 5..80%
-
-        leadingSeekBar.setProgress(leading - 5);
-        trailingSeekBar.setProgress(trailing - 5);
-        updateTapZoneRatioLabels(ratioLabel, leadingLabel, trailingLabel, leading, trailing);
-
-        leadingSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (suppress[0]) return;
-                int leading = progress + 5;
-                int trailing = trailingSeekBar.getProgress() + 5;
-                if (leading + trailing > 90) {
-                    trailing = Math.max(5, 90 - leading);
-                    suppress[0] = true;
-                    trailingSeekBar.setProgress(trailing - 5);
-                    suppress[0] = false;
-                }
-                updateTapZoneRatioLabels(ratioLabel, leadingLabel, trailingLabel, leading, trailing);
-                if (fromUser) prefs.setTapZonePercents(leading, trailing);
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                prefs.setTapZonePercents(seekBar.getProgress() + 5, trailingSeekBar.getProgress() + 5);
-            }
-        });
-
-        trailingSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (suppress[0]) return;
-                int leading = leadingSeekBar.getProgress() + 5;
-                int trailing = progress + 5;
-                if (leading + trailing > 90) {
-                    leading = Math.max(5, 90 - trailing);
-                    suppress[0] = true;
-                    leadingSeekBar.setProgress(leading - 5);
-                    suppress[0] = false;
-                }
-                updateTapZoneRatioLabels(ratioLabel, leadingLabel, trailingLabel, leading, trailing);
-                if (fromUser) prefs.setTapZonePercents(leading, trailing);
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                prefs.setTapZonePercents(leadingSeekBar.getProgress() + 5, seekBar.getProgress() + 5);
-            }
-        });
-    }
-
-    private int clampTapEdgePercent(int percent) {
-        return Math.max(5, Math.min(80, percent));
-    }
-
-    private void updateTapZoneRatioLabels(TextView ratioLabel, TextView leadingLabel,
-                                          TextView trailingLabel, int leadingPercent,
-                                          int trailingPercent) {
-        int leading = clampTapEdgePercent(leadingPercent);
-        int trailing = clampTapEdgePercent(trailingPercent);
-        if (leading + trailing > 90) trailing = Math.max(5, 90 - leading);
-        int middle = Math.max(10, 100 - leading - trailing);
-
-        ratioLabel.setText(getString(R.string.tap_zone_ratio_format, leading, middle, trailing));
-        leadingLabel.setText(getString(R.string.tap_zone_leading_format, leading));
-        trailingLabel.setText(getString(R.string.tap_zone_trailing_format, trailing));
-    }
-
-
-    private void setupTextZoneTuning() {
-        SeekBar topSeekBar = findViewById(R.id.txt_top_offset_seekbar);
-        TextView topLabel = findViewById(R.id.txt_top_offset_label);
-        SeekBar bottomSeekBar = findViewById(R.id.txt_bottom_offset_seekbar);
-        TextView bottomLabel = findViewById(R.id.txt_bottom_offset_label);
-        SeekBar leftSeekBar = findViewById(R.id.txt_left_inset_seekbar);
-        TextView leftLabel = findViewById(R.id.txt_left_inset_label);
-        SeekBar rightSeekBar = findViewById(R.id.txt_right_inset_seekbar);
-        TextView rightLabel = findViewById(R.id.txt_right_inset_label);
-        if (topSeekBar == null || topLabel == null
-                || bottomSeekBar == null || bottomLabel == null
-                || leftSeekBar == null || leftLabel == null
-                || rightSeekBar == null || rightLabel == null) {
-            return;
-        }
-
-        final int textZoneStepPx = 5;
-        final int textZoneMaxPx = 240;
-        final int textZoneMaxProgress = textZoneMaxPx / textZoneStepPx;
-
-        int topOffset = roundToTextZoneStep(prefs.getReaderTextTopOffsetPx(), textZoneStepPx);
-        topSeekBar.setMax(textZoneMaxProgress); // 0px .. 240px, 5px steps
-        topSeekBar.setProgress(topOffset / textZoneStepPx);
-        topLabel.setText(getString(R.string.txt_top_offset_format, topOffset));
-        topSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int value = progress * textZoneStepPx;
-                topLabel.setText(getString(R.string.txt_top_offset_format, value));
-                if (fromUser) prefs.setReaderTextTopOffsetPx(value);
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                prefs.setReaderTextTopOffsetPx(seekBar.getProgress() * textZoneStepPx);
-            }
-        });
-
-        int bottomOffset = roundToTextZoneStep(prefs.getReaderTextBottomOffsetPx(), textZoneStepPx);
-        bottomSeekBar.setMax(textZoneMaxProgress); // 0px .. 240px, 5px steps
-        bottomSeekBar.setProgress(bottomOffset / textZoneStepPx);
-        bottomLabel.setText(getString(R.string.txt_bottom_offset_format, bottomOffset));
-        bottomSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int value = progress * textZoneStepPx;
-                bottomLabel.setText(getString(R.string.txt_bottom_offset_format, value));
-                if (fromUser) prefs.setReaderTextBottomOffsetPx(value);
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                prefs.setReaderTextBottomOffsetPx(seekBar.getProgress() * textZoneStepPx);
-            }
-        });
-
-        int leftInset = roundToTextZoneStep(prefs.getReaderTextLeftInsetPx(), textZoneStepPx);
-        leftSeekBar.setMax(textZoneMaxProgress); // 0px .. 240px, 5px steps
-        leftSeekBar.setProgress(leftInset / textZoneStepPx);
-        leftLabel.setText(getString(R.string.txt_left_inset_format, leftInset));
-        leftSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int value = progress * textZoneStepPx;
-                leftLabel.setText(getString(R.string.txt_left_inset_format, value));
-                if (fromUser) prefs.setReaderTextLeftInsetPx(value);
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                prefs.setReaderTextLeftInsetPx(seekBar.getProgress() * textZoneStepPx);
-            }
-        });
-
-        int rightInset = roundToTextZoneStep(prefs.getReaderTextRightInsetPx(), textZoneStepPx);
-        rightSeekBar.setMax(textZoneMaxProgress); // 0px .. 240px, 5px steps
-        rightSeekBar.setProgress(rightInset / textZoneStepPx);
-        rightLabel.setText(getString(R.string.txt_right_inset_format, rightInset));
-        rightSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int value = progress * textZoneStepPx;
-                rightLabel.setText(getString(R.string.txt_right_inset_format, value));
-                if (fromUser) prefs.setReaderTextRightInsetPx(value);
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                prefs.setReaderTextRightInsetPx(seekBar.getProgress() * textZoneStepPx);
-            }
-        });
-    }
-
-
-    private void setupLargeTextPartitionMode() {
-        Spinner modeSpinner = findViewById(R.id.spinner_large_txt_partition_mode);
-        if (modeSpinner == null) return;
-
-        String[] choices = {
-                getString(R.string.large_txt_partition_mode_standard),
-                getString(R.string.large_txt_partition_mode_high_buffer)
-        };
-        ArrayAdapter<String> adapter = makeSettingsSpinnerAdapter(choices);
-        modeSpinner.setAdapter(adapter);
-        modeSpinner.setSelection(prefs.getLargeTextPartitionMode() == PrefsManager.LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
-                ? PrefsManager.LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
-                : PrefsManager.LARGE_TEXT_PARTITION_MODE_STANDARD);
-        modeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                styleSpinnerText(view);
-                prefs.setLargeTextPartitionMode(position == PrefsManager.LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
-                        ? PrefsManager.LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
-                        : PrefsManager.LARGE_TEXT_PARTITION_MODE_STANDARD);
-            }
-            @Override public void onNothingSelected(AdapterView<?> parent) {}
-        });
+    private void setupReaderControls() {
+        new SettingsReaderControlsController(this).setupReaderControls();
     }
 
     private void setupTextDisplayRules() {
@@ -1152,707 +581,8 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void showTextDisplayRulesDialog() {
-        final ArrayList<TextDisplayRule> rules = new ArrayList<>(TextDisplayRuleManager.getRules(this));
-        final android.app.Dialog dialog = createRoundedSettingsDialog();
-        LinearLayout panel = createRoundedSettingsDialogPanel();
-
-        int text = dialogTextColor();
-        int sub = dialogSubTextColor();
-        int outline = dialogOutlineColor();
-
-        TextView title = makeSettingsDialogTitle(getString(R.string.txt_display_rules), text);
-        panel.addView(title);
-
-        TextView guide = makeSettingsDialogMessage(getString(R.string.txt_display_rules_dialog_description), sub);
-        guide.setGravity(Gravity.CENTER);
-        panel.addView(guide);
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(false);
-        scroll.setClipChildren(true);
-        scroll.setClipToPadding(true);
-        scroll.setVerticalScrollBarEnabled(false);
-        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(list, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        int listHeight = Math.max(dpToPx(160),
-                Math.min(dpToPx(360), currentVisibleWindowHeightPx() - dpToPx(260)));
-        LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, listHeight);
-        scrollLp.setMargins(0, 0, 0, dpToPx(8));
-        panel.addView(scroll, scrollLp);
-
-        final Runnable[] refresh = new Runnable[1];
-        refresh[0] = () -> {
-            list.removeAllViews();
-            if (rules.isEmpty()) {
-                TextView empty = new TextView(this);
-                empty.setText(getString(R.string.txt_display_rules_empty));
-                empty.setTextColor(sub);
-                empty.setTextSize(14f);
-                empty.setGravity(Gravity.CENTER);
-                empty.setPadding(0, dpToPx(16), 0, dpToPx(16));
-                list.addView(empty, new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                return;
-            }
-            for (int i = 0; i < rules.size(); i++) {
-                TextDisplayRule rule = rules.get(i);
-                LinearLayout row = new LinearLayout(this);
-                row.setOrientation(LinearLayout.VERTICAL);
-                row.setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10));
-                GradientDrawable bg = new GradientDrawable();
-                bg.setColor(dialogRowBackgroundColor());
-                bg.setStroke(dpToPx(1), outline);
-                bg.setCornerRadius(dpToPx(14));
-                row.setBackground(bg);
-
-                TextView rowTitle = new TextView(this);
-                rowTitle.setText((rule.enabled ? "✓ " : "○ ")
-                        + safePreview(rule.findText) + " → " + safePreview(rule.replacementText));
-                rowTitle.setTextColor(text);
-                rowTitle.setTextSize(15f);
-                rowTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-                row.addView(rowTitle);
-
-                TextView meta = new TextView(this);
-                String scope = TextDisplayRule.SCOPE_FILE.equals(rule.scope)
-                        ? getString(R.string.txt_display_rule_scope_current_file)
-                        : getString(R.string.txt_display_rule_scope_all_txt);
-                String caseMode = rule.caseSensitive
-                        ? getString(R.string.txt_display_rule_case_sensitive)
-                        : getString(R.string.txt_display_rule_case_insensitive);
-                String mode = rule.useRegex
-                        ? getString(R.string.txt_display_rule_regex_mode)
-                        : getString(R.string.txt_display_rule_plain_mode);
-                meta.setText(scope + " · " + caseMode + " · " + mode);
-                meta.setTextColor(sub);
-                meta.setTextSize(12f);
-                meta.setSingleLine(true);
-                meta.setEllipsize(TextUtils.TruncateAt.END);
-                meta.setPadding(0, dpToPx(4), 0, 0);
-                row.addView(meta);
-
-                String sourceFileLabel = makeTextDisplayRuleSourceFileLabel(rule);
-                if (!sourceFileLabel.isEmpty()) {
-                    TextView source = new TextView(this);
-                    source.setText(sourceFileLabel);
-                    source.setTextColor(sub);
-                    source.setTextSize(12f);
-                    source.setSingleLine(true);
-                    source.setEllipsize(TextUtils.TruncateAt.END);
-                    source.setPadding(0, dpToPx(2), 0, 0);
-                    row.addView(source);
-                }
-
-                LinearLayout orderRow = new LinearLayout(this);
-                orderRow.setOrientation(LinearLayout.HORIZONTAL);
-                orderRow.setGravity(Gravity.CENTER_VERTICAL);
-                orderRow.setPadding(0, dpToPx(8), 0, 0);
-
-                TextView up = makeSmallTextButton(getString(R.string.move_up));
-                TextView down = makeSmallTextButton(getString(R.string.move_down));
-                TextView toggle = makeSmallTextButton(rule.enabled
-                        ? getString(R.string.disable)
-                        : getString(R.string.enable));
-                TextView delete = makeSmallTextButton(getString(R.string.delete));
-                orderRow.addView(up, new LinearLayout.LayoutParams(0, dpToPx(34), 1f));
-                orderRow.addView(down, new LinearLayout.LayoutParams(0, dpToPx(34), 1f));
-                orderRow.addView(toggle, new LinearLayout.LayoutParams(0, dpToPx(34), 1f));
-                orderRow.addView(delete, new LinearLayout.LayoutParams(0, dpToPx(34), 1f));
-                row.addView(orderRow);
-
-                final int index = i;
-                row.setOnClickListener(v -> showEditTextDisplayRuleDialog(rules, index, () -> {
-                    TextDisplayRuleManager.saveRules(this, rules);
-                    refresh[0].run();
-                }));
-                row.setOnLongClickListener(v -> {
-                    showEditTextDisplayRuleDialog(rules, index, () -> {
-                        TextDisplayRuleManager.saveRules(this, rules);
-                        refresh[0].run();
-                    });
-                    return true;
-                });
-                up.setOnClickListener(v -> {
-                    if (index <= 0) return;
-                    TextDisplayRule moved = rules.remove(index);
-                    rules.add(index - 1, moved);
-                    TextDisplayRuleManager.saveRules(this, rules);
-                    refresh[0].run();
-                });
-                down.setOnClickListener(v -> {
-                    if (index >= rules.size() - 1) return;
-                    TextDisplayRule moved = rules.remove(index);
-                    rules.add(index + 1, moved);
-                    TextDisplayRuleManager.saveRules(this, rules);
-                    refresh[0].run();
-                });
-                toggle.setOnClickListener(v -> {
-                    rule.enabled = !rule.enabled;
-                    TextDisplayRuleManager.saveRules(this, rules);
-                    refresh[0].run();
-                });
-                delete.setOnClickListener(v -> showDeleteTextDisplayRuleConfirmDialog(rule, () -> {
-                    if (index < 0 || index >= rules.size()) return;
-                    rules.remove(index);
-                    TextDisplayRuleManager.saveRules(this, rules);
-                    refresh[0].run();
-                }));
-
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                lp.setMargins(0, 0, 0, dpToPx(8));
-                list.addView(row, lp);
-            }
-        };
-        refresh[0].run();
-
-        MaterialButton add = makeTextRuleDialogButton(getString(R.string.add), text);
-        add.setOnClickListener(v -> showEditTextDisplayRuleDialog(rules, -1, () -> {
-            TextDisplayRuleManager.saveRules(this, rules);
-            refresh[0].run();
-        }));
-        panel.addView(add);
-
-        MaterialButton clear = makeTextRuleDialogButton(getString(R.string.clear_all), text);
-        clear.setOnClickListener(v -> {
-            if (!rules.isEmpty()) {
-                showClearTextDisplayRulesConfirmDialog(() -> {
-                    rules.clear();
-                    TextDisplayRuleManager.saveRules(this, rules);
-                    refresh[0].run();
-                });
-            }
-        });
-        panel.addView(clear);
-
-        MaterialButton close = makeTextRuleDialogButton(getString(R.string.close), text);
-        close.setOnClickListener(v -> dialog.dismiss());
-        panel.addView(close);
-
-        showRoundedSettingsDialog(dialog, panel);
+        new SettingsTextDisplayRuleController(this).showTextDisplayRulesDialog();
     }
-
-    private void showDeleteTextDisplayRuleConfirmDialog(@NonNull TextDisplayRule rule, @NonNull Runnable onDelete) {
-        final android.app.Dialog dialog = createRoundedSettingsDialog();
-        LinearLayout panel = createRoundedSettingsDialogPanel();
-
-        int text = dialogTextColor();
-        int sub = dialogSubTextColor();
-        int outline = dialogOutlineColor();
-
-        panel.addView(makeSettingsDialogTitle(getString(R.string.delete), text));
-
-        String preview = safePreview(rule.findText) + " → " + safePreview(rule.replacementText);
-        TextView message = makeSettingsDialogMessage(
-                getString(R.string.txt_display_rule_delete_confirm, preview), sub);
-        message.setGravity(Gravity.CENTER);
-        panel.addView(message);
-
-        MaterialButton delete = makeTextRuleDialogButton(getString(R.string.delete), text);
-        delete.setOnClickListener(v -> {
-            dialog.dismiss();
-            onDelete.run();
-        });
-        panel.addView(delete);
-
-        MaterialButton cancel = makeTextRuleDialogButton(getString(R.string.cancel), text);
-        cancel.setOnClickListener(v -> dialog.dismiss());
-        panel.addView(cancel);
-
-        showRoundedSettingsDialog(dialog, panel, true, 0.58f, 220);
-    }
-
-    private void showClearTextDisplayRulesConfirmDialog(@NonNull Runnable onClear) {
-        final android.app.Dialog dialog = createRoundedSettingsDialog();
-        LinearLayout panel = createRoundedSettingsDialogPanel();
-
-        int text = dialogTextColor();
-        int sub = dialogSubTextColor();
-        int outline = dialogOutlineColor();
-
-        panel.addView(makeSettingsDialogTitle(getString(R.string.clear_all), text));
-        panel.addView(makeSettingsDialogMessage(getString(R.string.txt_display_rules_clear_confirm), sub));
-
-        MaterialButton clear = makeTextRuleDialogButton(getString(R.string.clear_all), text);
-        clear.setOnClickListener(v -> {
-            dialog.dismiss();
-            onClear.run();
-        });
-        panel.addView(clear);
-
-        MaterialButton cancel = makeTextRuleDialogButton(getString(R.string.cancel), text);
-        cancel.setOnClickListener(v -> dialog.dismiss());
-        panel.addView(cancel);
-
-        showRoundedSettingsDialog(dialog, panel, true);
-    }
-
-    private void showEditTextDisplayRuleDialog(ArrayList<TextDisplayRule> rules, int editIndex, Runnable onSaved) {
-        TextDisplayRule editing = editIndex >= 0 && editIndex < rules.size() ? rules.get(editIndex) : new TextDisplayRule();
-        final android.app.Dialog dialog = createRoundedSettingsDialog();
-        LinearLayout panel = createRoundedSettingsDialogPanel();
-
-        int text = dialogTextColor();
-        int sub = dialogSubTextColor();
-        int outline = dialogOutlineColor();
-
-        TextView title = makeSettingsDialogTitle(getString(editIndex >= 0 ? R.string.edit : R.string.add), text);
-        panel.addView(title);
-
-        EditText findInput = new EditText(this);
-        findInput.setHint(R.string.txt_display_rule_find_hint);
-        findInput.setSingleLine(true);
-        findInput.setText(editing.findText);
-        styleSettingsEditText(findInput, text, sub, outline);
-        panel.addView(findInput, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(52)));
-
-        EditText replaceInput = new EditText(this);
-        replaceInput.setHint(R.string.txt_display_rule_replace_hint);
-        replaceInput.setSingleLine(true);
-        replaceInput.setText(editing.replacementText);
-        styleSettingsEditText(replaceInput, text, sub, outline);
-        LinearLayout.LayoutParams replaceLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(52));
-        replaceLp.setMargins(0, dpToPx(8), 0, 0);
-        panel.addView(replaceInput, replaceLp);
-
-        LinearLayout optionGroup = new LinearLayout(this);
-        optionGroup.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams optionGroupLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        optionGroupLp.setMargins(0, dpToPx(12), 0, dpToPx(12));
-
-        CheckBox enabledBox = makeSettingsCheckBox(getString(R.string.enabled), text);
-        enabledBox.setChecked(editing.enabled);
-        optionGroup.addView(enabledBox);
-
-        CheckBox caseBox = makeSettingsCheckBox(getString(R.string.txt_display_rule_case_sensitive), text);
-        caseBox.setChecked(editing.caseSensitive);
-        optionGroup.addView(caseBox);
-
-        CheckBox regexBox = makeSettingsCheckBox(getString(R.string.txt_display_rule_use_regex), text);
-        regexBox.setChecked(editing.useRegex);
-        optionGroup.addView(regexBox);
-
-        CheckBox fileOnlyBox = makeSettingsCheckBox(getString(R.string.txt_display_rule_current_file_only), text);
-        fileOnlyBox.setChecked(TextDisplayRule.SCOPE_FILE.equals(editing.scope));
-        fileOnlyBox.setEnabled(currentTxtFilePath != null && !currentTxtFilePath.isEmpty());
-        optionGroup.addView(fileOnlyBox);
-
-        panel.addView(optionGroup, optionGroupLp);
-
-        TextView warning = makeSettingsDialogMessage(getString(R.string.txt_display_rule_length_warning), sub);
-        warning.setGravity(Gravity.START);
-        panel.addView(warning);
-
-        MaterialButton save = makeTextRuleDialogButton(getString(R.string.save), text);
-        save.setOnClickListener(v -> {
-            String find = findInput.getText() != null ? findInput.getText().toString() : "";
-            if (find.isEmpty()) {
-                Toast.makeText(this, R.string.txt_display_rule_find_required, Toast.LENGTH_SHORT).show();
-                return;
-            }
-            String oldScope = editIndex >= 0 ? editing.scope : TextDisplayRule.SCOPE_ALL_TXT;
-            String oldFilePath = editIndex >= 0 && editing.filePath != null ? editing.filePath : "";
-
-            editing.findText = find;
-            editing.replacementText = replaceInput.getText() != null ? replaceInput.getText().toString() : "";
-            editing.enabled = enabledBox.isChecked();
-            editing.caseSensitive = caseBox.isChecked();
-            editing.useRegex = regexBox.isChecked();
-            if ((editing.sourceFilePath == null || editing.sourceFilePath.isEmpty()) && currentTxtFilePath != null && !currentTxtFilePath.isEmpty()) {
-                editing.sourceFilePath = currentTxtFilePath;
-            }
-            if (fileOnlyBox.isChecked() && currentTxtFilePath != null && !currentTxtFilePath.isEmpty()) {
-                editing.scope = TextDisplayRule.SCOPE_FILE;
-                if (editIndex >= 0 && TextDisplayRule.SCOPE_FILE.equals(oldScope) && oldFilePath != null && !oldFilePath.isEmpty()) {
-                    editing.filePath = oldFilePath;
-                } else {
-                    editing.filePath = currentTxtFilePath;
-                }
-            } else {
-                editing.scope = TextDisplayRule.SCOPE_ALL_TXT;
-                editing.filePath = "";
-            }
-            if (editIndex < 0) rules.add(editing);
-            if (onSaved != null) onSaved.run();
-            dialog.dismiss();
-        });
-        panel.addView(save);
-
-        MaterialButton cancel = makeTextRuleDialogButton(getString(R.string.cancel), text);
-        cancel.setOnClickListener(v -> dialog.dismiss());
-        panel.addView(cancel);
-
-        showRoundedSettingsDialog(dialog, panel);
-    }
-
-    private void styleSettingsEditText(@NonNull EditText input, int text, int hint, int outline) {
-        input.setTextColor(text);
-        input.setHintTextColor(hint);
-        input.setTextSize(15f);
-        input.setSingleLine(true);
-        input.setPadding(dpToPx(12), 0, dpToPx(12), 0);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(dialogRowBackgroundColor());
-        bg.setCornerRadius(dpToPx(12));
-        bg.setStroke(dpToPx(1), outline);
-        input.setBackground(bg);
-    }
-
-    private CheckBox makeSettingsCheckBox(String label, int text) {
-        CheckBox box = new CheckBox(this);
-        box.setText(label);
-        box.setTextColor(text);
-        box.setTextSize(14f);
-        box.setButtonTintList(ColorStateList.valueOf(text));
-        return box;
-    }
-
-    private TextView makeSmallTextButton(String text) {
-        MaterialButton button = new MaterialButton(this);
-        button.setAllCaps(false);
-        button.setText(text);
-        button.setTextColor(dialogTextColor());
-        button.setTextSize(12f);
-        button.setGravity(Gravity.CENTER);
-        button.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-        button.setIncludeFontPadding(false);
-        button.setSingleLine(true);
-        button.setPadding(dpToPx(4), 0, dpToPx(4), 0);
-        button.setInsetTop(0);
-        button.setInsetBottom(0);
-        button.setMinWidth(0);
-        button.setMinimumWidth(0);
-        button.setMinHeight(0);
-        button.setMinimumHeight(0);
-        button.setCornerRadius(dpToPx(10));
-        button.setStrokeWidth(0);
-        button.setStrokeColor(ColorStateList.valueOf(Color.TRANSPARENT));
-        button.setBackgroundTintList(ColorStateList.valueOf(Color.TRANSPARENT));
-        button.setElevation(0f);
-        button.setTranslationZ(0f);
-        button.setStateListAnimator(null);
-        button.setRippleColor(ColorStateList.valueOf(Color.TRANSPARENT));
-        return button;
-    }
-
-    private String makeTextDisplayRuleSourceFileLabel(@NonNull TextDisplayRule rule) {
-        String sourcePath = rule.sourceFilePath;
-        if ((sourcePath == null || sourcePath.isEmpty()) && rule.filePath != null && !rule.filePath.isEmpty()) {
-            sourcePath = rule.filePath;
-        }
-        if (sourcePath == null || sourcePath.isEmpty()) return "";
-        String fileName = new File(sourcePath).getName();
-        if (fileName == null || fileName.isEmpty()) fileName = sourcePath;
-        return getString(R.string.txt_display_rule_source_file, fileName);
-    }
-
-    private String safePreview(String value) {
-        if (value == null) return "";
-        String oneLine = value.replace('\n', ' ').replace('\r', ' ');
-        return oneLine.length() > 32 ? oneLine.substring(0, 32) + "…" : oneLine;
-    }
-
-    private int roundToTextZoneStep(int px, int stepPx) {
-        int clamped = Math.max(0, Math.min(240, px));
-        return Math.round(clamped / (float) stepPx) * stepPx;
-    }
-
-    private void setupEpubBoundary() {
-        SeekBar leftSeekBar = findViewById(R.id.epub_left_spacing_seekbar);
-        TextView leftLabel = findViewById(R.id.epub_left_spacing_label);
-        SeekBar rightSeekBar = findViewById(R.id.epub_right_spacing_seekbar);
-        TextView rightLabel = findViewById(R.id.epub_right_spacing_label);
-        SeekBar topSeekBar = findViewById(R.id.epub_top_spacing_seekbar);
-        TextView topLabel = findViewById(R.id.epub_top_spacing_label);
-        SeekBar bottomSeekBar = findViewById(R.id.epub_bottom_spacing_seekbar);
-        TextView bottomLabel = findViewById(R.id.epub_bottom_spacing_label);
-        if (leftSeekBar == null || leftLabel == null
-                || rightSeekBar == null || rightLabel == null
-                || topSeekBar == null || topLabel == null
-                || bottomSeekBar == null || bottomLabel == null) {
-            return;
-        }
-
-        final int epubBoundaryStepPx = 5;
-        final int epubBoundaryMaxPx = 240;
-        final int epubBoundaryMaxProgress = epubBoundaryMaxPx / epubBoundaryStepPx;
-
-        leftSeekBar.setMax(epubBoundaryMaxProgress);
-        rightSeekBar.setMax(epubBoundaryMaxProgress);
-        topSeekBar.setMax(epubBoundaryMaxProgress);
-        bottomSeekBar.setMax(epubBoundaryMaxProgress);
-
-        int left = clampEpubBoundaryPx(prefs.getEpubLeftPaddingDp());
-        int right = clampEpubBoundaryPx(prefs.getEpubRightPaddingDp());
-        int top = clampEpubBoundaryPx(prefs.getEpubTopPaddingDp());
-        int bottom = clampEpubBoundaryPx(prefs.getEpubBottomPaddingDp());
-
-        leftSeekBar.setProgress(left / epubBoundaryStepPx);
-        rightSeekBar.setProgress(right / epubBoundaryStepPx);
-        topSeekBar.setProgress(top / epubBoundaryStepPx);
-        bottomSeekBar.setProgress(bottom / epubBoundaryStepPx);
-
-        leftLabel.setText(getString(R.string.epub_left_spacing_format, left));
-        rightLabel.setText(getString(R.string.epub_right_spacing_format, right));
-        topLabel.setText(getString(R.string.epub_top_spacing_format, top));
-        bottomLabel.setText(getString(R.string.epub_bottom_spacing_format, bottom));
-
-        leftSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int value = clampEpubBoundaryPx(progress * epubBoundaryStepPx);
-                leftLabel.setText(getString(R.string.epub_left_spacing_format, value));
-                if (fromUser) prefs.setEpubLeftPaddingDp(value);
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                prefs.setEpubLeftPaddingDp(clampEpubBoundaryPx(seekBar.getProgress() * epubBoundaryStepPx));
-            }
-        });
-
-        rightSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int value = clampEpubBoundaryPx(progress * epubBoundaryStepPx);
-                rightLabel.setText(getString(R.string.epub_right_spacing_format, value));
-                if (fromUser) prefs.setEpubRightPaddingDp(value);
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                prefs.setEpubRightPaddingDp(clampEpubBoundaryPx(seekBar.getProgress() * epubBoundaryStepPx));
-            }
-        });
-
-        topSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int value = clampEpubBoundaryPx(progress * epubBoundaryStepPx);
-                topLabel.setText(getString(R.string.epub_top_spacing_format, value));
-                if (fromUser) prefs.setEpubTopPaddingDp(value);
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                prefs.setEpubTopPaddingDp(clampEpubBoundaryPx(seekBar.getProgress() * epubBoundaryStepPx));
-            }
-        });
-
-        bottomSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int value = clampEpubBoundaryPx(progress * epubBoundaryStepPx);
-                bottomLabel.setText(getString(R.string.epub_bottom_spacing_format, value));
-                if (fromUser) prefs.setEpubBottomPaddingDp(value);
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                prefs.setEpubBottomPaddingDp(clampEpubBoundaryPx(seekBar.getProgress() * epubBoundaryStepPx));
-            }
-        });
-    }
-
-    private int clampEpubBoundaryPx(int px) {
-        int clamped = Math.max(0, Math.min(240, px));
-        return Math.round(clamped / 5f) * 5;
-    }
-
-    private void setupEpubPageBehavior() {
-        Spinner directionSpinner = findViewById(R.id.spinner_epub_page_direction);
-        Spinner effectSpinner = findViewById(R.id.spinner_epub_page_effect);
-
-        if (directionSpinner != null) {
-            String[] directionChoices = {
-                    getString(R.string.epub_page_direction_ltr),
-                    getString(R.string.epub_page_direction_rtl)
-            };
-            ArrayAdapter<String> adapter = makeSettingsSpinnerAdapter(directionChoices);
-            directionSpinner.setAdapter(adapter);
-            directionSpinner.setSelection(prefs.getEpubPageDirection());
-            directionSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-                @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                    styleSpinnerText(view);
-                    prefs.setEpubPageDirection(position == PrefsManager.EPUB_PAGE_DIRECTION_RTL
-                            ? PrefsManager.EPUB_PAGE_DIRECTION_RTL
-                            : PrefsManager.EPUB_PAGE_DIRECTION_LTR);
-                }
-                @Override public void onNothingSelected(AdapterView<?> parent) {}
-            });
-        }
-
-        if (effectSpinner != null) {
-            String[] effectChoices = {
-                    getString(R.string.epub_page_effect_slide),
-                    getString(R.string.epub_page_effect_none)
-            };
-            ArrayAdapter<String> adapter = makeSettingsSpinnerAdapter(effectChoices);
-            effectSpinner.setAdapter(adapter);
-            effectSpinner.setSelection(prefs.getEpubPageEffect());
-            effectSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-                @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                    styleSpinnerText(view);
-                    prefs.setEpubPageEffect(position == PrefsManager.EPUB_PAGE_EFFECT_NONE
-                            ? PrefsManager.EPUB_PAGE_EFFECT_NONE
-                            : PrefsManager.EPUB_PAGE_EFFECT_SLIDE);
-                }
-                @Override public void onNothingSelected(AdapterView<?> parent) {}
-            });
-        }
-    }
-
-    private ArrayAdapter<String> makeSettingsSpinnerAdapter(String[] choices) {
-        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
-                android.R.layout.simple_spinner_item, choices) {
-            @NonNull @Override
-            public View getView(int position, View convertView, @NonNull ViewGroup parent) {
-                View view = super.getView(position, convertView, parent);
-                styleSpinnerText(view);
-                return view;
-            }
-            @Override
-            public View getDropDownView(int position, View convertView, @NonNull ViewGroup parent) {
-                View view = super.getDropDownView(position, convertView, parent);
-                styleSpinnerText(view);
-                return view;
-            }
-        };
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        return adapter;
-    }
-
-    private void setupSwitches() {
-        Switch switchScreenOn = findViewById(R.id.switch_keep_screen_on);
-        switchScreenOn.setChecked(prefs.getKeepScreenOn());
-        switchScreenOn.setOnCheckedChangeListener((v, c) -> prefs.setKeepScreenOn(c));
-
-        Switch switchAutoSave = findViewById(R.id.switch_auto_save);
-        switchAutoSave.setChecked(prefs.getAutoSavePosition());
-        switchAutoSave.setOnCheckedChangeListener((v, c) -> prefs.setAutoSavePosition(c));
-
-        Switch switchStatusBar = findViewById(R.id.switch_status_bar);
-        switchStatusBar.setChecked(prefs.getShowStatusBar());
-        switchStatusBar.setOnCheckedChangeListener((v, c) -> prefs.setShowStatusBar(c));
-
-        Spinner pageStatusAlignSpinner = findViewById(R.id.spinner_page_status_alignment);
-        String[] pageStatusAlignChoices = {
-                getString(R.string.page_status_align_left),
-                getString(R.string.page_status_align_center),
-                getString(R.string.page_status_align_right),
-                getString(R.string.page_status_align_hidden)
-        };
-        ArrayAdapter<String> pageStatusAlignAdapter = new ArrayAdapter<String>(this,
-                android.R.layout.simple_spinner_item, pageStatusAlignChoices) {
-            @NonNull @Override
-            public View getView(int position, View convertView, @NonNull ViewGroup parent) {
-                View view = super.getView(position, convertView, parent);
-                styleSpinnerText(view);
-                return view;
-            }
-            @Override
-            public View getDropDownView(int position, View convertView, @NonNull ViewGroup parent) {
-                View view = super.getDropDownView(position, convertView, parent);
-                styleSpinnerText(view);
-                return view;
-            }
-        };
-        pageStatusAlignAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        pageStatusAlignSpinner.setAdapter(pageStatusAlignAdapter);
-        pageStatusAlignSpinner.setSelection(prefs.getPageStatusAlignment());
-        pageStatusAlignSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                styleSpinnerText(view);
-                prefs.setPageStatusAlignment(position);
-            }
-            @Override public void onNothingSelected(AdapterView<?> parent) {}
-        });
-
-
-        Switch switchVolume = findViewById(R.id.switch_volume_scroll);
-        switchVolume.setChecked(prefs.getVolumeKeyScroll());
-        switchVolume.setOnCheckedChangeListener((v, c) -> prefs.setVolumeKeyScroll(c));
-
-        Switch switchTapPaging = findViewById(R.id.switch_tap_paging);
-        switchTapPaging.setChecked(prefs.getTapPagingEnabled());
-        switchTapPaging.setOnCheckedChangeListener((v, c) -> prefs.setTapPagingEnabled(c));
-
-        Spinner tapZoneModeSpinner = findViewById(R.id.spinner_tap_zone_mode);
-        String[] tapZoneChoices = {
-                getString(R.string.tap_zone_vertical),
-                getString(R.string.tap_zone_horizontal)
-        };
-        ArrayAdapter<String> tapZoneAdapter = new ArrayAdapter<String>(this,
-                android.R.layout.simple_spinner_item, tapZoneChoices) {
-            @NonNull @Override
-            public View getView(int position, View convertView, @NonNull ViewGroup parent) {
-                View view = super.getView(position, convertView, parent);
-                styleSpinnerText(view);
-                return view;
-            }
-            @Override
-            public View getDropDownView(int position, View convertView, @NonNull ViewGroup parent) {
-                View view = super.getDropDownView(position, convertView, parent);
-                styleSpinnerText(view);
-                return view;
-            }
-        };
-        tapZoneAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        tapZoneModeSpinner.setAdapter(tapZoneAdapter);
-        tapZoneModeSpinner.setSelection(prefs.getTapZoneMode());
-        tapZoneModeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                styleSpinnerText(view);
-                prefs.setTapZoneMode(position);
-            }
-            @Override public void onNothingSelected(AdapterView<?> parent) {}
-        });
-
-        setupTapZoneRatioControl();
-
-        Spinner overlapSpinner = findViewById(R.id.spinner_overlap_lines);
-        String[] choices = {getString(R.string.no_overlap), getString(R.string.keep_1_line), getString(R.string.keep_2_lines), getString(R.string.keep_3_lines), getString(R.string.keep_4_lines)};
-        ArrayAdapter<String> overlapAdapter = new ArrayAdapter<String>(this,
-                android.R.layout.simple_spinner_item, choices) {
-            @NonNull @Override
-            public View getView(int position, View convertView, @NonNull ViewGroup parent) {
-                View view = super.getView(position, convertView, parent);
-                styleSpinnerText(view);
-                return view;
-            }
-            @Override
-            public View getDropDownView(int position, View convertView, @NonNull ViewGroup parent) {
-                View view = super.getDropDownView(position, convertView, parent);
-                styleSpinnerText(view);
-                return view;
-            }
-        };
-        overlapAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        overlapSpinner.setAdapter(overlapAdapter);
-        overlapSpinner.setSelection(prefs.getPagingOverlapLines());
-        overlapSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                styleSpinnerText(view);
-                prefs.setPagingOverlapLines(position);
-            }
-            @Override public void onNothingSelected(AdapterView<?> parent) {}
-        });
-    }
-
-    private void styleSpinnerText(View view) {
-        if (view instanceof TextView) {
-            boolean dark = isDarkUi();
-            int bg = prefs != null ? prefs.getMainBgColor(this) : (dark ? Color.rgb(0, 0, 0) : Color.rgb(255, 255, 255));
-            int text = prefs != null ? prefs.getMainTextColor(this) : (dark ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36));
-            TextView tv = (TextView) view;
-            tv.setTextColor(text);
-            tv.setBackgroundColor(bg);
-            tv.setTextSize(16f);
-            int pad = Math.round(14 * getResources().getDisplayMetrics().density);
-            tv.setPadding(pad, 0, pad, 0);
-        }
-    }
-
-
 
     private boolean isDarkUi() {
         if (prefs != null) return prefs.shouldUseDarkColors(this);
@@ -2339,13 +1069,13 @@ public class SettingsActivity extends AppCompatActivity {
         showRoundedSettingsDialog(dialog, panel, true);
     }
 
-    private android.app.Dialog createRoundedSettingsDialog() {
+    android.app.Dialog createRoundedSettingsDialog() {
         android.app.Dialog dialog = new android.app.Dialog(this);
         dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         return dialog;
     }
 
-    private LinearLayout createRoundedSettingsDialogPanel() {
+    LinearLayout createRoundedSettingsDialogPanel() {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         int pad = dpToPx(18);
@@ -2360,15 +1090,15 @@ public class SettingsActivity extends AppCompatActivity {
         return panel;
     }
 
-    private void showRoundedSettingsDialog(android.app.Dialog dialog, LinearLayout panel) {
+    void showRoundedSettingsDialog(android.app.Dialog dialog, LinearLayout panel) {
         showRoundedSettingsDialog(dialog, panel, false);
     }
 
-    private void showRoundedSettingsDialog(android.app.Dialog dialog, LinearLayout panel, boolean compactWidth) {
+    void showRoundedSettingsDialog(android.app.Dialog dialog, LinearLayout panel, boolean compactWidth) {
         showRoundedSettingsDialog(dialog, panel, compactWidth, 0.70f, 240);
     }
 
-    private void showRoundedSettingsDialog(android.app.Dialog dialog, LinearLayout panel, boolean compactWidth, float compactWidthFraction, int compactMinWidthDp) {
+    void showRoundedSettingsDialog(android.app.Dialog dialog, LinearLayout panel, boolean compactWidth, float compactWidthFraction, int compactMinWidthDp) {
         ScrollView adaptiveScroll = new ScrollView(this);
         adaptiveScroll.setFillViewport(false);
         adaptiveScroll.setClipChildren(true);
@@ -2393,44 +1123,16 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void applyAdaptiveSettingsDialogMaxHeight(@NonNull View adaptiveView) {
-        // Pre-apply constrained-window sizing before the dialog is shown.
-        // This prevents rounded settings/theme popups from resizing into place.
-        int availableHeight = currentVisibleWindowHeightPx();
-        if (availableHeight <= 0) return;
-        if (!shouldApplyAdaptiveDialogMaxHeight(availableHeight)) return;
-
-        int maxHeight = Math.max(dpToPx(220), Math.round(availableHeight * 0.88f) - dpToPx(24));
-        adaptiveView.measure(
-                View.MeasureSpec.makeMeasureSpec(Math.min(getResources().getDisplayMetrics().widthPixels - dpToPx(40), dpToPx(420)), View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int measured = adaptiveView.getMeasuredHeight();
-        if (measured > maxHeight) {
-            ViewGroup.LayoutParams lp = adaptiveView.getLayoutParams();
-            lp.height = maxHeight;
-            adaptiveView.setLayoutParams(lp);
-        }
+        int widthPx = Math.min(getResources().getDisplayMetrics().widthPixels - dpToPx(40), dpToPx(420));
+        AdaptiveDialogLayoutHelper.applyAdaptiveMaxHeight(this, adaptiveView, widthPx);
     }
 
     private boolean shouldApplyAdaptiveDialogMaxHeight(int availableHeightPx) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N && isInMultiWindowMode()) {
-            return true;
-        }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && isInPictureInPictureMode()) {
-            return true;
-        }
-        int fullHeightPx = getResources().getDisplayMetrics().heightPixels;
-        return fullHeightPx > 0 && availableHeightPx < Math.round(fullHeightPx * 0.82f);
+        return AdaptiveDialogLayoutHelper.shouldApplyAdaptiveMaxHeight(this, availableHeightPx);
     }
 
-    private int currentVisibleWindowHeightPx() {
-        android.graphics.Rect rect = new android.graphics.Rect();
-        View decor = getWindow() != null ? getWindow().getDecorView() : null;
-        if (decor != null) {
-            decor.getWindowVisibleDisplayFrame(rect);
-            if (rect.height() > dpToPx(240)) return rect.height();
-            if (decor.getHeight() > dpToPx(240)) return decor.getHeight();
-        }
-        return getResources().getDisplayMetrics().heightPixels;
+    int currentVisibleWindowHeightPx() {
+        return AdaptiveDialogLayoutHelper.currentVisibleWindowHeightPx(this);
     }
 
     private void prepareRoundedSettingsDialogWindow(android.app.Dialog dialog, boolean hideUntilLaidOut) {
@@ -2474,7 +1176,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    private TextView makeSettingsDialogTitle(String value, int color) {
+    TextView makeSettingsDialogTitle(String value, int color) {
         TextView title = new TextView(this);
         title.setText(value);
         title.setTextColor(color);
@@ -2489,7 +1191,7 @@ public class SettingsActivity extends AppCompatActivity {
         return title;
     }
 
-    private TextView makeSettingsDialogMessage(String value, int color) {
+    TextView makeSettingsDialogMessage(String value, int color) {
         TextView message = new TextView(this);
         message.setText(value);
         message.setTextColor(color);
@@ -2569,7 +1271,7 @@ public class SettingsActivity extends AppCompatActivity {
         return makeSettingsDialogButton(label, text, dialogActionButtonBackgroundColor(), outline, true);
     }
 
-    private MaterialButton makeTextRuleDialogButton(String label, int text) {
+    MaterialButton makeTextRuleDialogButton(String label, int text) {
         MaterialButton button = makeSettingsDialogButton(label, text,
                 dialogActionButtonBackgroundColor(), Color.TRANSPARENT, true);
         button.setStrokeWidth(0);
@@ -2617,39 +1319,25 @@ public class SettingsActivity extends AppCompatActivity {
         return isDarkUi() ? Color.rgb(48, 48, 48) : Color.rgb(245, 245, 245);
     }
 
-    private int dialogRowBackgroundColor() {
+    int dialogRowBackgroundColor() {
         return dialogActionButtonBackgroundColor();
     }
 
-    private int dialogTextColor() {
+    int dialogTextColor() {
         if (prefs != null) return prefs.getMainTextColor(this);
         return isDarkUi() ? Color.rgb(232, 234, 237) : Color.rgb(32, 33, 36);
     }
 
-    private int dialogSubTextColor() {
+    int dialogSubTextColor() {
         if (prefs != null) return prefs.getMainSubTextColor(this);
         return isDarkUi() ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104);
     }
 
-    private int dialogOutlineColor() {
+    int dialogOutlineColor() {
         if (prefs != null) return prefs.getMainOutlineColor(this);
         return isDarkUi() ? Color.rgb(70, 70, 70) : Color.rgb(218, 220, 224);
     }
-    private boolean isLightColor(int color) {
-        double luminance = 0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color);
-        return luminance > 160;
-    }
-
-    private int blendColors(int bottomColor, int topColor, float topAlpha) {
-        topAlpha = Math.max(0f, Math.min(1f, topAlpha));
-        float bottomAlpha = 1f - topAlpha;
-        int r = Math.round(Color.red(topColor) * topAlpha + Color.red(bottomColor) * bottomAlpha);
-        int g = Math.round(Color.green(topColor) * topAlpha + Color.green(bottomColor) * bottomAlpha);
-        int b = Math.round(Color.blue(topColor) * topAlpha + Color.blue(bottomColor) * bottomAlpha);
-        return Color.rgb(r, g, b);
-    }
-
-    private int dpToPx(int dp) {
+    int dpToPx(int dp) {
         return (int) (dp * getResources().getDisplayMetrics().density + 0.5f);
     }
 

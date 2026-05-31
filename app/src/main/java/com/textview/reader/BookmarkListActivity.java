@@ -150,20 +150,11 @@ public class BookmarkListActivity extends AppCompatActivity
 
 
     private int blendColors(int bottomColor, int topColor, float topAlpha) {
-        topAlpha = Math.max(0f, Math.min(1f, topAlpha));
-        float bottomAlpha = 1f - topAlpha;
-        int r = Math.round(Color.red(topColor) * topAlpha + Color.red(bottomColor) * bottomAlpha);
-        int g = Math.round(Color.green(topColor) * topAlpha + Color.green(bottomColor) * bottomAlpha);
-        int b = Math.round(Color.blue(topColor) * topAlpha + Color.blue(bottomColor) * bottomAlpha);
-        return Color.rgb(r, g, b);
+        return UiColorUtils.blendColors(bottomColor, topColor, topAlpha);
     }
 
     private boolean isLightColor(int color) {
-        int r = Color.red(color);
-        int g = Color.green(color);
-        int b = Color.blue(color);
-        double luminance = (0.299 * r + 0.587 * g + 0.114 * b);
-        return luminance > 160;
+        return UiColorUtils.isLightColor(color);
     }
 
     private int readableTextColorForBackground(int backgroundColor) {
@@ -537,60 +528,20 @@ public class BookmarkListActivity extends AppCompatActivity
     }
 
     private ScrollView wrapAdaptiveBookmarkDialogContent(@NonNull View content, @NonNull ViewGroup outerFrame) {
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(false);
-        scroll.setClipChildren(true);
-        scroll.setClipToPadding(true);
-        scroll.setVerticalScrollBarEnabled(false);
-        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-        scroll.addView(content, new ScrollView.LayoutParams(
-                ScrollView.LayoutParams.MATCH_PARENT,
-                ScrollView.LayoutParams.WRAP_CONTENT));
-        outerFrame.addView(scroll, new android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT));
-        return scroll;
+        return AdaptiveDialogLayoutHelper.wrapAdaptiveContent(this, content, outerFrame);
     }
 
     private void applyAdaptiveBookmarkDialogMaxHeight(@NonNull android.app.Dialog dialog, @NonNull View adaptiveView) {
-        // Pre-measure and cap before show() so bookmark dialogs do not resize and
-        // visibly hard-drop after appearing in constrained window modes.
-        int availableHeight = currentVisibleWindowHeightPx();
-        if (availableHeight <= 0) return;
-        if (!shouldApplyAdaptiveDialogMaxHeight(availableHeight)) return;
-
-        int maxHeight = Math.max(dpToPx(220), Math.round(availableHeight * 0.88f) - dpToPx(24));
-        adaptiveView.measure(
-                View.MeasureSpec.makeMeasureSpec(Math.min(getResources().getDisplayMetrics().widthPixels - dpToPx(28), dpToPx(460)), View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int measured = adaptiveView.getMeasuredHeight();
-        if (measured > maxHeight) {
-            ViewGroup.LayoutParams lp = adaptiveView.getLayoutParams();
-            lp.height = maxHeight;
-            adaptiveView.setLayoutParams(lp);
-        }
+        int widthPx = Math.min(getResources().getDisplayMetrics().widthPixels - dpToPx(28), dpToPx(460));
+        AdaptiveDialogLayoutHelper.applyAdaptiveMaxHeight(this, adaptiveView, widthPx);
     }
 
     private boolean shouldApplyAdaptiveDialogMaxHeight(int availableHeightPx) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N && isInMultiWindowMode()) {
-            return true;
-        }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && isInPictureInPictureMode()) {
-            return true;
-        }
-        int fullHeightPx = getResources().getDisplayMetrics().heightPixels;
-        return fullHeightPx > 0 && availableHeightPx < Math.round(fullHeightPx * 0.82f);
+        return AdaptiveDialogLayoutHelper.shouldApplyAdaptiveMaxHeight(this, availableHeightPx);
     }
 
     private int currentVisibleWindowHeightPx() {
-        android.graphics.Rect rect = new android.graphics.Rect();
-        View decor = getWindow() != null ? getWindow().getDecorView() : null;
-        if (decor != null) {
-            decor.getWindowVisibleDisplayFrame(rect);
-            if (rect.height() > dpToPx(240)) return rect.height();
-            if (decor.getHeight() > dpToPx(240)) return decor.getHeight();
-        }
-        return getResources().getDisplayMetrics().heightPixels;
+        return AdaptiveDialogLayoutHelper.currentVisibleWindowHeightPx(this);
     }
 
     private void configureBookmarkDialogWindow(@NonNull android.app.Dialog dialog) {

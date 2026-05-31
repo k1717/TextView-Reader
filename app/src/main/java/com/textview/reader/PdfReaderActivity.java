@@ -3,9 +3,7 @@ package com.textview.reader;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.Rect;
 import android.graphics.pdf.PdfRenderer;
-import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
@@ -23,7 +21,6 @@ import android.view.Gravity;
 import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.view.ViewConfiguration;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
@@ -36,7 +33,6 @@ import android.widget.Space;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -81,7 +77,7 @@ public class PdfReaderActivity extends AppCompatActivity {
     public static final String EXTRA_JUMP_TO_PAGE = ReaderActivity.EXTRA_JUMP_TO_POSITION;
 
     // Match toolbar-triggered PDF popups to the Go to Page bottom offset.
-    private static final int PDF_TOOLBAR_POPUP_Y_DP = 74;
+    static final int PDF_TOOLBAR_POPUP_Y_DP = 74;
 
     // In horizontal PDF swipe mode, a zoomed page needs to pan around the enlarged
     // bitmap before the next edge-start swipe can turn the page. Accelerate only
@@ -90,26 +86,26 @@ public class PdfReaderActivity extends AppCompatActivity {
     private static final float PDF_ZOOMED_HORIZONTAL_PAN_ACCELERATION = 1.62f;
     private static final float PDF_ZOOMED_VERTICAL_PAN_ACCELERATION = 1.45f;
 
-    private View root;
-    private View pdfAppBar;
-    private View pdfBottomBar;
-    private boolean pdfChromeVisible = true;
-    private ImageView pageImage;
-    private RecyclerView pdfContinuousList;
-    private PdfContinuousPageAdapter pdfContinuousAdapter;
+    View root;
+    View pdfAppBar;
+    View pdfBottomBar;
+    boolean pdfChromeVisible = true;
+    ImageView pageImage;
+    RecyclerView pdfContinuousList;
+    PdfContinuousPageAdapter pdfContinuousAdapter;
     private RecyclerView.OnScrollListener continuousScrollListener;
     private boolean suppressContinuousScrollSync = false;
-    private ProgressBar progressBar;
-    private TextView pageStatus;
-    private TextView prevButton;
-    private TextView nextButton;
-    private TextView slideModeButton;
-    private TextView pageButton;
-    private TextView bookmarkButton;
-    private TextView zoomMoreButton;
-    private View pdfViewport;
-    private HorizontalScrollView pdfHScroll;
-    private ScrollView pdfVScroll;
+    ProgressBar progressBar;
+    TextView pageStatus;
+    TextView prevButton;
+    TextView nextButton;
+    TextView slideModeButton;
+    TextView pageButton;
+    TextView bookmarkButton;
+    TextView zoomMoreButton;
+    View pdfViewport;
+    HorizontalScrollView pdfHScroll;
+    ScrollView pdfVScroll;
     private ScaleGestureDetector scaleGestureDetector;
     private GestureDetector gestureDetector;
     private float touchStartX;
@@ -122,14 +118,14 @@ public class PdfReaderActivity extends AppCompatActivity {
     private boolean viewportPanConsumed = false;
     private float lastPanRawX;
     private float lastPanRawY;
-    private int touchSlop;
+    int touchSlop;
     private boolean gestureStartedWithHorizontalScrollable = false;
     private boolean gestureStartedWithVerticalScrollable = false;
     private boolean gestureStartedAtLeftEdge = true;
     private boolean gestureStartedAtRightEdge = true;
     private boolean gestureStartedAtTopEdge = true;
     private boolean gestureStartedAtBottomEdge = true;
-    private boolean verticalPageSlideMode = false;
+    boolean verticalPageSlideMode = false;
 
     private boolean pendingZoomFocus = false;
     private float pendingZoomFocusXRatio = 0.5f;
@@ -139,114 +135,64 @@ public class PdfReaderActivity extends AppCompatActivity {
     private float activePinchFocusRawX = -1f;
     private float activePinchFocusRawY = -1f;
 
-    private int readerBg = Color.rgb(18, 18, 18);
-    private int readerFg = Color.rgb(232, 234, 237);
-    private int readerToolbarBg = Color.rgb(18, 18, 18);
-    private int readerSub = Color.rgb(176, 176, 176);
-    private int readerPanel = Color.rgb(32, 33, 36);
-    private int readerLine = Color.rgb(84, 86, 90);
+    int readerBg = Color.rgb(18, 18, 18);
+    int readerFg = Color.rgb(232, 234, 237);
+    int readerToolbarBg = Color.rgb(18, 18, 18);
+    int readerSub = Color.rgb(176, 176, 176);
+    int readerPanel = Color.rgb(32, 33, 36);
+    int readerLine = Color.rgb(84, 86, 90);
 
-    private PrefsManager prefs;
-    private BookmarkManager bookmarkManager;
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private volatile boolean activityDestroyed = false;
-    private final Object rendererLock = new Object();
+    PrefsManager prefs;
+    BookmarkManager bookmarkManager;
+    final Handler handler = new Handler(Looper.getMainLooper());
+    final ExecutorService executor = Executors.newSingleThreadExecutor();
+    volatile boolean activityDestroyed = false;
+    final Object rendererLock = new Object();
 
     private ParcelFileDescriptor parcelFileDescriptor;
-    private PdfRenderer pdfRenderer;
+    PdfRenderer pdfRenderer;
     private Bitmap currentBitmap;
     private File localFile;
-    private String filePath;
-    private String fileName;
-    private int pageCount = 0;
-    private int currentPage = 0;
+    String filePath;
+    String fileName;
+    int pageCount = 0;
+    int currentPage = 0;
     private float zoom = 1.0f;
     private float renderedZoom = 1.0f;
     private int pendingPageSlideDirection = 0;
     private int renderGeneration = 0;
     private boolean backgroundPdfBitmapsReleased = false;
     private final Runnable backgroundPdfMemoryTrimRunnable = () -> trimPdfBitmapsForBackground(false);
+    private PdfReaderStartupController startupController;
+    private PdfPageTurnController pageTurnController;
+
+    private PdfReaderStartupController startup() {
+        if (startupController == null) {
+            startupController = new PdfReaderStartupController(this);
+        }
+        return startupController;
+    }
+
+    private PdfPageTurnController pageTurns() {
+        if (pageTurnController == null) {
+            pageTurnController = new PdfPageTurnController(this);
+        }
+        return pageTurnController;
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         prefs = PrefsManager.getInstance(this);
         prefs.applyLanguage(prefs.getLanguageMode());
         super.onCreate(savedInstanceState);
-        ViewerRegistry.activate(this);
-
-        resolveReaderThemeColors();
-        touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
-
-        setContentView(R.layout.activity_pdf_reader);
-        applyDocumentSystemBarColors();
-
-        // targetSdk 35 forces edge-to-edge regardless of setDecorFitsSystemWindows,
-        // so the toolbar would otherwise be hidden under the status bar and the
-        // page-control buttons under the navigation bar. The shared helper
-        // installs an OnApplyWindowInsetsListener that pads the AppBarLayout and
-        // bottom bar by the matching system inset, which is exactly what is
-        // needed here.
-        com.textview.reader.util.EdgeToEdgeUtil.applyFoldableChromeInsets(this,
-                findViewById(R.id.pdf_root),
-                findViewById(R.id.pdf_appbar),
-                findViewById(R.id.pdf_bottom_bar),
-                findViewById(R.id.pdf_viewport),
-                () -> pdfChromeVisible);
-        applyDocumentSystemBarColors();
-
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        if (getSupportActionBar() != null) {
-            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        }
-        toolbar.setTitleTextColor(Color.WHITE);
-        toolbar.setNavigationIcon(tintedBackIcon());
-
-        root = findViewById(R.id.pdf_root);
-        pdfAppBar = findViewById(R.id.pdf_appbar);
-        pdfBottomBar = findViewById(R.id.pdf_bottom_bar);
-        pageImage = findViewById(R.id.pdf_page_image);
-        pdfContinuousList = findViewById(R.id.pdf_continuous_list);
-        progressBar = findViewById(R.id.pdf_progress);
-        pageStatus = findViewById(R.id.pdf_page_status);
-        prevButton = findViewById(R.id.pdf_prev);
-        nextButton = findViewById(R.id.pdf_next);
-        slideModeButton = findViewById(R.id.pdf_slide_toggle);
-        pageButton = findViewById(R.id.pdf_page);
-        bookmarkButton = findViewById(R.id.pdf_bookmark);
-        zoomMoreButton = findViewById(R.id.pdf_zoom_more);
-        pdfViewport = findViewById(R.id.pdf_viewport);
-        pdfHScroll = findViewById(R.id.pdf_h_scroll);
-        pdfVScroll = findViewById(R.id.pdf_v_scroll);
-        setupContinuousPdfList();
-
-        bookmarkManager = BookmarkManager.getInstance(this);
-        verticalPageSlideMode = getSharedPreferences("pdf_reader", MODE_PRIVATE)
-                .getBoolean("vertical_page_slide_mode", false);
-        styleControls();
-        setupControls();
-        installPdfGestures();
-
-        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override public void handleOnBackPressed() { finish(); }
-        });
-
-        // Brightness override is intentionally TXT-reader-only. PDF should always
-        // use the system brightness rather than inheriting a saved TXT brightness
-        // override from ReaderActivity.
-        WindowManager.LayoutParams lp = getWindow().getAttributes();
-        lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
-        getWindow().setAttributes(lp);
-
-        loadPdfFromIntent();
+        startup().onCreateAfterSuper(savedInstanceState);
     }
 
 
-    private void setupContinuousPdfList() {
+    void setupContinuousPdfList() {
         if (pdfContinuousList == null) return;
 
-        pdfContinuousAdapter = new PdfContinuousPageAdapter();
+        pdfContinuousAdapter = new PdfContinuousPageAdapter(this);
         LinearLayoutManager lm = new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false);
         pdfContinuousList.setLayoutManager(lm);
         pdfContinuousList.setAdapter(pdfContinuousAdapter);
@@ -410,72 +356,72 @@ public class PdfReaderActivity extends AppCompatActivity {
 
     private boolean handlePdfViewportGesture(@NonNull MotionEvent event) {
         if (pdfViewport == null || pageCount <= 0) return false;
-
         boolean insideViewport = isEventInsideView(pdfViewport, event);
-        if (verticalPageSlideMode) {
-            // Continuous vertical PDF mode is still vertically scrolled by the
-            // RecyclerView. When pages are zoomed wider than the viewport, horizontal
-            // drags are intercepted here so the user can pan across the enlarged
-            // page instead of being stuck at the centered crop.
-            if (insideViewport && scaleGestureDetector != null) {
-                scaleGestureDetector.onTouchEvent(event);
-                if (event.getPointerCount() > 1 || scaleGestureDetector.isInProgress()) {
-                    return true;
-                }
-            }
-            if (handlePdfTapGesture(event, insideViewport)) {
-                resetViewportGesture();
+        return verticalPageSlideMode
+                ? handleContinuousPdfViewportGesture(event, insideViewport)
+                : handleSinglePagePdfViewportGesture(event, insideViewport);
+    }
+
+    private boolean handleContinuousPdfViewportGesture(@NonNull MotionEvent event, boolean insideViewport) {
+        // Continuous vertical PDF mode is still vertically scrolled by the
+        // RecyclerView. When pages are zoomed wider than the viewport, horizontal
+        // drags are intercepted here so the user can pan across the enlarged
+        // page instead of being stuck at the centered crop.
+        if (insideViewport && scaleGestureDetector != null) {
+            scaleGestureDetector.onTouchEvent(event);
+            if (event.getPointerCount() > 1 || scaleGestureDetector.isInProgress()) {
                 return true;
             }
-
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    gestureStartRawX = event.getRawX();
-                    gestureStartRawY = event.getRawY();
-                    lastPanRawX = gestureStartRawX;
-                    lastPanRawY = gestureStartRawY;
-                    viewportPanConsumed = false;
-                    gestureStartedInViewport = insideViewport;
-                    gestureSawMultiTouch = event.getPointerCount() > 1;
-                    return false;
-
-                case MotionEvent.ACTION_POINTER_DOWN:
-                    if (gestureStartedInViewport) gestureSawMultiTouch = true;
-                    return false;
-
-                case MotionEvent.ACTION_MOVE:
-                    if (!gestureStartedInViewport || gestureSawMultiTouch
-                            || (scaleGestureDetector != null && scaleGestureDetector.isInProgress())) {
-                        return false;
-                    }
-                    if (pdfContinuousAdapter != null && pdfContinuousAdapter.canPanVisiblePageHorizontally()) {
-                        float rawX = event.getRawX();
-                        float rawY = event.getRawY();
-                        float stepDx = rawX - lastPanRawX;
-                        float totalDx = rawX - gestureStartRawX;
-                        float totalDy = rawY - gestureStartRawY;
-                        boolean horizontalPanGesture = viewportPanConsumed
-                                || (Math.abs(totalDx) > touchSlop && Math.abs(totalDx) > Math.abs(totalDy) * 1.12f);
-                        if (horizontalPanGesture) {
-                            boolean moved = pdfContinuousAdapter.panVisiblePageHorizontally(-stepDx * 1.65f);
-                            viewportPanConsumed = true;
-                            lastPanRawX = rawX;
-                            lastPanRawY = rawY;
-                            return moved || Math.abs(stepDx) > 0.5f;
-                        }
-                    }
-                    return false;
-
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    boolean consumed = viewportPanConsumed;
-                    resetViewportGesture();
-                    return consumed;
-
-                default:
-                    return false;
-            }
         }
+        if (handlePdfTapGesture(event, insideViewport)) {
+            resetViewportGesture();
+            return true;
+        }
+
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                beginViewportGesture(event, insideViewport, false);
+                return false;
+
+            case MotionEvent.ACTION_POINTER_DOWN:
+                if (gestureStartedInViewport) gestureSawMultiTouch = true;
+                return false;
+
+            case MotionEvent.ACTION_MOVE:
+                return handleContinuousPdfHorizontalPan(event);
+
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                boolean consumed = viewportPanConsumed;
+                resetViewportGesture();
+                return consumed;
+
+            default:
+                return false;
+        }
+    }
+
+    private boolean handleContinuousPdfHorizontalPan(@NonNull MotionEvent event) {
+        if (isViewportGestureBlockedForPan()) return false;
+        if (pdfContinuousAdapter == null || !pdfContinuousAdapter.canPanVisiblePageHorizontally()) return false;
+
+        float rawX = event.getRawX();
+        float rawY = event.getRawY();
+        float stepDx = rawX - lastPanRawX;
+        float totalDx = rawX - gestureStartRawX;
+        float totalDy = rawY - gestureStartRawY;
+        boolean horizontalPanGesture = viewportPanConsumed
+                || (Math.abs(totalDx) > touchSlop && Math.abs(totalDx) > Math.abs(totalDy) * 1.12f);
+        if (!horizontalPanGesture) return false;
+
+        boolean moved = pdfContinuousAdapter.panVisiblePageHorizontally(-stepDx * 1.65f);
+        viewportPanConsumed = true;
+        lastPanRawX = rawX;
+        lastPanRawY = rawY;
+        return moved || Math.abs(stepDx) > 0.5f;
+    }
+
+    private boolean handleSinglePagePdfViewportGesture(@NonNull MotionEvent event, boolean insideViewport) {
         if (handlePdfTapGesture(event, insideViewport)) {
             resetViewportGesture();
             return true;
@@ -486,19 +432,7 @@ public class PdfReaderActivity extends AppCompatActivity {
 
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                gestureStartRawX = event.getRawX();
-                gestureStartRawY = event.getRawY();
-                lastPanRawX = gestureStartRawX;
-                lastPanRawY = gestureStartRawY;
-                viewportPanConsumed = false;
-                gestureStartedInViewport = insideViewport;
-                gestureSawMultiTouch = event.getPointerCount() > 1;
-                gestureStartedWithHorizontalScrollable = insideViewport && isPdfHorizontallyScrollable();
-                gestureStartedWithVerticalScrollable = insideViewport && isPdfVerticallyScrollable();
-                gestureStartedAtLeftEdge = !gestureStartedWithHorizontalScrollable || isPdfAtLeftEdge(dpToPx(3));
-                gestureStartedAtRightEdge = !gestureStartedWithHorizontalScrollable || isPdfAtRightEdge(dpToPx(3));
-                gestureStartedAtTopEdge = !gestureStartedWithVerticalScrollable || isPdfAtTopEdge(dpToPx(3));
-                gestureStartedAtBottomEdge = !gestureStartedWithVerticalScrollable || isPdfAtBottomEdge(dpToPx(3));
+                beginViewportGesture(event, insideViewport, true);
                 return false;
 
             case MotionEvent.ACTION_POINTER_DOWN:
@@ -506,67 +440,10 @@ public class PdfReaderActivity extends AppCompatActivity {
                 return false;
 
             case MotionEvent.ACTION_MOVE:
-                if (!gestureStartedInViewport || gestureSawMultiTouch
-                        || (scaleGestureDetector != null && scaleGestureDetector.isInProgress())) {
-                    return false;
-                }
-                if (isPdfContentScrollable()) {
-                    float rawX = event.getRawX();
-                    float rawY = event.getRawY();
-                    float stepDx = rawX - lastPanRawX;
-                    float stepDy = rawY - lastPanRawY;
-                    float totalDx = rawX - gestureStartRawX;
-                    float totalDy = rawY - gestureStartRawY;
-                    if (viewportPanConsumed || Math.hypot(totalDx, totalDy) > touchSlop) {
-                        float horizontalPan = -stepDx;
-                        float verticalPan = -stepDy;
-                        if (!isPdfAtOriginalZoom()) {
-                            if (isPdfHorizontallyScrollable()) {
-                                horizontalPan *= PDF_ZOOMED_HORIZONTAL_PAN_ACCELERATION;
-                            }
-                            if (isPdfVerticallyScrollable()) {
-                                verticalPan *= PDF_ZOOMED_VERTICAL_PAN_ACCELERATION;
-                            }
-                        }
-                        panPdfContent(horizontalPan, verticalPan);
-                        viewportPanConsumed = true;
-                        lastPanRawX = rawX;
-                        lastPanRawY = rawY;
-                        return true;
-                    }
-                }
-                return false;
+                return handleSinglePagePdfPan(event);
 
             case MotionEvent.ACTION_UP:
-                if (!gestureStartedInViewport || gestureSawMultiTouch
-                        || (scaleGestureDetector != null && scaleGestureDetector.isInProgress())) {
-                    resetViewportGesture();
-                    return false;
-                }
-                float dx = event.getRawX() - gestureStartRawX;
-                float dy = event.getRawY() - gestureStartRawY;
-                if (verticalPageSlideMode) {
-                    boolean strongVerticalPageSwipe = Math.abs(dy) >= getPdfVerticalPageSwipeThresholdPx()
-                            && Math.abs(dy) > Math.abs(dx) * getPdfVerticalPageSwipeDominanceRatio();
-                    if (strongVerticalPageSwipe && canTurnPdfPageFromVerticalSwipe(dy)) {
-                        if (dy < 0) goToPage(currentPage + 1, 1);
-                        else goToPage(currentPage - 1, -1);
-                        resetViewportGesture();
-                        return true;
-                    }
-                } else {
-                    boolean strongPageSwipe = Math.abs(dx) >= getPdfHorizontalPageSwipeThresholdPx()
-                            && Math.abs(dx) > Math.abs(dy) * getPdfHorizontalPageSwipeDominanceRatio();
-                    if (strongPageSwipe && canTurnPdfPageFromSwipe(dx)) {
-                        if (dx < 0) goToPage(currentPage + 1, 1);
-                        else goToPage(currentPage - 1, -1);
-                        resetViewportGesture();
-                        return true;
-                    }
-                }
-                boolean consumed = viewportPanConsumed;
-                resetViewportGesture();
-                return consumed;
+                return handleSinglePagePdfSwipeRelease(event);
 
             case MotionEvent.ACTION_CANCEL:
                 resetViewportGesture();
@@ -575,6 +452,77 @@ public class PdfReaderActivity extends AppCompatActivity {
             default:
                 return false;
         }
+    }
+
+    private void beginViewportGesture(@NonNull MotionEvent event, boolean insideViewport, boolean trackScrollableEdges) {
+        gestureStartRawX = event.getRawX();
+        gestureStartRawY = event.getRawY();
+        lastPanRawX = gestureStartRawX;
+        lastPanRawY = gestureStartRawY;
+        viewportPanConsumed = false;
+        gestureStartedInViewport = insideViewport;
+        gestureSawMultiTouch = event.getPointerCount() > 1;
+        if (!trackScrollableEdges) return;
+
+        gestureStartedWithHorizontalScrollable = insideViewport && isPdfHorizontallyScrollable();
+        gestureStartedWithVerticalScrollable = insideViewport && isPdfVerticallyScrollable();
+        gestureStartedAtLeftEdge = !gestureStartedWithHorizontalScrollable || isPdfAtLeftEdge(dpToPx(3));
+        gestureStartedAtRightEdge = !gestureStartedWithHorizontalScrollable || isPdfAtRightEdge(dpToPx(3));
+        gestureStartedAtTopEdge = !gestureStartedWithVerticalScrollable || isPdfAtTopEdge(dpToPx(3));
+        gestureStartedAtBottomEdge = !gestureStartedWithVerticalScrollable || isPdfAtBottomEdge(dpToPx(3));
+    }
+
+    private boolean isViewportGestureBlockedForPan() {
+        return !gestureStartedInViewport || gestureSawMultiTouch
+                || (scaleGestureDetector != null && scaleGestureDetector.isInProgress());
+    }
+
+    private boolean handleSinglePagePdfPan(@NonNull MotionEvent event) {
+        if (isViewportGestureBlockedForPan() || !isPdfContentScrollable()) return false;
+
+        float rawX = event.getRawX();
+        float rawY = event.getRawY();
+        float stepDx = rawX - lastPanRawX;
+        float stepDy = rawY - lastPanRawY;
+        float totalDx = rawX - gestureStartRawX;
+        float totalDy = rawY - gestureStartRawY;
+        if (!viewportPanConsumed && Math.hypot(totalDx, totalDy) <= touchSlop) return false;
+
+        float horizontalPan = -stepDx;
+        float verticalPan = -stepDy;
+        if (!isPdfAtOriginalZoom()) {
+            if (isPdfHorizontallyScrollable()) {
+                horizontalPan *= PDF_ZOOMED_HORIZONTAL_PAN_ACCELERATION;
+            }
+            if (isPdfVerticallyScrollable()) {
+                verticalPan *= PDF_ZOOMED_VERTICAL_PAN_ACCELERATION;
+            }
+        }
+        panPdfContent(horizontalPan, verticalPan);
+        viewportPanConsumed = true;
+        lastPanRawX = rawX;
+        lastPanRawY = rawY;
+        return true;
+    }
+
+    private boolean handleSinglePagePdfSwipeRelease(@NonNull MotionEvent event) {
+        if (isViewportGestureBlockedForPan()) {
+            resetViewportGesture();
+            return false;
+        }
+        float dx = event.getRawX() - gestureStartRawX;
+        float dy = event.getRawY() - gestureStartRawY;
+        boolean strongPageSwipe = Math.abs(dx) >= getPdfHorizontalPageSwipeThresholdPx()
+                && Math.abs(dx) > Math.abs(dy) * getPdfHorizontalPageSwipeDominanceRatio();
+        if (strongPageSwipe && canTurnPdfPageFromSwipe(dx)) {
+            if (dx < 0) goToPage(currentPage + 1, 1);
+            else goToPage(currentPage - 1, -1);
+            resetViewportGesture();
+            return true;
+        }
+        boolean consumed = viewportPanConsumed;
+        resetViewportGesture();
+        return consumed;
     }
 
     private void resetViewportGesture() {
@@ -732,16 +680,10 @@ public class PdfReaderActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        cancelPdfBackgroundMemoryTrim();
-        ThemeManager.getInstance(this).reloadFromStorage();
-        applyDocumentSystemBarColors();
-        styleControls();
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        if (toolbar != null) toolbar.setNavigationIcon(tintedBackIcon());
-        restorePdfBitmapsAfterBackgroundTrimIfNeeded();
+        startup().onResume();
     }
 
-    private void resolveReaderThemeColors() {
+    void resolveReaderThemeColors() {
         Theme theme = ThemeManager.getInstance(this).getActiveTheme();
         if (theme != null) {
             readerBg = theme.getBackgroundColor();
@@ -753,7 +695,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         readerLine = blendColors(readerBg, readerFg, isDarkColor(readerBg) ? 0.28f : 0.20f);
     }
 
-    private void applyDocumentSystemBarColors() {
+    void applyDocumentSystemBarColors() {
         resolveReaderThemeColors();
         int bg = readerBg;
         int toolbarBg = readerToolbarBg;
@@ -780,32 +722,21 @@ public class PdfReaderActivity extends AppCompatActivity {
         }
     }
 
-    private boolean isDarkColor(int color) {
-        int r = Color.red(color);
-        int g = Color.green(color);
-        int b = Color.blue(color);
-        double luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
-        return luminance < 0.5;
+    boolean isDarkColor(int color) {
+        return UiColorUtils.isDarkColor(color);
     }
 
-    private int blendColors(int base, int overlay, float overlayAlpha) {
-        overlayAlpha = Math.max(0f, Math.min(1f, overlayAlpha));
-        float inv = 1f - overlayAlpha;
-        return Color.rgb(
-                Math.round(Color.red(base) * inv + Color.red(overlay) * overlayAlpha),
-                Math.round(Color.green(base) * inv + Color.green(overlay) * overlayAlpha),
-                Math.round(Color.blue(base) * inv + Color.blue(overlay) * overlayAlpha));
+    int blendColors(int base, int overlay, float overlayAlpha) {
+        return UiColorUtils.blendColors(base, overlay, overlayAlpha);
     }
 
     @Override
     protected void onNewIntent(@NonNull android.content.Intent intent) {
         super.onNewIntent(intent);
-        saveReadingState();
-        setIntent(intent);
-        loadPdfFromIntent();
+        startup().onNewIntent(intent);
     }
 
-    private android.graphics.drawable.Drawable tintedBackIcon() {
+    android.graphics.drawable.Drawable tintedBackIcon() {
         android.graphics.drawable.Drawable icon = androidx.core.content.ContextCompat.getDrawable(
                 this, androidx.appcompat.R.drawable.abc_ic_ab_back_material);
         if (icon == null) return null;
@@ -814,7 +745,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         return wrapped;
     }
 
-    private void styleControls() {
+    void styleControls() {
         resolveReaderThemeColors();
         if (root != null) root.setBackgroundColor(readerBg);
         if (pdfAppBar == null) pdfAppBar = findViewById(R.id.pdf_appbar);
@@ -840,13 +771,13 @@ public class PdfReaderActivity extends AppCompatActivity {
     }
 
 
-    private void updateLoadingIndicatorTheme() {
+    void updateLoadingIndicatorTheme() {
         if (progressBar == null) return;
         progressBar.setBackgroundColor(Color.TRANSPARENT);
         progressBar.setIndeterminateTintList(ColorStateList.valueOf(readerFg));
     }
 
-    private void setupControls() {
+    void setupControls() {
         prevButton.setOnClickListener(v -> goToPage(currentPage - 1, -1));
         nextButton.setOnClickListener(v -> goToPage(currentPage + 1, 1));
         if (slideModeButton != null) {
@@ -862,7 +793,7 @@ public class PdfReaderActivity extends AppCompatActivity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (handlePdfPageTurnKey(event)) return true;
+        if (pageTurns().handlePageTurnKey(event)) return true;
         return super.dispatchKeyEvent(event);
     }
 
@@ -870,66 +801,12 @@ public class PdfReaderActivity extends AppCompatActivity {
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         // Fallback for devices that route hardware keys through onKeyDown() instead
         // of dispatchKeyEvent(). dispatchKeyEvent() normally consumes these first.
-        if (handlePdfPageTurnKey(event)) return true;
+        if (pageTurns().handlePageTurnKey(event)) return true;
         return super.onKeyDown(keyCode, event);
     }
 
-    private boolean handlePdfPageTurnKey(KeyEvent event) {
-        if (event == null || prefs == null || !prefs.getVolumeKeyScroll()) return false;
 
-        int direction = pageTurnDirectionForKey(event.getKeyCode());
-        if (direction == 0) return false;
-
-        int action = event.getAction();
-        if (action == KeyEvent.ACTION_DOWN) {
-            if (event.getRepeatCount() == 0) {
-                pagePdfBy(direction);
-            }
-            return true;
-        }
-
-        // Consume ACTION_UP too so Android/e-reader firmware does not also treat
-        // volume keys as volume changes after the app has used them for paging.
-        return action == KeyEvent.ACTION_UP;
-    }
-
-    private int pageTurnDirectionForKey(int keyCode) {
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_VOLUME_DOWN:
-            case KeyEvent.KEYCODE_PAGE_DOWN:
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
-            case KeyEvent.KEYCODE_DPAD_DOWN:
-            case KeyEvent.KEYCODE_SPACE:
-            case KeyEvent.KEYCODE_FORWARD:
-            case KeyEvent.KEYCODE_MEDIA_NEXT:
-            case KeyEvent.KEYCODE_BUTTON_R1:
-            case KeyEvent.KEYCODE_NAVIGATE_NEXT:
-                return +1;
-
-            case KeyEvent.KEYCODE_VOLUME_UP:
-            case KeyEvent.KEYCODE_PAGE_UP:
-            case KeyEvent.KEYCODE_DPAD_LEFT:
-            case KeyEvent.KEYCODE_DPAD_UP:
-            case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
-            case KeyEvent.KEYCODE_BUTTON_L1:
-            case KeyEvent.KEYCODE_NAVIGATE_PREVIOUS:
-                return -1;
-
-            default:
-                return 0;
-        }
-    }
-
-    private void pagePdfBy(int direction) {
-        if (pageCount <= 0) return;
-        int target = Math.max(0, Math.min(pageCount - 1, currentPage + direction));
-        if (target != currentPage) {
-            goToPage(target, Integer.compare(target, currentPage));
-        }
-    }
-
-
-    private void installPdfGestures() {
+    void installPdfGestures() {
         scaleGestureDetector = new ScaleGestureDetector(this, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override
             public boolean onScaleBegin(ScaleGestureDetector detector) {
@@ -1330,10 +1207,10 @@ public class PdfReaderActivity extends AppCompatActivity {
 
     private int dialogBg() { return readerBg; }
     private int dialogPanel() { return readerPanel; }
-    private int dialogFg() { return readerFg; }
-    private int dialogSub() { return readerSub; }
+    int dialogFg() { return readerFg; }
+    int dialogSub() { return readerSub; }
 
-    private LinearLayout makeDialogBox() {
+    LinearLayout makeDialogBox() {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dpToPx(18), dpToPx(14), dpToPx(18), dpToPx(10));
@@ -1345,7 +1222,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         return box;
     }
 
-    private TextView makeDialogTitle(String text) {
+    TextView makeDialogTitle(String text) {
         TextView title = new TextView(this);
         title.setText(text);
         title.setTextColor(dialogFg());
@@ -1357,7 +1234,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         return title;
     }
 
-    private EditText makeDialogInput(String hint) {
+    EditText makeDialogInput(String hint) {
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setHint(hint);
@@ -1400,26 +1277,6 @@ public class PdfReaderActivity extends AppCompatActivity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(48));
         lp.setMargins(0, 0, 0, dpToPx(8));
         box.addView(row, lp);
-        row.setOnClickListener(v -> action.run());
-        return row;
-    }
-
-    private TextView makeDialogActionRow(String text, Runnable action) {
-        TextView row = new TextView(this);
-        row.setText(text);
-        row.setContentDescription(text);
-        row.setTextColor(dialogFg());
-        row.setTextSize(16f);
-        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        row.setPadding(dpToPx(14), 0, dpToPx(14), 0);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(dialogPanel());
-        bg.setCornerRadius(dpToPx(10));
-        row.setBackground(bg);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(48));
-        lp.setMargins(0, 0, 0, dpToPx(8));
-        row.setLayoutParams(lp);
         row.setOnClickListener(v -> action.run());
         return row;
     }
@@ -1483,115 +1340,28 @@ public class PdfReaderActivity extends AppCompatActivity {
         return dialogRef[0];
     }
 
-    private android.app.Dialog createStablePositionedDialog(@NonNull View content,
-                                                             int yDp,
-                                                             boolean adjustResize,
-                                                             boolean legacyBookmarkWidth) {
-        android.app.Dialog dialog = new android.app.Dialog(this);
-        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
-        dialog.setCanceledOnTouchOutside(true);
-
-        android.widget.FrameLayout outerFrame = new android.widget.FrameLayout(this);
-        outerFrame.setBackgroundColor(Color.TRANSPARENT);
-        outerFrame.setClipChildren(true);
-        outerFrame.setClipToPadding(true);
-
-        // Keep the content view's own rounded/background drawable.
-        // Do not force it transparent here; the dialog window/background is already transparent
-        // so clearing this background makes the popup body invisible.
-        if (content instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) content;
-            group.setClipChildren(true);
-            group.setClipToPadding(true);
-        }
-        ScrollView adaptiveScroll = wrapAdaptiveDialogContent(content, outerFrame);
-        dialog.setContentView(outerFrame);
-
-        android.view.Window window = dialog.getWindow();
-        if (window != null) {
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
-            lp.copyFrom(window.getAttributes());
-            lp.width = legacyBookmarkWidth ? legacyBookmarkDialogWidthPx() : txtReaderDialogWidthPx();
-            lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-            lp.y = dpToPx(yDp);
-            lp.dimAmount = 0.16f;
-            window.setAttributes(lp);
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            if (adjustResize) {
-                window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-            }
-        }
-        applyAdaptiveDialogMaxHeight(dialog, adaptiveScroll, legacyBookmarkWidth ? legacyBookmarkDialogWidthPx() : txtReaderDialogWidthPx());
-        return dialog;
+    android.app.Dialog createStablePositionedDialog(@NonNull View content,
+                                                    int yDp,
+                                                    boolean adjustResize,
+                                                    boolean legacyBookmarkWidth) {
+        int widthPx = legacyBookmarkWidth ? legacyBookmarkDialogWidthPx() : txtReaderDialogWidthPx();
+        return AdaptiveDialogLayoutHelper.createStableBottomDialog(this, content, yDp, adjustResize, widthPx);
     }
 
-    private ScrollView wrapAdaptiveDialogContent(@NonNull View content, @NonNull ViewGroup outerFrame) {
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(false);
-        scroll.setClipChildren(true);
-        scroll.setClipToPadding(true);
-        scroll.setVerticalScrollBarEnabled(false);
-        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-        scroll.addView(content, new ScrollView.LayoutParams(
-                ScrollView.LayoutParams.MATCH_PARENT,
-                ScrollView.LayoutParams.WRAP_CONTENT));
-        outerFrame.addView(scroll, new android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT));
-        return scroll;
+    ScrollView wrapAdaptiveDialogContent(@NonNull View content, @NonNull ViewGroup outerFrame) {
+        return AdaptiveDialogLayoutHelper.wrapAdaptiveContent(this, content, outerFrame);
     }
 
-    private void applyAdaptiveDialogMaxHeight(@NonNull android.app.Dialog dialog, @NonNull View adaptiveView, int widthPx) {
-        // Apply the constrained-window cap before dialog.show().  Posting this work
-        // after attach made bottom-positioned bookmark dialogs visibly drop/land in
-        // split-screen and pop-up modes because the window height changed after it
-        // was already on screen.  Normal full-screen mode still returns early below.
-        int availableHeight = currentVisibleWindowHeightPx();
-        if (availableHeight <= 0) return;
-        if (!shouldApplyAdaptiveDialogMaxHeight(availableHeight)) return;
-
-        int maxHeight = Math.max(dpToPx(220), Math.round(availableHeight * 0.88f) - dpToPx(24));
-        adaptiveView.measure(
-                View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int measured = adaptiveView.getMeasuredHeight();
-        if (measured > maxHeight) {
-            ViewGroup.LayoutParams lp = adaptiveView.getLayoutParams();
-            lp.height = maxHeight;
-            adaptiveView.setLayoutParams(lp);
-        }
-    }
-
-    private boolean shouldApplyAdaptiveDialogMaxHeight(int availableHeightPx) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N && isInMultiWindowMode()) {
-            return true;
-        }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && isInPictureInPictureMode()) {
-            return true;
-        }
-        int fullHeightPx = getResources().getDisplayMetrics().heightPixels;
-        return fullHeightPx > 0 && availableHeightPx < Math.round(fullHeightPx * 0.82f);
-    }
-
-    private int currentVisibleWindowHeightPx() {
-        Rect rect = new Rect();
-        View decor = getWindow() != null ? getWindow().getDecorView() : null;
-        if (decor != null) {
-            decor.getWindowVisibleDisplayFrame(rect);
-            if (rect.height() > dpToPx(240)) return rect.height();
-            if (decor.getHeight() > dpToPx(240)) return decor.getHeight();
-        }
-        return getResources().getDisplayMetrics().heightPixels;
+    void applyAdaptiveDialogMaxHeight(@NonNull android.app.Dialog dialog, @NonNull View adaptiveView, int widthPx) {
+        AdaptiveDialogLayoutHelper.applyAdaptiveMaxHeight(this, adaptiveView, widthPx);
     }
 
 
-    private void addDialogBottomActions(LinearLayout box, android.app.Dialog dialog, String primaryText, Runnable primaryAction) {
+    void addDialogBottomActions(LinearLayout box, android.app.Dialog dialog, String primaryText, Runnable primaryAction) {
         addDialogBottomActions(box, null, null, primaryText, primaryAction);
     }
 
-    private void addDialogBottomActions(LinearLayout box,
+    void addDialogBottomActions(LinearLayout box,
                                         String secondaryText,
                                         Runnable secondaryAction,
                                         String primaryText,
@@ -1630,7 +1400,7 @@ public class PdfReaderActivity extends AppCompatActivity {
     }
 
 
-    private void loadPdfFromIntent() {
+    void loadPdfFromIntent() {
         if (activityDestroyed) return;
         updateLoadingIndicatorTheme();
         progressBar.setVisibility(View.VISIBLE);
@@ -1712,11 +1482,11 @@ public class PdfReaderActivity extends AppCompatActivity {
         return Math.min(page, pageCount - 1);
     }
 
-    private void goToPage(int page) {
+    void goToPage(int page) {
         goToPage(page, Integer.compare(page, currentPage));
     }
 
-    private void goToPage(int page, int direction) {
+    void goToPage(int page, int direction) {
         int target = clampPage(page);
         if (target == currentPage) {
             if (verticalPageSlideMode) {
@@ -1935,7 +1705,7 @@ public class PdfReaderActivity extends AppCompatActivity {
                 .start();
     }
 
-    private void updatePageStatus() {
+    void updatePageStatus() {
         if (pageStatus == null) return;
         if (pageCount <= 0) {
             pageStatus.setText("");
@@ -1947,422 +1717,20 @@ public class PdfReaderActivity extends AppCompatActivity {
         nextButton.setEnabled(currentPage < pageCount - 1);
     }
 
-    private void addBookmarkForCurrentPage() {
-        if (filePath == null || pageCount <= 0) {
-            Toast.makeText(this, getString(R.string.file_not_loaded), Toast.LENGTH_SHORT).show();
-            return;
+    private PdfBookmarkDialogController pdfBookmarkDialogs;
+
+    private PdfBookmarkDialogController pdfBookmarkDialogs() {
+        if (pdfBookmarkDialogs == null) {
+            pdfBookmarkDialogs = new PdfBookmarkDialogController(this);
         }
-
-        List<Bookmark> existing = bookmarkManager.getBookmarksForFile(filePath);
-        for (Bookmark b : existing) {
-            if (b.getCharPosition() == currentPage) {
-                b.setLineNumber(currentPage + 1);
-                b.setPageNumber(currentPage + 1);
-                b.setTotalPages(pageCount);
-                b.setExcerpt(pageLabel(currentPage));
-                b.setEndPosition(currentPage);
-                bookmarkManager.updateBookmark(b);
-                Toast.makeText(this, getString(R.string.bookmark_updated), Toast.LENGTH_SHORT).show();
-                return;
-            }
-        }
-
-        Bookmark bookmark = new Bookmark(filePath, fileName, currentPage, currentPage + 1, pageLabel(currentPage));
-        bookmark.setPageNumber(currentPage + 1);
-        bookmark.setTotalPages(pageCount);
-        bookmark.setEndPosition(currentPage);
-        bookmarkManager.addBookmark(bookmark);
-        Toast.makeText(this, getString(R.string.bookmark_saved), Toast.LENGTH_SHORT).show();
-    }
-
-    private String pageLabel(int zeroBasedPage) {
-        return String.format(Locale.getDefault(), "Page %d", zeroBasedPage + 1);
+        return pdfBookmarkDialogs;
     }
 
     private void showBookmarksDialog() {
-        if (filePath == null) {
-            Toast.makeText(this, getString(R.string.file_not_loaded), Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        final int bg = readerBg;
-        final int panel = readerPanel;
-        final int fg = readerFg;
-        final int sub = readerSub;
-        final int line = readerLine;
-
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dpToPx(18), dpToPx(16), dpToPx(18), dpToPx(10));
-        GradientDrawable boxBg = new GradientDrawable();
-        boxBg.setColor(bg);
-        boxBg.setCornerRadius(dpToPx(16));
-        boxBg.setStroke(Math.max(1, dpToPx(1)), line);
-        box.setBackground(boxBg);
-
-        TextView title = new TextView(this);
-        title.setText(getString(R.string.bookmark));
-        title.setTextColor(fg);
-        title.setTextSize(22f);
-        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        title.setGravity(android.view.Gravity.CENTER);
-        title.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-        title.setPadding(0, 0, 0, dpToPx(4));
-        box.addView(title, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        TextView currentInfo = new TextView(this);
-        currentInfo.setTextColor(sub);
-        currentInfo.setTextSize(12f);
-        currentInfo.setGravity(android.view.Gravity.CENTER);
-        currentInfo.setSingleLine(false);
-        currentInfo.setLineSpacing(0f, 1.08f);
-        currentInfo.setPadding(0, 0, 0, dpToPx(10));
-        box.addView(currentInfo, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-        TextView hintButton = new TextView(this);
-        hintButton.setText(getString(R.string.bookmark_hints_show));
-        hintButton.setContentDescription(getString(R.string.bookmark_hints_show));
-        hintButton.setTextColor(sub);
-        hintButton.setTextSize(12f);
-        hintButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        hintButton.setGravity(android.view.Gravity.CENTER);
-        hintButton.setPadding(0, dpToPx(6), 0, dpToPx(4));
-        hintButton.setOnClickListener(v -> showBookmarkHintsPopup());
-        box.addView(hintButton, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        TextView saveButton = new TextView(this);
-        saveButton.setText(getString(R.string.add_current_bookmark));
-        saveButton.setGravity(android.view.Gravity.CENTER);
-        saveButton.setTextColor(fg);
-        saveButton.setTextSize(16f);
-        saveButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        saveButton.setPadding(0, dpToPx(12), 0, dpToPx(12));
-        android.graphics.drawable.GradientDrawable saveBg = new android.graphics.drawable.GradientDrawable();
-        boolean darkBookmarkDialog = isDarkColor(bg);
-        int saveFill = blendColors(bg, fg, darkBookmarkDialog ? 0.135f : 0.085f);
-        int saveStroke = blendColors(bg, fg, darkBookmarkDialog ? 0.460f : 0.360f);
-        saveBg.setColor(saveFill);
-        saveBg.setCornerRadius(dpToPx(14));
-        saveBg.setStroke(Math.max(1, dpToPx(1)), saveStroke);
-        saveButton.setBackground(saveBg);
-        LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        saveLp.setMargins(0, dpToPx(8), 0, 0);
-
-        RecyclerView rv = new RecyclerView(this);
-        rv.setLayoutManager(new LinearLayoutManager(this));
-        rv.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        rv.setItemAnimator(null);
-        rv.setBackgroundColor(Color.TRANSPARENT);
-        rv.setPadding(0, dpToPx(8), 0, 0);
-        rv.setClipToPadding(false);
-        BookmarkFolderAdapter adapter = new BookmarkFolderAdapter();
-        adapter.setThemeColors(bg, fg, sub, panel);
-        Set<String> expandedFolders = new HashSet<>();
-        expandedFolders.add(filePath);
-        rv.setAdapter(adapter);
-
-        TextView emptyText = new TextView(this);
-        emptyText.setText(getString(R.string.no_bookmarks_hint));
-        emptyText.setTextColor(sub);
-        emptyText.setGravity(android.view.Gravity.CENTER);
-        emptyText.setPadding(0, dpToPx(18), 0, dpToPx(18));
-        box.addView(emptyText, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams bookmarkListLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(430));
-        box.addView(rv, bookmarkListLp);
-        box.addView(saveButton, saveLp);
-
-        TextView closeButton = new TextView(this);
-        closeButton.setText(getString(R.string.close));
-        closeButton.setGravity(android.view.Gravity.CENTER);
-        closeButton.setTextColor(fg);
-        closeButton.setTextSize(16f);
-        closeButton.setPadding(0, dpToPx(14), 0, dpToPx(10));
-        box.addView(closeButton, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        android.app.Dialog dialog = createStablePositionedDialog(box, 34, false, true);
-
-        final Runnable[] refreshRef = new Runnable[1];
-        refreshRef[0] = () -> {
-            List<Bookmark> all = bookmarkManager.getAllBookmarks();
-            adapter.setBookmarks(all, expandedFolders, filePath);
-            // Keep the bookmark dialog height stable even when the list is empty.
-            // This prevents the window from bouncing when the first bookmark is added.
-            emptyText.setVisibility(View.GONE);
-            rv.setVisibility(View.VISIBLE);
-            LinearLayout.LayoutParams rvLp = (LinearLayout.LayoutParams) rv.getLayoutParams();
-            if (rvLp != null && rvLp.height != dpToPx(430)) {
-                rvLp.height = dpToPx(430);
-                rv.setLayoutParams(rvLp);
-            }
-            currentInfo.setText(getString(R.string.all_bookmarks_status,
-                    adapter.getFolderCount(), all.size(), currentPage + 1, pageCount));
-        };
-
-        saveButton.setOnClickListener(v -> {
-            addBookmarkForCurrentPage();
-            expandedFolders.add(filePath);
-            refreshRef[0].run();
-        });
-        closeButton.setOnClickListener(v -> dialog.dismiss());
-
-        adapter.setListener(new BookmarkFolderAdapter.Listener() {
-            @Override public void onFolderClick(String folderFilePath) {
-                if (expandedFolders.contains(folderFilePath)) expandedFolders.remove(folderFilePath);
-                else expandedFolders.add(folderFilePath);
-                refreshRef[0].run();
-            }
-
-            @Override public void onFolderDelete(String folderFilePath, String expansionKey, String folderName, int bookmarkCount) {
-                showBookmarkFolderDeleteConfirm(folderFilePath, folderName, bookmarkCount, () -> {
-                    expandedFolders.remove(folderFilePath);
-                    expandedFolders.remove(expansionKey);
-                    refreshRef[0].run();
-                });
-            }
-
-            @Override public void onBookmarkClick(Bookmark b) {
-                navigateToBookmark(b);
-                dialog.dismiss();
-            }
-
-            @Override public void onBookmarkDelete(Bookmark b) {
-                showBookmarkDeleteConfirm(b, refreshRef[0]);
-            }
-
-            @Override public void onBookmarkEdit(Bookmark b) {
-                showBookmarkMemoEditDialog(b, refreshRef[0]);
-            }
-        });
-
-        dialog.setOnDismissListener(d -> {});
-        refreshRef[0].run();
-        dialog.show();
+        pdfBookmarkDialogs().showBookmarksDialog();
     }
 
-    private void showBookmarkHintsPopup() {
-        LinearLayout box = makeDialogBox();
-        box.addView(makeDialogTitle(getString(R.string.bookmark_hints_show)));
-
-        TextView message = new TextView(this);
-        message.setText(getString(R.string.bookmark_folder_hint));
-        message.setTextColor(dialogSub());
-        message.setTextSize(13f);
-        message.setLineSpacing(0f, 1.12f);
-        message.setPadding(0, 0, 0, dpToPx(12));
-        box.addView(message, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
-        addDialogBottomActions(box, null, getString(R.string.ok), () -> {
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        dialogRef[0] = createSmallBookmarkHintDialog(box);
-        dialogRef[0].show();
-    }
-
-    private android.app.Dialog createSmallBookmarkHintDialog(@NonNull View content) {
-        android.app.Dialog dialog = new android.app.Dialog(this);
-        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
-        dialog.setCanceledOnTouchOutside(true);
-
-        android.widget.FrameLayout outerFrame = new android.widget.FrameLayout(this);
-        outerFrame.setBackgroundColor(Color.TRANSPARENT);
-        outerFrame.setClipChildren(true);
-        outerFrame.setClipToPadding(true);
-        if (content instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) content;
-            group.setClipChildren(true);
-            group.setClipToPadding(true);
-        }
-        ScrollView adaptiveScroll = wrapAdaptiveDialogContent(content, outerFrame);
-        dialog.setContentView(outerFrame);
-
-        android.view.Window window = dialog.getWindow();
-        if (window != null) {
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
-            lp.copyFrom(window.getAttributes());
-            int screenWidth = getResources().getDisplayMetrics().widthPixels;
-            lp.width = Math.max(dpToPx(240), Math.min(Math.round(screenWidth * 0.74f), dpToPx(360)));
-            lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-            lp.y = dpToPx(112);
-            lp.dimAmount = 0.16f;
-            window.setAttributes(lp);
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        }
-        applyAdaptiveDialogMaxHeight(dialog, adaptiveScroll, Math.max(dpToPx(240), Math.min(Math.round(getResources().getDisplayMetrics().widthPixels * 0.74f), dpToPx(360))));
-        return dialog;
-    }
-
-    private void navigateToBookmark(@NonNull Bookmark b) {
-        String path = b.getFilePath();
-        if (path == null || path.trim().isEmpty()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + "(missing path)", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        File target = new File(path.trim());
-        if (!target.exists()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (path.equals(filePath) || target.getAbsolutePath().equals(filePath)) {
-            goToPage(b.getCharPosition(), Integer.compare(b.getCharPosition(), currentPage));
-            return;
-        }
-        android.content.Intent intent;
-        String targetPath = target.getAbsolutePath();
-        if (FileUtils.isPdfFile(target.getName())) {
-            intent = new android.content.Intent(this, PdfReaderActivity.class);
-            intent.putExtra(PdfReaderActivity.EXTRA_FILE_PATH, targetPath);
-            intent.putExtra(PdfReaderActivity.EXTRA_JUMP_TO_PAGE, b.getCharPosition());
-        } else if (FileUtils.isEpubFile(target.getName()) || FileUtils.isWordFile(target.getName())) {
-            intent = new android.content.Intent(this, DocumentPageActivity.class);
-            intent.putExtra(DocumentPageActivity.EXTRA_FILE_PATH, targetPath);
-            intent.putExtra(DocumentPageActivity.EXTRA_JUMP_TO_PAGE, b.getCharPosition());
-        } else {
-            intent = new android.content.Intent(this, ReaderActivity.class);
-            intent.putExtra(ReaderActivity.EXTRA_FILE_PATH, targetPath);
-            intent.putExtra(ReaderActivity.EXTRA_JUMP_TO_POSITION, b.getCharPosition());
-            intent.putExtra(ReaderActivity.EXTRA_JUMP_DISPLAY_PAGE, b.getPageNumber());
-            intent.putExtra(ReaderActivity.EXTRA_JUMP_TOTAL_PAGES, b.getTotalPages());
-        }
-        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP | android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        startActivity(intent);
-    }
-
-    private void showBookmarkDeleteConfirm(@NonNull Bookmark bookmark, @NonNull Runnable afterDelete) {
-        LinearLayout box = makeDialogBox();
-        box.addView(makeDialogTitle(getString(R.string.delete_bookmark)));
-
-        TextView message = new TextView(this);
-        message.setText(bookmark.getFileName() + "\n\n" + bookmark.getDisplayText());
-        message.setTextColor(dialogSub());
-        message.setTextSize(14f);
-        message.setLineSpacing(0f, 1.15f);
-        message.setPadding(0, 0, 0, dpToPx(12));
-        box.addView(message, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
-        addDialogBottomActions(box, null, getString(R.string.delete), () -> {
-            bookmarkManager.deleteBookmark(bookmark.getId());
-            afterDelete.run();
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        dialogRef[0] = createStablePositionedDialog(box, PDF_TOOLBAR_POPUP_Y_DP, false, false);
-        dialogRef[0].show();
-    }
-
-    private void showBookmarkFolderDeleteConfirm(String folderFilePath, String folderName, int bookmarkCount, @NonNull Runnable afterDelete) {
-        LinearLayout box = makeDialogBox();
-        box.addView(makeDialogTitle(getString(R.string.delete_bookmark_folder)));
-
-        TextView message = new TextView(this);
-        String displayName = folderName != null && !folderName.trim().isEmpty() ? folderName.trim() : getString(R.string.bookmark);
-        message.setText(displayName + "\n\n"
-                + getString(R.string.delete_bookmark_folder_message, bookmarkCount)
-                + "\n" + getString(R.string.delete_bookmark_folder_note));
-        message.setTextColor(dialogSub());
-        message.setTextSize(14f);
-        message.setLineSpacing(0f, 1.15f);
-        message.setPadding(0, 0, 0, dpToPx(12));
-        box.addView(message, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
-        addDialogBottomActions(box, null, getString(R.string.delete), () -> {
-            bookmarkManager.deleteBookmarksForFile(folderFilePath);
-            afterDelete.run();
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        dialogRef[0] = createStablePositionedDialog(box, PDF_TOOLBAR_POPUP_Y_DP, false, false);
-        dialogRef[0].show();
-    }
-
-    private void showBookmarkMemoEditDialog(@NonNull Bookmark bookmark, @NonNull Runnable afterSave) {
-        LinearLayout box = makeDialogBox();
-        box.addView(makeDialogTitle(getString(R.string.edit_bookmark_memo)));
-
-        EditText input = makeDialogInput(getString(R.string.optional_memo));
-        input.setText(bookmark.getLabel());
-        input.setSelectAllOnFocus(true);
-        box.addView(input, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(52)));
-
-        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
-
-        LinearLayout actions = new LinearLayout(this);
-        actions.setTag("dialog_actions");
-        actions.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.END);
-        actions.setPadding(0, dpToPx(8), 0, 0);
-
-        TextView cancel = new TextView(this);
-        cancel.setText(getString(R.string.cancel));
-        cancel.setTextColor(dialogSub());
-        cancel.setTextSize(16f);
-        cancel.setGravity(android.view.Gravity.CENTER);
-        cancel.setPadding(dpToPx(14), 0, dpToPx(14), 0);
-
-        TextView clear = new TextView(this);
-        clear.setText(getString(R.string.clear_memo));
-        clear.setTextColor(dialogSub());
-        clear.setTextSize(16f);
-        clear.setGravity(android.view.Gravity.CENTER);
-        clear.setPadding(dpToPx(14), 0, dpToPx(14), 0);
-
-        TextView save = new TextView(this);
-        save.setText(getString(R.string.save));
-        save.setTextColor(dialogFg());
-        save.setTextSize(16f);
-        save.setGravity(android.view.Gravity.CENTER);
-        save.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        save.setPadding(dpToPx(18), 0, dpToPx(18), 0);
-
-        actions.addView(cancel, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
-        actions.addView(clear, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
-        actions.addView(save, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
-        box.addView(actions, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        cancel.setOnClickListener(v -> {
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        clear.setOnClickListener(v -> {
-            bookmark.setLabel("");
-            bookmarkManager.updateBookmark(bookmark);
-            afterSave.run();
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        save.setOnClickListener(v -> {
-            bookmark.setLabel(input.getText().toString().trim());
-            bookmarkManager.updateBookmark(bookmark);
-            afterSave.run();
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-
-        dialogRef[0] = createStablePositionedDialog(box, PDF_TOOLBAR_POPUP_Y_DP, true, false);
-        dialogRef[0].show();
-    }
-
-    private void saveReadingState() {
+    void saveReadingState() {
         if (filePath == null || !prefs.getAutoSavePosition()) return;
         ReaderState state = new ReaderState(filePath);
         state.setCharPosition(currentPage);
@@ -2384,15 +1752,15 @@ public class PdfReaderActivity extends AppCompatActivity {
         }
     }
 
-    private int dpToPx(float dp) {
+    int dpToPx(float dp) {
         return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
-    private void cancelPdfBackgroundMemoryTrim() {
+    void cancelPdfBackgroundMemoryTrim() {
         handler.removeCallbacks(backgroundPdfMemoryTrimRunnable);
     }
 
-    private void schedulePdfBackgroundMemoryTrim() {
+    void schedulePdfBackgroundMemoryTrim() {
         if (activityDestroyed || backgroundPdfBitmapsReleased || pdfRenderer == null) return;
         handler.removeCallbacks(backgroundPdfMemoryTrimRunnable);
         handler.postDelayed(backgroundPdfMemoryTrimRunnable, BACKGROUND_MEMORY_TRIM_DELAY_MS);
@@ -2410,7 +1778,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         backgroundPdfBitmapsReleased = true;
     }
 
-    private void restorePdfBitmapsAfterBackgroundTrimIfNeeded() {
+    void restorePdfBitmapsAfterBackgroundTrimIfNeeded() {
         if (!backgroundPdfBitmapsReleased) return;
         backgroundPdfBitmapsReleased = false;
         if (pdfRenderer == null || pageCount <= 0) return;
@@ -2464,455 +1832,14 @@ public class PdfReaderActivity extends AppCompatActivity {
     }
 
 
-    private class PdfContinuousPageAdapter extends RecyclerView.Adapter<PdfContinuousPageAdapter.PageViewHolder> {
-        private static final float DEFAULT_PDF_PAGE_RATIO = 1.4142f;
-        private static final int PAGE_VERTICAL_GAP_DP = 10;
-
-        private int count = 0;
-        private int viewportWidth = 0;
-        private float adapterZoom = 1.0f;
-        private int adapterGeneration = 0;
-        private final SparseIntArray pageHeightCache = new SparseIntArray();
-        private final SparseIntArray pagePanXCache = new SparseIntArray();
-        private final Set<String> pagesRendering = new HashSet<>();
-        private final Set<Bitmap> displayedBitmaps = Collections.newSetFromMap(new IdentityHashMap<>());
-        private final int cacheMaxKb;
-        private final LruCache<Integer, Bitmap> bitmapCache;
-
-        PdfContinuousPageAdapter() {
-            setHasStableIds(true);
-            cacheMaxKb = calculatePdfContinuousCacheKb();
-            bitmapCache = new LruCache<Integer, Bitmap>(cacheMaxKb) {
-                @Override
-                protected int sizeOf(Integer key, Bitmap value) {
-                    if (value == null || value.isRecycled()) return 0;
-                    return Math.max(1, value.getByteCount() / 1024);
-                }
-
-                @Override
-                protected void entryRemoved(boolean evicted, Integer key, Bitmap oldValue, Bitmap newValue) {
-                    if (oldValue != null && oldValue != newValue && !oldValue.isRecycled()) {
-                        if (displayedBitmaps.contains(oldValue)) {
-                            return;
-                        }
-                        oldValue.recycle();
-                    }
-                }
-            };
-        }
-
-        void configure(int newCount, int newViewportWidth, float newZoom) {
-            int clampedCount = Math.max(0, newCount);
-            int clampedWidth = Math.max(1, newViewportWidth);
-            float clampedZoom = Math.max(0.55f, Math.min(4.5f, newZoom));
-            boolean changed = count != clampedCount
-                    || viewportWidth != clampedWidth
-                    || Math.abs(adapterZoom - clampedZoom) > 0.01f;
-            count = clampedCount;
-            viewportWidth = clampedWidth;
-            adapterZoom = clampedZoom;
-            if (changed) {
-                adapterGeneration++;
-                clearCacheAndRenderingState();
-                notifyDataSetChanged();
-            }
-        }
-
-        void prefetchPage(int pageIndex) {
-            if (pageIndex < 0 || pageIndex >= count) return;
-            if (bitmapCache.get(pageIndex) != null) return;
-            startRender(pageIndex, null, adapterGeneration);
-        }
-
-        void clearBitmaps() {
-            adapterGeneration++;
-            clearCacheAndRenderingState();
-            if (!activityDestroyed) notifyDataSetChanged();
-        }
-
-        void release() {
-            adapterGeneration++;
-            count = 0;
-            clearCacheAndRenderingState();
-        }
-
-        private void clearCacheAndRenderingState() {
-            synchronized (pagesRendering) {
-                pagesRendering.clear();
-            }
-            pageHeightCache.clear();
-            pagePanXCache.clear();
-            bitmapCache.evictAll();
-        }
-
-        private boolean isBitmapStillCached(@NonNull Bitmap bitmap) {
-            for (Bitmap cached : bitmapCache.snapshot().values()) {
-                if (cached == bitmap) return true;
-            }
-            return false;
-        }
-
-        private void markBitmapDetached(Bitmap bitmap) {
-            if (bitmap == null) return;
-            displayedBitmaps.remove(bitmap);
-            if (!isBitmapStillCached(bitmap) && !bitmap.isRecycled()) {
-                bitmap.recycle();
-            }
-        }
-
-        @NonNull
-        @Override
-        public PageViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            ImageView image = new ImageView(parent.getContext());
-            image.setAdjustViewBounds(false);
-            image.setBackgroundColor(Color.WHITE);
-            // Do not use FIT_CENTER here: when zoom > 1.0 the rendered bitmap is
-            // intentionally wider/taller than the viewport. FIT_CENTER scales that
-            // bitmap back down to the row width and makes vertical-mode zoom look
-            // like it did not work. CENTER preserves the rendered zoom size.
-            image.setScaleType(ImageView.ScaleType.CENTER);
-            image.setContentDescription(getString(R.string.pdf_page));
-            image.setPadding(0, 0, 0, 0);
-
-            RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
-                    RecyclerView.LayoutParams.MATCH_PARENT,
-                    estimatePageRowHeight());
-            lp.setMargins(0, 0, 0, dpToPx(PAGE_VERTICAL_GAP_DP));
-            image.setLayoutParams(lp);
-            return new PageViewHolder(image);
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull PageViewHolder holder, int position) {
-            holder.bind(position, adapterGeneration);
-        }
-
-        @Override
-        public int getItemCount() {
-            return count;
-        }
-
-        @Override
-        public long getItemId(int position) {
-            return position;
-        }
-
-        @Override
-        public void onViewRecycled(@NonNull PageViewHolder holder) {
-            holder.clear();
-            super.onViewRecycled(holder);
-        }
-
-        private int estimatePageRowHeight() {
-            int cached = pageHeightCache.get(Math.max(0, currentPage), 0);
-            if (cached > 0) return cached;
-            int baseWidth = Math.max(1, viewportWidth - dpToPx(24));
-            int estimated = Math.round(baseWidth * DEFAULT_PDF_PAGE_RATIO * adapterZoom);
-            long pixels = (long) baseWidth * (long) estimated;
-            if (pixels > getContinuousPageMaxPixels()) {
-                float shrink = (float) Math.sqrt(getContinuousPageMaxPixels() / (double) pixels);
-                estimated = Math.max(1, Math.round(estimated * shrink));
-            }
-            return Math.max(dpToPx(220), estimated);
-        }
-
-        private int estimatedHeightForPage(int pageIndex) {
-            int cached = pageHeightCache.get(pageIndex, 0);
-            return cached > 0 ? cached : estimatePageRowHeight();
-        }
-
-        private void rememberPageHeight(int pageIndex, int height) {
-            if (pageIndex < 0 || height <= 0) return;
-            int old = pageHeightCache.get(pageIndex, 0);
-            if (Math.abs(old - height) > dpToPx(2)) {
-                pageHeightCache.put(pageIndex, height);
-            }
-        }
-
-        private int bitmapSizeKb(Bitmap bitmap) {
-            if (bitmap == null || bitmap.isRecycled()) return 0;
-            return Math.max(1, bitmap.getByteCount() / 1024);
-        }
-
-        private boolean canCacheBitmap(Bitmap bitmap) {
-            return bitmapSizeKb(bitmap) <= Math.max(1, cacheMaxKb);
-        }
-
-        private void deliverRenderedBitmap(int pageIndex, int generation, int renderedHeight,
-                                           @NonNull Bitmap bitmap, PageViewHolder originalHolder) {
-            if (bitmap.isRecycled()) return;
-            rememberPageHeight(pageIndex, renderedHeight);
-
-            boolean applied = false;
-            if (originalHolder != null) {
-                applied = originalHolder.setBitmapIfStillBound(bitmap, pageIndex, generation);
-            }
-
-            if (pdfContinuousList != null) {
-                RecyclerView.ViewHolder visibleHolder = pdfContinuousList.findViewHolderForAdapterPosition(pageIndex);
-                if (visibleHolder instanceof PageViewHolder && visibleHolder != originalHolder) {
-                    applied = ((PageViewHolder) visibleHolder).setBitmapIfStillBound(bitmap, pageIndex, generation) || applied;
-                }
-            }
-
-            if (canCacheBitmap(bitmap)) {
-                bitmapCache.put(pageIndex, bitmap);
-            } else if (!applied) {
-                bitmap.recycle();
-                return;
-            }
-
-            if (!applied) {
-                notifyItemChanged(pageIndex);
-            }
-        }
-
-        private String renderKeyFor(int pageIndex, int generation) {
-            return generation + ":" + pageIndex + ":" + viewportWidth + ":" + Math.round(adapterZoom * 100f);
-        }
-
-        private void startRender(int pageIndex, PageViewHolder holder, int generation) {
-            if (pdfRenderer == null || pageIndex < 0 || pageIndex >= pageCount) return;
-            String key = renderKeyFor(pageIndex, generation);
-            synchronized (pagesRendering) {
-                if (pagesRendering.contains(key)) return;
-                pagesRendering.add(key);
-            }
-            renderContinuousPageIntoHolder(holder, pageIndex, generation, key,
-                    Math.max(1, viewportWidth), adapterZoom);
-        }
-
-        private PageViewHolder findBestVisibleHolder() {
-            if (pdfContinuousList == null) return null;
-            RecyclerView.LayoutManager manager = pdfContinuousList.getLayoutManager();
-            if (!(manager instanceof LinearLayoutManager)) return null;
-            LinearLayoutManager lm = (LinearLayoutManager) manager;
-            int first = lm.findFirstVisibleItemPosition();
-            int last = lm.findLastVisibleItemPosition();
-            if (first == RecyclerView.NO_POSITION || last == RecyclerView.NO_POSITION) return null;
-
-            int viewportCenter = pdfContinuousList.getHeight() / 2;
-            PageViewHolder bestHolder = null;
-            int bestDistance = Integer.MAX_VALUE;
-            for (int i = first; i <= last; i++) {
-                View child = lm.findViewByPosition(i);
-                RecyclerView.ViewHolder vh = pdfContinuousList.findViewHolderForAdapterPosition(i);
-                if (child == null || !(vh instanceof PageViewHolder)) continue;
-                int distance = Math.abs(((child.getTop() + child.getBottom()) / 2) - viewportCenter);
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestHolder = (PageViewHolder) vh;
-                }
-            }
-            return bestHolder;
-        }
-
-        boolean canPanVisiblePageHorizontally() {
-            PageViewHolder holder = findBestVisibleHolder();
-            return holder != null && holder.canPanHorizontally();
-        }
-
-        boolean panVisiblePageHorizontally(float deltaX) {
-            PageViewHolder holder = findBestVisibleHolder();
-            return holder != null && holder.panHorizontally(deltaX);
-        }
-
-        class PageViewHolder extends RecyclerView.ViewHolder {
-            private final ImageView image;
-            private Bitmap displayedBitmap;
-            private int boundPage = RecyclerView.NO_POSITION;
-            private int boundGeneration = -1;
-            private int imageWidth = 0;
-
-            PageViewHolder(@NonNull ImageView image) {
-                super(image);
-                this.image = image;
-            }
-
-            void bind(int pageIndex, int generation) {
-                clear();
-                boundPage = pageIndex;
-                boundGeneration = generation;
-                image.setBackgroundColor(Color.WHITE);
-                setRowHeight(estimatedHeightForPage(pageIndex));
-
-                Bitmap cached = bitmapCache.get(pageIndex);
-                if (cached != null && !cached.isRecycled()) {
-                    setBitmapIfStillBound(cached, pageIndex, generation);
-                    return;
-                }
-
-                image.setImageDrawable(null);
-                startRender(pageIndex, this, generation);
-            }
-
-            boolean setBitmapIfStillBound(Bitmap nextBitmap, int pageIndex, int generation) {
-                if (boundPage != pageIndex || boundGeneration != generation || activityDestroyed) {
-                    return false;
-                }
-                if (nextBitmap == null || nextBitmap.isRecycled()) {
-                    image.setImageDrawable(null);
-                    return false;
-                }
-                if (displayedBitmap != nextBitmap) {
-                    markBitmapDetached(displayedBitmap);
-                    displayedBitmap = nextBitmap;
-                    displayedBitmaps.add(nextBitmap);
-                }
-                setImageFrame(nextBitmap.getWidth(), nextBitmap.getHeight());
-                image.setImageBitmap(nextBitmap);
-                applyHorizontalPan();
-                return true;
-            }
-
-            void setRowHeight(int height) {
-                setImageFrame(Math.max(1, viewportWidth), height);
-            }
-
-            private void setImageFrame(int width, int height) {
-                ViewGroup.LayoutParams lp = image.getLayoutParams();
-                if (lp == null) return;
-                int nextWidth = Math.max(Math.max(1, viewportWidth), width);
-                int nextHeight = Math.max(dpToPx(180), height);
-                imageWidth = nextWidth;
-                if (lp.width != nextWidth || lp.height != nextHeight) {
-                    lp.width = nextWidth;
-                    lp.height = nextHeight;
-                    image.setLayoutParams(lp);
-                }
-            }
-
-            boolean canPanHorizontally() {
-                return getHorizontalPanRange() > 0;
-            }
-
-            boolean panHorizontally(float deltaX) {
-                int range = getHorizontalPanRange();
-                if (range <= 0 || boundPage == RecyclerView.NO_POSITION) return false;
-                int current = getHorizontalPanOffset(range);
-                int next = Math.max(0, Math.min(range, current + Math.round(deltaX)));
-                pagePanXCache.put(boundPage, next);
-                applyHorizontalPan();
-                return next != current;
-            }
-
-            private int getHorizontalPanRange() {
-                if (pdfContinuousList == null) return 0;
-                int viewport = Math.max(1, pdfContinuousList.getWidth());
-                return Math.max(0, imageWidth - viewport);
-            }
-
-            private int getHorizontalPanOffset(int range) {
-                if (boundPage == RecyclerView.NO_POSITION) return 0;
-                int stored = pagePanXCache.get(boundPage, Integer.MIN_VALUE);
-                if (stored == Integer.MIN_VALUE) {
-                    stored = range / 2;
-                    pagePanXCache.put(boundPage, stored);
-                }
-                return Math.max(0, Math.min(range, stored));
-            }
-
-            private void applyHorizontalPan() {
-                int range = getHorizontalPanRange();
-                int offset = range > 0 ? getHorizontalPanOffset(range) : 0;
-                image.setTranslationX(-offset);
-            }
-
-            void clear() {
-                image.setImageDrawable(null);
-                image.setTranslationX(0f);
-                imageWidth = 0;
-                markBitmapDetached(displayedBitmap);
-                displayedBitmap = null;
-                boundPage = RecyclerView.NO_POSITION;
-                boundGeneration = -1;
-            }
-        }
-    }
-
-    private int calculatePdfContinuousCacheKb() {
+    int calculatePdfContinuousCacheKb() {
         long maxMemoryKb = Runtime.getRuntime().maxMemory() / 1024L;
         long targetKb = Math.max(12L * 1024L, Math.min(64L * 1024L, maxMemoryKb / 8L));
         return (int) Math.max(8L * 1024L, targetKb);
     }
 
-    private long getContinuousPageMaxPixels() {
+    long getContinuousPageMaxPixels() {
         return 12000000L;
-    }
-
-    private void renderContinuousPageIntoHolder(
-            PdfContinuousPageAdapter.PageViewHolder holder,
-            int pageIndex,
-            int generation,
-            @NonNull String renderKey,
-            int widthForRender,
-            float zoomForRender
-    ) {
-        final int pageToRender = pageIndex;
-
-        executor.execute(() -> {
-            Bitmap bitmap = null;
-            int renderedHeight = 0;
-            try {
-                synchronized (rendererLock) {
-                    if (activityDestroyed || pdfRenderer == null || pageToRender >= pageCount) {
-                        throw new IllegalStateException("PDF renderer is closed");
-                    }
-                    PdfRenderer.Page page = pdfRenderer.openPage(pageToRender);
-                    try {
-                        int baseWidth = Math.max(1, widthForRender - dpToPx(24));
-                        float fitScale = baseWidth / (float) page.getWidth();
-                        float renderScale = Math.max(0.2f, fitScale * zoomForRender);
-                        int width = Math.max(1, Math.round(page.getWidth() * renderScale));
-                        int height = Math.max(1, Math.round(page.getHeight() * renderScale));
-
-                        long pixels = (long) width * (long) height;
-                        long maxPixels = getContinuousPageMaxPixels();
-                        if (pixels > maxPixels) {
-                            float shrink = (float) Math.sqrt(maxPixels / (double) pixels);
-                            width = Math.max(1, Math.round(width * shrink));
-                            height = Math.max(1, Math.round(height * shrink));
-                        }
-
-                        bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-                        bitmap.eraseColor(Color.WHITE);
-                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
-                        renderedHeight = height;
-                    } finally {
-                        page.close();
-                    }
-                }
-
-                Bitmap finalBitmap = bitmap;
-                int finalRenderedHeight = renderedHeight;
-                handler.post(() -> {
-                    if (pdfContinuousAdapter != null) {
-                        synchronized (pdfContinuousAdapter.pagesRendering) {
-                            pdfContinuousAdapter.pagesRendering.remove(renderKey);
-                        }
-                    }
-                    if (activityDestroyed || pdfContinuousAdapter == null || generation != pdfContinuousAdapter.adapterGeneration) {
-                        if (finalBitmap != null && !finalBitmap.isRecycled()) finalBitmap.recycle();
-                        return;
-                    }
-                    if (finalBitmap == null || finalBitmap.isRecycled()) return;
-                    pdfContinuousAdapter.deliverRenderedBitmap(pageToRender, generation,
-                            finalRenderedHeight, finalBitmap, holder);
-                    if (verticalPageSlideMode && pageToRender == currentPage) {
-                        updatePageStatus();
-                    }
-                });
-            } catch (Exception e) {
-                if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
-                handler.post(() -> {
-                    if (pdfContinuousAdapter != null) {
-                        synchronized (pdfContinuousAdapter.pagesRendering) {
-                            pdfContinuousAdapter.pagesRendering.remove(renderKey);
-                        }
-                    }
-                });
-            }
-        });
     }
 
     @Override

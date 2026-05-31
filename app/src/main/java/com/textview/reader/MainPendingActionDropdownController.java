@@ -1,0 +1,246 @@
+package com.textview.reader;
+
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
+import android.text.Layout;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.PopupWindow;
+import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+
+import com.textview.reader.util.FileClipboardController;
+
+import java.io.File;
+import java.util.ArrayList;
+
+/**
+ * Owns the pending copy/move/extract dropdown under the main toolbar.
+ * The menu now dismisses as soon as the queue becomes empty instead of
+ * leaving a blank shell behind.
+ */
+final class MainPendingActionDropdownController {
+    private final MainActivity activity;
+
+    MainPendingActionDropdownController(@NonNull MainActivity activity) {
+        this.activity = activity;
+    }
+
+    void show() {
+        boolean hasClipboard = activity.fileClipboardController.hasPending();
+        boolean hasExtract = !activity.pendingExtractArchives.isEmpty();
+        if ((!hasClipboard && !hasExtract) || activity.mainPendingActionButton == null) return;
+
+        final MainDropdownStyle style = MainDropdownStyle.from(activity);
+
+        final int screenWidth = Math.max(activity.dpToPx(320), activity.getResources().getDisplayMetrics().widthPixels);
+        final int popupWidth = Math.min(screenWidth - activity.dpToPx(24), activity.dpToPx(430));
+
+        LinearLayout box = new LinearLayout(activity);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(0, activity.dpToPx(6), 0, activity.dpToPx(6));
+        box.setBackground(style.makePanelBackground(activity, 8, true));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            box.setClipToOutline(true);
+        }
+
+        PopupWindow popup = new PopupWindow(
+                box,
+                popupWidth,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                true);
+        popup.setOutsideTouchable(true);
+        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            popup.setElevation(activity.dpToPx(3));
+        }
+
+        TextView title = new TextView(activity);
+        title.setText(activity.getString(R.string.pending_actions_title));
+        title.setTextColor(style.sub);
+        title.setTextSize(13f);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        title.setSingleLine(true);
+        title.setIncludeFontPadding(false);
+        title.setPadding(activity.dpToPx(14), 0, activity.dpToPx(14), 0);
+        box.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                activity.dpToPx(34)));
+
+        LinearLayout rowsContainer = new LinearLayout(activity);
+        rowsContainer.setOrientation(LinearLayout.VERTICAL);
+        box.addView(rowsContainer, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView clearView = new TextView(activity);
+        clearView.setText(activity.getString(R.string.clear_pending_actions));
+        clearView.setTextColor(style.danger);
+        clearView.setTextSize(14f);
+        clearView.setTypeface(Typeface.DEFAULT_BOLD);
+        clearView.setGravity(Gravity.CENTER);
+        clearView.setSingleLine(true);
+        clearView.setIncludeFontPadding(false);
+        clearView.setPadding(activity.dpToPx(12), 0, activity.dpToPx(12), 0);
+        box.addView(clearView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                activity.dpToPx(42)));
+
+        final Runnable[] refreshRows = new Runnable[1];
+        refreshRows[0] = () -> {
+            rowsContainer.removeAllViews();
+            boolean hasAny = false;
+
+            for (FileClipboardController.PendingItem item : activity.fileClipboardController.getPendingItems()) {
+                hasAny = true;
+                File source = item.getSource();
+                String name = source.getName();
+                String path = source.getAbsolutePath();
+                String label = activity.getString(item.isCopy()
+                        ? R.string.pending_copy_action
+                        : R.string.pending_move_action, name);
+                addPendingActionDropdownRow(rowsContainer, label, path, style.fg, style.sub, style.danger, style.rowPanel,
+                        () -> {
+                            popup.dismiss();
+                            if (activity.fileClipboardController.setActive(item.getId())) {
+                                activity.pastePendingClipboardItemToCurrentDirectory();
+                            }
+                        },
+                        () -> {
+                            activity.cancelPendingClipboardOperation(item.getId());
+                            refreshRows[0].run();
+                        });
+            }
+
+            for (File archive : new ArrayList<>(activity.pendingExtractArchives)) {
+                hasAny = true;
+                String name = archive != null ? archive.getName() : "";
+                String path = archive != null ? archive.getAbsolutePath() : "";
+                addPendingActionDropdownRow(rowsContainer, activity.getString(R.string.pending_extract_action, name), path,
+                        style.fg, style.sub, style.danger, style.rowPanel,
+                        () -> {
+                            popup.dismiss();
+                            if (activity.setActivePendingArchiveExtraction(archive)) {
+                                activity.confirmPendingArchiveExtractionToCurrentDirectory();
+                            }
+                        },
+                        () -> {
+                            activity.cancelPendingArchiveExtraction(archive);
+                            refreshRows[0].run();
+                        });
+            }
+
+            activity.updateMainOverflowButtonVisibility();
+            if (!hasAny) {
+                popup.dismiss();
+            }
+        };
+
+        clearView.setOnClickListener(v -> {
+            activity.clearPendingActionQueue();
+            activity.updateMainOverflowButtonVisibility();
+            popup.dismiss();
+        });
+
+        refreshRows[0].run();
+
+        int xoff = activity.mainPendingActionButton.getWidth() - popupWidth;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            popup.showAsDropDown(activity.mainPendingActionButton, xoff, 0, Gravity.NO_GRAVITY);
+        } else {
+            popup.showAsDropDown(activity.mainPendingActionButton, xoff, 0);
+        }
+    }
+
+    private void addPendingActionDropdownRow(@NonNull LinearLayout box,
+                                             @NonNull String label,
+                                             @NonNull String fullPath,
+                                             int textColor,
+                                             int subTextColor,
+                                             int dangerColor,
+                                             int rowPanelColor,
+                                             @NonNull Runnable openAction,
+                                             @NonNull Runnable cancelAction) {
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(activity.dpToPx(12), activity.dpToPx(9), activity.dpToPx(4), activity.dpToPx(9));
+        GradientDrawable rowBg = new GradientDrawable();
+        rowBg.setColor(rowPanelColor);
+        rowBg.setCornerRadius(activity.dpToPx(10));
+        row.setBackground(rowBg);
+        row.setClickable(true);
+        row.setOnClickListener(v -> openAction.run());
+        row.setMinimumHeight(activity.dpToPx(58));
+
+        LinearLayout textBox = new LinearLayout(activity);
+        textBox.setOrientation(LinearLayout.VERTICAL);
+        textBox.setGravity(Gravity.CENTER_VERTICAL);
+        textBox.setPadding(0, 0, activity.dpToPx(8), 0);
+
+        TextView labelView = new TextView(activity);
+        labelView.setText(label);
+        labelView.setTextColor(textColor);
+        labelView.setTextSize(15f);
+        labelView.setTypeface(Typeface.DEFAULT_BOLD);
+        labelView.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        labelView.setSingleLine(true);
+        labelView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        labelView.setIncludeFontPadding(false);
+        textBox.addView(labelView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView pathView = new TextView(activity);
+        pathView.setText(fullPath);
+        pathView.setTextColor(subTextColor);
+        pathView.setTextSize(12.5f);
+        pathView.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        pathView.setSingleLine(false);
+        pathView.setHorizontallyScrolling(false);
+        pathView.setIncludeFontPadding(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            pathView.setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE);
+            pathView.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE);
+        }
+        LinearLayout.LayoutParams pathLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        pathLp.setMargins(0, activity.dpToPx(4), 0, 0);
+        textBox.addView(pathView, pathLp);
+
+        row.addView(textBox, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f));
+
+        TextView cancelView = new TextView(activity);
+        cancelView.setText("×");
+        cancelView.setTextColor(dangerColor);
+        cancelView.setTextSize(24f);
+        cancelView.setTypeface(Typeface.DEFAULT_BOLD);
+        cancelView.setGravity(Gravity.CENTER);
+        cancelView.setIncludeFontPadding(false);
+        cancelView.setContentDescription(activity.getString(R.string.cancel_pending_action));
+        cancelView.setOnClickListener(v -> {
+            v.setSelected(true);
+            cancelAction.run();
+        });
+        row.addView(cancelView, new LinearLayout.LayoutParams(
+                activity.dpToPx(40),
+                LinearLayout.LayoutParams.MATCH_PARENT));
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(activity.dpToPx(6), 0, activity.dpToPx(6), activity.dpToPx(6));
+        box.addView(row, lp);
+    }
+}

@@ -7,10 +7,8 @@ import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
-import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
@@ -25,11 +23,9 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.webkit.JavascriptInterface;
-import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -103,94 +99,99 @@ public class DocumentPageActivity extends AppCompatActivity {
     public static final String EXTRA_FILE_URI = "file_uri";
     public static final String EXTRA_JUMP_TO_PAGE = "jump_page";
 
-    private static final String LOCAL_HOST = "textview.local";
-    private static final String EPUB_PREFIX = "/epub/";
+    static final String LOCAL_HOST = "textview.local";
+    static final String EPUB_PREFIX = "/epub/";
     private static final String WORD_PREFIX = "/word/";
     private static final String FONT_PREFIX = "/font/";
     private static final String DOCUMENT_FONT_DEFAULT = "document_default";
     private static final String FONT_OPTION_SYSTEM_CURRENT = "system_current";
     private static final int WORD_PARAGRAPHS_PER_PAGE = 28;
     // Match toolbar-triggered document popups to the Go to Page bottom offset.
-    private static final int DOCUMENT_TOOLBAR_POPUP_Y_DP = 74;
+    static final int DOCUMENT_TOOLBAR_POPUP_Y_DP = 74;
 
-    private Toolbar toolbar;
-    private View documentAppBar;
-    private View documentBottomChrome;
-    private boolean documentChromeVisible = true;
-    private WebView webView;
-    private ProgressBar progressBar;
-    private TextView pageStatus;
-    private TextView prevButton;
-    private TextView nextButton;
-    private TextView searchButton;
-    private TextView pageButton;
-    private TextView bookmarkButton;
-    private TextView moreButton;
-    private int readerBg = Color.rgb(18, 18, 18);
-    private int readerFg = Color.rgb(232, 234, 237);
-    private int readerToolbarBg = Color.rgb(18, 18, 18);
-    private int readerSub = Color.rgb(176, 176, 176);
-    private int readerPanel = Color.rgb(32, 33, 36);
-    private int readerLine = Color.rgb(84, 86, 90);
-    private String lastAppliedDocumentThemeSignature = null;
-    private boolean restoreDocumentScrollAfterThemeRefresh = false;
-    private int pendingThemeRefreshScrollX = 0;
-    private int pendingThemeRefreshScrollY = 0;
+    Toolbar toolbar;
+    View documentAppBar;
+    View documentBottomChrome;
+    boolean documentChromeVisible = true;
+    WebView webView;
+    ProgressBar progressBar;
+    TextView pageStatus;
+    TextView prevButton;
+    TextView nextButton;
+    TextView searchButton;
+    TextView pageButton;
+    TextView bookmarkButton;
+    TextView moreButton;
+    int readerBg = Color.rgb(18, 18, 18);
+    int readerFg = Color.rgb(232, 234, 237);
+    int readerToolbarBg = Color.rgb(18, 18, 18);
+    int readerSub = Color.rgb(176, 176, 176);
+    int readerPanel = Color.rgb(32, 33, 36);
+    int readerLine = Color.rgb(84, 86, 90);
+    String lastAppliedDocumentThemeSignature = null;
+    boolean restoreDocumentScrollAfterThemeRefresh = false;
+    int pendingThemeRefreshScrollX = 0;
+    int pendingThemeRefreshScrollY = 0;
 
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final List<Page> pages = new ArrayList<>();
-    private BookmarkManager bookmarkManager;
-    private PrefsManager prefs;
+    final ExecutorService executor = Executors.newSingleThreadExecutor();
+    final List<Page> pages = new ArrayList<>();
+    BookmarkManager bookmarkManager;
+    PrefsManager prefs;
     private ZipFile resourceZip;
-    private File localFile;
-    private String filePath;
-    private String fileName;
-    private String docType = "Document";
+    File localFile;
+    String filePath;
+    String fileName;
+    String docType = "Document";
     private int lastAppliedEpubLeftPaddingDp = Integer.MIN_VALUE;
     private int lastAppliedEpubRightPaddingDp = Integer.MIN_VALUE;
     private int lastAppliedEpubTopPaddingDp = Integer.MIN_VALUE;
     private int lastAppliedEpubBottomPaddingDp = Integer.MIN_VALUE;
     private int lastAppliedEpubBottomToolbarHeightPx = Integer.MIN_VALUE;
     private int lastAppliedEpubEffectiveBottomMarginPx = Integer.MIN_VALUE;
-    private int currentPage = 0;
-    private int pendingSlideDirection = 0;
+    int currentPage = 0;
+    int pendingSlideDirection = 0;
     private int wordSwipeTouchSlop = 0;
     private float wordSwipeStartX = 0f;
     private float wordSwipeStartY = 0f;
     private boolean wordSwipeTriggered = false;
     private boolean wordSwipeMovedEnoughForParentDisallow = false;
-    private boolean pageTurnInFlight = false;
+    boolean pageTurnInFlight = false;
     private GestureDetector documentGestureDetector;
     private boolean documentDoubleTapResetSequence = false;
     private int armedDocumentEdgeDirection = 0;
     private long armedDocumentEdgeTimeMs = 0L;
     private boolean wordGestureStartedAtLeftEdge = true;
     private boolean wordGestureStartedAtRightEdge = true;
-    private volatile boolean wordSelectionActive = false;
-    private volatile boolean activityDestroyed = false;
-    private int loadGeneration = 0;
-    private File selectedDocumentFontFile = null;
-    private boolean epubHasDocumentFont = false;
-    private boolean epubFixedLayoutLike = false;
-    private boolean fixedLayoutFindOffsetActive = false;
-    private boolean wordHasDocumentFont = false;
-    private String wordDefaultFontFamily = null;
-    private String documentFontOverride = null;
-    private String activeDocumentSearchQuery = "";
-    private int activeDocumentSearchPage = -1;
-    private int activeDocumentSearchOrdinal = 0;
-    private int activeDocumentSearchCountOnPage = 0;
-    private int activeDocumentSearchTotal = 0;
-    private boolean documentSearchSelectLastAfterCount = false;
-    private TextView documentSearchStatusView = null;
-    private FrameLayout documentSearchPanelContainer = null;
-    private FrameLayout documentSearchOverlayContainer = null;
-    private EditText documentSearchInputView = null;
-    private final Runnable checkWordSelectionAfterScrollRunnable = this::checkWordSelectionAfterScroll;
-    private final Runnable releasePageTurnRunnable = () -> pageTurnInFlight = false;
-    private final Map<String, String> wordRelationships = new LinkedHashMap<>();
+    volatile boolean wordSelectionActive = false;
+    volatile boolean activityDestroyed = false;
+    int loadGeneration = 0;
+    File selectedDocumentFontFile = null;
+    boolean epubHasDocumentFont = false;
+    boolean epubFixedLayoutLike = false;
+    boolean fixedLayoutFindOffsetActive = false;
+    boolean wordHasDocumentFont = false;
+    String wordDefaultFontFamily = null;
+    String documentFontOverride = null;
+    String activeDocumentSearchQuery = "";
+    int activeDocumentSearchPage = -1;
+    int activeDocumentSearchOrdinal = 0;
+    int activeDocumentSearchCountOnPage = 0;
+    int activeDocumentSearchTotal = 0;
+    boolean documentSearchSelectLastAfterCount = false;
+    TextView documentSearchStatusView = null;
+    FrameLayout documentSearchPanelContainer = null;
+    FrameLayout documentSearchOverlayContainer = null;
+    EditText documentSearchInputView = null;
+    final Runnable checkWordSelectionAfterScrollRunnable = this::checkWordSelectionAfterScroll;
+    final Runnable releasePageTurnRunnable = () -> pageTurnInFlight = false;
+    final Map<String, String> wordRelationships = new LinkedHashMap<>();
+    private DocumentPageStartupController startupController;
+    private DocumentPageTurnController pageTurnController;
+    private DocumentWebViewController documentWebViewController;
+    private DocumentPageLoadController documentPageLoadController;
+    private DocumentPageDisplayController documentPageDisplayController;
 
-    private static class Page {
+    static class Page {
         final String title;
         final String html;
         final String sourcePath;
@@ -200,6 +201,41 @@ public class DocumentPageActivity extends AppCompatActivity {
             this.html = html;
             this.sourcePath = sourcePath;
         }
+    }
+
+    private DocumentPageStartupController startup() {
+        if (startupController == null) {
+            startupController = new DocumentPageStartupController(this);
+        }
+        return startupController;
+    }
+
+    private DocumentPageTurnController pageTurns() {
+        if (pageTurnController == null) {
+            pageTurnController = new DocumentPageTurnController(this);
+        }
+        return pageTurnController;
+    }
+
+    private DocumentWebViewController documentWebViews() {
+        if (documentWebViewController == null) {
+            documentWebViewController = new DocumentWebViewController(this);
+        }
+        return documentWebViewController;
+    }
+
+    private DocumentPageLoadController pageLoader() {
+        if (documentPageLoadController == null) {
+            documentPageLoadController = new DocumentPageLoadController(this);
+        }
+        return documentPageLoadController;
+    }
+
+    private DocumentPageDisplayController pageDisplay() {
+        if (documentPageDisplayController == null) {
+            documentPageDisplayController = new DocumentPageDisplayController(this);
+        }
+        return documentPageDisplayController;
     }
 
     @Override
@@ -218,70 +254,18 @@ public class DocumentPageActivity extends AppCompatActivity {
         // already renders its own dark floating toolbar on Android 13+, so the
         // dark-bubble look is preserved even without forcing night mode.
         super.onCreate(savedInstanceState);
-        ViewerRegistry.activate(this);
-        getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
-
-        resolveReaderThemeColors();
-        setContentView(R.layout.activity_document_page);
-        applyDocumentSystemBarColors();
-
-        // targetSdk 35 forces edge-to-edge regardless of setDecorFitsSystemWindows.
-        // Without inset padding, the toolbar sits under the status bar and the
-        // bottom button row sits under the 3-button navigation bar.
-        com.textview.reader.util.EdgeToEdgeUtil.applyFoldableChromeInsetsImeFixed(this,
-                findViewById(R.id.document_root),
-                findViewById(R.id.document_appbar),
-                findViewById(R.id.document_bottom_scroller),
-                findViewById(R.id.document_viewport),
-                () -> documentChromeVisible);
-        applyDocumentSystemBarColors();
-
-        documentAppBar = findViewById(R.id.document_appbar);
-        documentBottomChrome = findViewById(R.id.document_bottom_scroller);
-        if (documentBottomChrome != null) {
-            documentBottomChrome.addOnLayoutChangeListener((v, left, top, right, bottom,
-                    oldLeft, oldTop, oldRight, oldBottom) -> {
-                if ("EPUB".equals(docType) && (bottom - top) != (oldBottom - oldTop)) {
-                    applyEpubBoundaryMarginsIfNeeded();
-                }
-            });
-        }
-        toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        if (getSupportActionBar() != null) getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        toolbar.setTitleTextColor(Color.WHITE);
-        toolbar.setBackgroundColor(Color.BLACK);
-
-        webView = findViewById(R.id.document_webview);
-        progressBar = findViewById(R.id.loading_progress);
-        pageStatus = findViewById(R.id.document_page_status);
-        prevButton = findViewById(R.id.btn_prev_page);
-        nextButton = findViewById(R.id.btn_next_page);
-        searchButton = findViewById(R.id.btn_document_search);
-        pageButton = findViewById(R.id.btn_page_move);
-        bookmarkButton = findViewById(R.id.btn_bookmarks);
-        moreButton = findViewById(R.id.btn_more);
-        documentSearchPanelContainer = findViewById(R.id.document_search_panel_container);
-        documentSearchOverlayContainer = findViewById(R.id.document_search_overlay_container);
-
-        bookmarkManager = BookmarkManager.getInstance(this);
-        applyDocumentThemeToViews();
-        setupWebView();
-        setupButtons();
-        installSwipePaging();
-        loadFromIntent(getIntent());
+        startup().onCreateAfterSuper(savedInstanceState);
     }
 
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        setIntent(intent);
-        loadFromIntent(intent);
+        startup().onNewIntent(intent);
     }
 
 
-    private void updateLoadingIndicatorTheme() {
+    void updateLoadingIndicatorTheme() {
         if (progressBar == null) return;
         progressBar.setBackgroundColor(Color.TRANSPARENT);
         progressBar.setIndeterminateTintList(ColorStateList.valueOf(readerFg));
@@ -290,33 +274,16 @@ public class DocumentPageActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        ThemeManager.getInstance(this).reloadFromStorage();
-        String currentThemeSignature = documentThemeSignature();
-        boolean pageThemeChanged = lastAppliedDocumentThemeSignature != null
-                && !lastAppliedDocumentThemeSignature.equals(currentThemeSignature);
-        if (webView != null) {
-            webView.onResume();
-            webView.resumeTimers();
-        }
-        applyDocumentSystemBarColors();
-        applyDocumentThemeToViews();
-        refreshEpubSpacingIfNeeded();
-        refreshDocumentPageThemeIfNeeded(currentThemeSignature, pageThemeChanged);
+        startup().onResume();
     }
 
     @Override
     protected void onPause() {
-        saveReadingState();
-        if (webView != null) {
-            webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
-            webView.removeCallbacks(releasePageTurnRunnable);
-            webView.onPause();
-            webView.pauseTimers();
-        }
+        startup().onPause();
         super.onPause();
     }
 
-    private void resolveReaderThemeColors() {
+    void resolveReaderThemeColors() {
         Theme theme = ThemeManager.getInstance(this).getActiveTheme();
         if (theme != null) {
             readerBg = theme.getBackgroundColor();
@@ -328,7 +295,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         readerLine = blendColors(readerBg, readerFg, isDarkColor(readerBg) ? 0.28f : 0.20f);
     }
 
-    private String documentThemeSignature() {
+    String documentThemeSignature() {
         Theme theme = ThemeManager.getInstance(this).getActiveTheme();
         if (theme == null) {
             return "theme:null:" + readerBg + ":" + readerFg + ":" + readerLine
@@ -347,7 +314,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                 ? prefs.getFontSize() : PrefsManager.DEFAULT_FONT_SIZE);
     }
 
-    private void refreshDocumentPageThemeIfNeeded(String currentThemeSignature, boolean pageThemeChanged) {
+    void refreshDocumentPageThemeIfNeeded(String currentThemeSignature, boolean pageThemeChanged) {
         if (!pageThemeChanged) {
             lastAppliedDocumentThemeSignature = currentThemeSignature;
             return;
@@ -361,7 +328,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         showPage(currentPage, 0);
     }
 
-    private void restoreDocumentScrollAfterThemeRefreshIfNeeded(@NonNull WebView view) {
+    void restoreDocumentScrollAfterThemeRefreshIfNeeded(@NonNull WebView view) {
         if (!restoreDocumentScrollAfterThemeRefresh) return;
         final int restoreX = pendingThemeRefreshScrollX;
         final int restoreY = pendingThemeRefreshScrollY;
@@ -373,7 +340,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         }, 60);
     }
 
-    private void applyDocumentSystemBarColors() {
+    void applyDocumentSystemBarColors() {
         resolveReaderThemeColors();
         int bg = readerBg;
         int toolbarBg = readerToolbarBg;
@@ -398,24 +365,15 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
     }
 
-    private boolean isDarkColor(int color) {
-        int r = Color.red(color);
-        int g = Color.green(color);
-        int b = Color.blue(color);
-        double luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
-        return luminance < 0.5;
+    boolean isDarkColor(int color) {
+        return UiColorUtils.isDarkColor(color);
     }
 
-    private int blendColors(int base, int overlay, float overlayAlpha) {
-        overlayAlpha = Math.max(0f, Math.min(1f, overlayAlpha));
-        float inv = 1f - overlayAlpha;
-        return Color.rgb(
-                Math.round(Color.red(base) * inv + Color.red(overlay) * overlayAlpha),
-                Math.round(Color.green(base) * inv + Color.green(overlay) * overlayAlpha),
-                Math.round(Color.blue(base) * inv + Color.blue(overlay) * overlayAlpha));
+    int blendColors(int base, int overlay, float overlayAlpha) {
+        return UiColorUtils.blendColors(base, overlay, overlayAlpha);
     }
 
-    private void applyDocumentThemeToViews() {
+    void applyDocumentThemeToViews() {
         resolveReaderThemeColors();
         View root = findViewById(R.id.document_root);
         View viewport = findViewById(R.id.document_viewport);
@@ -524,7 +482,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
     }
 
-    private void closeResourceZip() {
+    void closeResourceZip() {
         if (resourceZip != null) {
             try { resourceZip.close(); } catch (IOException ignored) {}
             resourceZip = null;
@@ -549,92 +507,15 @@ public class DocumentPageActivity extends AppCompatActivity {
         super.onBackPressed();
     }
 
-    private void setupWebView() {
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(false);
-        settings.setBuiltInZoomControls(true);
-        settings.setDisplayZoomControls(false);
-        settings.setSupportZoom(true);
-        settings.setTextZoom(100);
-        // Keep generated Word pages at native screen scale. Wide-viewport overview
-        // scaling makes WebView text hit-testing and selection-handle dragging feel
-        // delayed or off-position on DOCX pages.
-        settings.setLoadWithOverviewMode(false);
-        settings.setUseWideViewPort(false);
-        settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING);
-        settings.setAllowFileAccess(false);
-        settings.setAllowContentAccess(false);
-        settings.setDomStorageEnabled(false);
-
-        webView.setBackgroundColor(readerBg);
-        webView.setLongClickable(true);
-        webView.setHapticFeedbackEnabled(true);
-        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        webView.addJavascriptInterface(new WordSelectionBridge(), "TextViewSelectionBridge");
-        webView.setFindListener((activeMatchOrdinal, numberOfMatches, isDoneCounting) -> {
-            if (!isDoneCounting) return;
-            activeDocumentSearchPage = currentPage;
-            activeDocumentSearchCountOnPage = Math.max(0, numberOfMatches);
-            activeDocumentSearchOrdinal = numberOfMatches > 0 ? Math.max(1, activeMatchOrdinal + 1) : 0;
-
-            if (documentSearchSelectLastAfterCount && numberOfMatches > 0 && webView != null) {
-                documentSearchSelectLastAfterCount = false;
-                webView.post(() -> {
-                    if (!activityDestroyed && webView != null) {
-                        webView.findNext(false);
-                        scheduleDocumentSearchReveal();
-                    }
-                });
-                return;
-            }
-
-            updateDocumentSearchStatus(documentSearchStatusView);
-            scheduleDocumentSearchReveal();
-        });
-        webView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
-            if ("Word".equals(docType) && Math.abs(scrollY - oldScrollY) > dpToPx(1)) {
-                webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
-                webView.postDelayed(checkWordSelectionAfterScrollRunnable, 90);
-            }
-        });
-
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public WebResourceResponse shouldInterceptRequest(@NonNull WebView view, @NonNull WebResourceRequest request) {
-                return interceptLocalResource(request.getUrl());
-            }
-
-            @Override
-            public void onPageFinished(@NonNull WebView view, @NonNull String url) {
-                super.onPageFinished(view, url);
-                if (progressBar != null) progressBar.setVisibility(View.GONE);
-                installWordSelectionCleanupScript();
-                applyFixedLayoutFindOffsetCssIfNeeded();
-                applyDocumentSearchHighlightAfterPageLoad();
-                runDocumentSlideInAnimation();
-                restoreDocumentScrollAfterThemeRefreshIfNeeded(view);
-            }
-        });
+    void setupWebView() {
+        documentWebViews().setupWebView();
     }
 
-    private void configureWebViewForCurrentPage() {
-        if (webView == null) return;
-        WebSettings settings = webView.getSettings();
-        if ("EPUB".equals(docType) && epubFixedLayoutLike) {
-            settings.setUseWideViewPort(true);
-            settings.setLoadWithOverviewMode(true);
-            settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.NORMAL);
-            settings.setTextZoom(100);
-            webView.setInitialScale(0);
-        } else {
-            settings.setLoadWithOverviewMode(false);
-            settings.setUseWideViewPort(false);
-            settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING);
-            settings.setTextZoom(documentTextZoomPercent());
-        }
+    void configureWebViewForCurrentPage() {
+        documentWebViews().configureForCurrentPage();
     }
 
-    private void setupButtons() {
+    void setupButtons() {
         prevButton.setOnClickListener(v -> {
             if (currentPage > 0) showPage(currentPage - 1, -1);
         });
@@ -653,7 +534,7 @@ public class DocumentPageActivity extends AppCompatActivity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (handleDocumentPageTurnKey(event)) return true;
+        if (pageTurns().handlePageTurnKey(event)) return true;
         return super.dispatchKeyEvent(event);
     }
 
@@ -661,66 +542,12 @@ public class DocumentPageActivity extends AppCompatActivity {
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         // Fallback for devices that route hardware keys through onKeyDown() instead
         // of dispatchKeyEvent(). dispatchKeyEvent() normally consumes these first.
-        if (handleDocumentPageTurnKey(event)) return true;
+        if (pageTurns().handlePageTurnKey(event)) return true;
         return super.onKeyDown(keyCode, event);
     }
 
-    private boolean handleDocumentPageTurnKey(KeyEvent event) {
-        if (event == null || prefs == null || !prefs.getVolumeKeyScroll()) return false;
-
-        int direction = pageTurnDirectionForKey(event.getKeyCode());
-        if (direction == 0) return false;
-
-        int action = event.getAction();
-        if (action == KeyEvent.ACTION_DOWN) {
-            if (event.getRepeatCount() == 0) {
-                pageDocumentBy(direction);
-            }
-            return true;
-        }
-
-        // Consume ACTION_UP too so Android/e-reader firmware does not also treat
-        // volume keys as volume changes after the app has used them for paging.
-        return action == KeyEvent.ACTION_UP;
-    }
-
-    private int pageTurnDirectionForKey(int keyCode) {
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_VOLUME_DOWN:
-            case KeyEvent.KEYCODE_PAGE_DOWN:
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
-            case KeyEvent.KEYCODE_DPAD_DOWN:
-            case KeyEvent.KEYCODE_SPACE:
-            case KeyEvent.KEYCODE_FORWARD:
-            case KeyEvent.KEYCODE_MEDIA_NEXT:
-            case KeyEvent.KEYCODE_BUTTON_R1:
-            case KeyEvent.KEYCODE_NAVIGATE_NEXT:
-                return +1;
-
-            case KeyEvent.KEYCODE_VOLUME_UP:
-            case KeyEvent.KEYCODE_PAGE_UP:
-            case KeyEvent.KEYCODE_DPAD_LEFT:
-            case KeyEvent.KEYCODE_DPAD_UP:
-            case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
-            case KeyEvent.KEYCODE_BUTTON_L1:
-            case KeyEvent.KEYCODE_NAVIGATE_PREVIOUS:
-                return -1;
-
-            default:
-                return 0;
-        }
-    }
-
-    private void pageDocumentBy(int direction) {
-        if (pages == null || pages.isEmpty()) return;
-        int target = Math.max(0, Math.min(pages.size() - 1, currentPage + direction));
-        if (target != currentPage) {
-            showPage(target, Integer.compare(target, currentPage));
-        }
-    }
-
     @SuppressLint("ClickableViewAccessibility")
-    private void installSwipePaging() {
+    void installSwipePaging() {
         wordSwipeTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         documentGestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
@@ -823,7 +650,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         return "Word".equals(docType) || "EPUB".equals(docType);
     }
 
-    private void clearDocumentEdgeArm() {
+    void clearDocumentEdgeArm() {
         armedDocumentEdgeDirection = 0;
         armedDocumentEdgeTimeMs = 0L;
     }
@@ -904,7 +731,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         return dx < 0 ? 1 : -1;
     }
 
-    private int visualSlideDirectionForPageDelta(int pageDelta) {
+    int visualSlideDirectionForPageDelta(int pageDelta) {
         if (pageDelta == 0) return 0;
         if ("EPUB".equals(docType)
                 && prefs != null
@@ -939,7 +766,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                 });
     }
 
-    private void installWordSelectionCleanupScript() {
+    void installWordSelectionCleanupScript() {
         if (activityDestroyed || !"Word".equals(docType) || webView == null) return;
         webView.evaluateJavascript(
                 "(function(){try{"
@@ -963,7 +790,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                 null);
     }
 
-    private class WordSelectionBridge {
+    class WordSelectionBridge {
         @JavascriptInterface
         public void onSelectionChanged(boolean active) {
             wordSelectionActive = active;
@@ -1041,7 +868,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         return prefs != null ? prefs.getEpubBottomPaddingDp() : 0;
     }
 
-    private void refreshEpubSpacingIfNeeded() {
+    void refreshEpubSpacingIfNeeded() {
         applyEpubBoundaryMarginsIfNeeded();
     }
 
@@ -1074,7 +901,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         return Math.max(0, requestedBottomBoundaryPx - Math.max(0, bottomToolbarHeightPx));
     }
 
-    private void applyEpubBoundaryMarginsIfNeeded() {
+    void applyEpubBoundaryMarginsIfNeeded() {
         if (webView == null) return;
         if ("EPUB".equals(docType) && epubFixedLayoutLike) {
             lastAppliedEpubLeftPaddingDp = 0;
@@ -1162,7 +989,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         webView.postDelayed(stabilize, 240);
     }
 
-    private int documentTextZoomPercent() {
+    int documentTextZoomPercent() {
         if ("EPUB".equals(docType) && epubFixedLayoutLike) return 100;
         if (!"EPUB".equals(docType) || prefs == null) return 100;
         float size = Math.max(8f, Math.min(48f, prefs.getFontSize()));
@@ -1199,864 +1026,20 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
     }
 
+    private DocumentFontDialogController documentFontController() {
+        return new DocumentFontDialogController(this);
+    }
+
     private void showDocumentFontDialog() {
-        showDocumentFontPickerDialog(getReadingFontOptions());
-    }
-
-    private void showDocumentFontPickerDialog(List<ReadingFontOption> fontOptions) {
-        final int bg = dialogBg();
-        final int fg = dialogFg();
-
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setBackgroundColor(Color.TRANSPARENT);
-        panel.setClipChildren(true);
-        panel.setClipToPadding(true);
-
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.VERTICAL);
-        header.setBackground(fontDialogHeaderBackground(bg));
-        header.setClipChildren(true);
-        header.setClipToPadding(true);
-
-        TextView title = makeDocumentFontDialogTitle(getString(R.string.select_font), bg, fg);
-        title.setBackgroundColor(Color.TRANSPARENT);
-        title.setPadding(title.getPaddingLeft(), title.getPaddingTop(),
-                title.getPaddingRight(), dpToPx(18));
-        header.addView(title, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-        panel.addView(header, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-        panel.addView(fontDialogHeaderSeparator(bg), new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                Math.max(1, dpToPx(1))));
-
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        list.setBackgroundColor(Color.TRANSPARENT);
-        int pad = dpToPx(14);
-        list.setPadding(pad, dpToPx(8), pad, dpToPx(8));
-
-        ScrollView scroll = new ScrollView(this);
-        FrameLayout scrollClip = makeClippedDialogScrollFrame(scroll, list, bg);
-        panel.addView(scrollClip, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                Math.min(dpToPx(360), getResources().getDisplayMetrics().heightPixels / 2)));
-
-        LinearLayout actionRow = new LinearLayout(this);
-        actionRow.setOrientation(LinearLayout.HORIZONTAL);
-        actionRow.setGravity(Gravity.CENTER_VERTICAL);
-        actionRow.setBackground(positionedActionPanelBackground(
-                dialogActionPanelFillColor(bg),
-                dialogActionPanelLineColor(bg)));
-        actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
-
-        TextView addFont = makeDocumentDialogActionText(
-                localizedText("Add font", "글꼴 추가"),
-                fg,
-                Gravity.CENTER_VERTICAL | Gravity.START);
-        TextView cancel = makeDocumentDialogActionText(getString(R.string.cancel), fg,
-                Gravity.CENTER_VERTICAL | Gravity.END);
-
-        actionRow.addView(addFont, new LinearLayout.LayoutParams(
-                0,
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                1f));
-        actionRow.addView(cancel, new LinearLayout.LayoutParams(
-                0,
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                1f));
-        panel.addView(fontDialogBottomSeparator(bg), new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                Math.max(1, dpToPx(1))));
-        panel.addView(actionRow, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(54)));
-
-        android.app.Dialog dialog = createDocumentFontDialog(panel, 460);
-        preserveFontDialogHeaderBarrier(panel, scrollClip);
-
-        String currentFont = currentDocumentFontSelection();
-        for (ReadingFontOption option : fontOptions) {
-            String label = getReadingFontLabel(option);
-            boolean selected = option.value.equals(currentFont);
-
-            TextView row = makeDocumentFontActionRow(label, fg, selected);
-            row.setOnClickListener(v -> {
-                dialog.dismiss();
-                setDocumentFontSelection(option.value);
-            });
-            if (isRemovableUserFontValue(option.value)) {
-                row.setOnLongClickListener(v -> {
-                    showUserFontRemoveConfirm(option.value, label, () -> {
-                        dialog.dismiss();
-                        showDocumentFontDialog();
-                    });
-                    return true;
-                });
-            }
-            list.addView(row);
-        }
-
-        addFont.setOnClickListener(v -> {
-            dialog.dismiss();
-            showAllDocumentFontsDialog();
-        });
-        cancel.setOnClickListener(v -> dialog.dismiss());
-        dialog.show();
-    }
-
-    private void showAllDocumentFontsDialog() {
-        final int bg = dialogBg();
-        final int fg = dialogFg();
-        final int sub = dialogSub();
-
-        List<String> fontNames = new ArrayList<>();
-        try {
-            FontManager fontManager = FontManager.getInstance();
-            if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
-            fontNames.addAll(fontManager.getFontNames());
-        } catch (Throwable ignored) {
-            // Keep the dialog usable even if a device blocks one of the font paths.
-        }
-
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setBackgroundColor(Color.TRANSPARENT);
-        panel.setClipChildren(true);
-        panel.setClipToPadding(true);
-
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.VERTICAL);
-        header.setBackground(fontDialogHeaderBackground(bg));
-        header.setClipChildren(true);
-        header.setClipToPadding(true);
-
-        TextView title = makeDocumentFontDialogTitle(
-                localizedText("All system fonts", "전체 시스템 글꼴"),
-                bg,
-                fg);
-        title.setBackgroundColor(Color.TRANSPARENT);
-        title.setPadding(title.getPaddingLeft(), title.getPaddingTop(),
-                title.getPaddingRight(), dpToPx(8));
-        header.addView(title, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        TextView hint = makeDocumentDialogLabel(
-                localizedText(
-                        "Select a font found from Android/system font folders.",
-                        "Android/시스템 글꼴 폴더에서 찾은 글꼴을 선택합니다."),
-                sub,
-                12f);
-        hint.setGravity(Gravity.CENTER);
-        hint.setPadding(dpToPx(18), dpToPx(4), dpToPx(18), dpToPx(16));
-        hint.setBackgroundColor(Color.TRANSPARENT);
-        header.addView(hint, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-        panel.addView(header, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-        panel.addView(fontDialogHeaderSeparator(bg), new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                Math.max(1, dpToPx(1))));
-
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        list.setBackgroundColor(Color.TRANSPARENT);
-        int pad = dpToPx(14);
-        list.setPadding(pad, dpToPx(8), pad, dpToPx(8));
-
-        ScrollView scroll = new ScrollView(this);
-        FrameLayout scrollClip = makeClippedDialogScrollFrame(scroll, list, bg);
-        panel.addView(scrollClip, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                Math.min(dpToPx(420), getResources().getDisplayMetrics().heightPixels / 2)));
-
-        LinearLayout actionRow = new LinearLayout(this);
-        actionRow.setOrientation(LinearLayout.HORIZONTAL);
-        actionRow.setGravity(Gravity.CENTER_VERTICAL);
-        actionRow.setBackground(positionedActionPanelBackground(
-                dialogActionPanelFillColor(bg),
-                dialogActionPanelLineColor(bg)));
-        actionRow.setPadding(dpToPx(30), 0, dpToPx(30), 0);
-
-        TextView cancel = makeDocumentDialogActionText(getString(R.string.cancel), fg,
-                Gravity.CENTER_VERTICAL | Gravity.END);
-        actionRow.addView(cancel, new LinearLayout.LayoutParams(
-                0,
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                1f));
-        panel.addView(fontDialogBottomSeparator(bg), new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                Math.max(1, dpToPx(1))));
-        panel.addView(actionRow, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(54)));
-
-        android.app.Dialog dialog = createDocumentFontDialog(panel, 460);
-        preserveFontDialogHeaderBarrier(panel, scrollClip);
-
-        String currentFont = currentDocumentFontSelection();
-        if (fontNames.isEmpty()) {
-            TextView empty = makeDocumentDialogLabel(
-                    localizedText("No readable system fonts found.", "읽을 수 있는 시스템 글꼴을 찾지 못했습니다."),
-                    sub,
-                    14f);
-            empty.setGravity(Gravity.CENTER);
-            empty.setPadding(dpToPx(12), dpToPx(16), dpToPx(12), dpToPx(16));
-            list.addView(empty, new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT));
-        } else {
-            for (String fontName : fontNames) {
-                if (fontName == null || fontName.trim().isEmpty()) continue;
-
-                String value = normalizeReadingFontValue(fontName);
-                String label = fontName;
-                boolean selected = value.equals(currentFont);
-
-                TextView row = makeDocumentFontActionRow(label, fg, selected);
-                row.setOnClickListener(v -> {
-                    try {
-                        FontManager.getInstance().addUserFont(this, fontName);
-                    } catch (Throwable ignored) {
-                        // Selecting the font should still work even if persisting the shortcut fails.
-                    }
-                    dialog.dismiss();
-                    setDocumentFontSelection(value);
-                });
-                list.addView(row);
-            }
-        }
-
-        cancel.setOnClickListener(v -> dialog.dismiss());
-        dialog.show();
-    }
-
-    private boolean isRemovableUserFontValue(String value) {
-        try {
-            FontManager fontManager = FontManager.getInstance();
-            if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
-            return fontManager.isRemovableUserFont(this, value);
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private void showUserFontRemoveConfirm(String value, String label, Runnable afterRemove) {
-        LinearLayout box = makeDialogBox();
-        box.addView(makeDialogTitle(localizedText("Remove font", "글꼴 삭제")));
-
-        TextView message = new TextView(this);
-        String safeLabel = label != null && !label.trim().isEmpty() ? label.trim() : value;
-        message.setText(safeLabel + "\n\n" + localizedText(
-                "Remove this user-added font from TextView Reader?",
-                "이 사용자 추가 글꼴을 TextView Reader에서 삭제할까요?")
-                + "\n" + localizedText(
-                "System fonts and document files are not affected.",
-                "시스템 글꼴과 문서 파일은 영향받지 않습니다."));
-        message.setTextColor(dialogSub());
-        message.setTextSize(14f);
-        message.setLineSpacing(0f, 1.15f);
-        message.setPadding(0, 0, 0, dpToPx(12));
-        box.addView(message, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
-        LinearLayout actions = new LinearLayout(this);
-        actions.setTag("dialog_actions");
-        actions.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.END);
-        actions.setPadding(0, dpToPx(8), 0, 0);
-
-        TextView cancel = new TextView(this);
-        cancel.setText(getString(R.string.cancel));
-        cancel.setTextColor(dialogSub());
-        cancel.setTextSize(16f);
-        cancel.setGravity(android.view.Gravity.CENTER);
-        cancel.setPadding(dpToPx(14), 0, dpToPx(14), 0);
-
-        TextView delete = new TextView(this);
-        delete.setText(getString(R.string.delete));
-        delete.setTextColor(!isDarkColor(dialogBg()) ? Color.rgb(95, 35, 35) : Color.rgb(255, 170, 170));
-        delete.setTextSize(16f);
-        delete.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        delete.setGravity(android.view.Gravity.CENTER);
-        delete.setPadding(dpToPx(14), 0, dpToPx(14), 0);
-
-        actions.addView(cancel, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
-        actions.addView(delete, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
-        box.addView(actions, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        cancel.setOnClickListener(v -> {
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        delete.setOnClickListener(v -> {
-            boolean removed = false;
-            try {
-                FontManager fontManager = FontManager.getInstance();
-                if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
-                removed = fontManager.removeUserFont(this, value);
-            } catch (Throwable ignored) {
-                removed = false;
-            }
-
-            if (removed) {
-                if (normalizeReadingFontValue(currentDocumentFontSelection()).equals(normalizeReadingFontValue(value))) {
-                    setDocumentFontSelection("default");
-                }
-                Toast.makeText(this, localizedText("Font removed", "글꼴을 삭제했습니다"), Toast.LENGTH_SHORT).show();
-                if (dialogRef[0] != null) dialogRef[0].dismiss();
-                if (afterRemove != null) afterRemove.run();
-            } else {
-                Toast.makeText(this, localizedText(
-                        "This font cannot be removed from inside the app.",
-                        "이 글꼴은 앱 안에서 삭제할 수 없습니다."), Toast.LENGTH_SHORT).show();
-            }
-        });
-
-        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, false, false);
-        dialogRef[0].show();
-    }
-
-    private boolean shouldOfferDocumentDefaultFont() {
-        return ("EPUB".equals(docType) && epubHasDocumentFont)
-                || ("Word".equals(docType) && wordHasDocumentFont);
-    }
-
-    private String currentDocumentFontSelection() {
-        if (DOCUMENT_FONT_DEFAULT.equals(documentFontOverride)) return DOCUMENT_FONT_DEFAULT;
-        if (documentFontOverride != null && !documentFontOverride.trim().isEmpty()) {
-            return normalizeReadingFontValue(documentFontOverride);
-        }
-        if (shouldOfferDocumentDefaultFont()) return DOCUMENT_FONT_DEFAULT;
-        return normalizeReadingFontValue(prefs != null ? prefs.getFontFamily() : "default");
-    }
-
-    private void setDocumentFontSelection(String value) {
-        if (DOCUMENT_FONT_DEFAULT.equals(value)) {
-            documentFontOverride = DOCUMENT_FONT_DEFAULT;
-        } else {
-            String normalized = normalizeReadingFontValue(value);
-            documentFontOverride = normalized;
-            if (prefs != null) prefs.setFontFamily(normalized);
-        }
-        refreshCurrentDocumentFont();
-    }
-
-    private void constrainDialogScrollArea(@NonNull View scrollContainer, @NonNull ViewGroup contentList) {
-        scrollContainer.setClipToOutline(false);
-        if (scrollContainer instanceof ScrollView) {
-            ScrollView scrollView = (ScrollView) scrollContainer;
-            scrollView.setClipToPadding(true);
-            scrollView.setFillViewport(false);
-            scrollView.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-        }
-        if (scrollContainer instanceof ViewGroup) {
-            ViewGroup scrollGroup = (ViewGroup) scrollContainer;
-            scrollGroup.setClipChildren(true);
-            scrollGroup.setClipToPadding(true);
-        }
-        contentList.setClipChildren(true);
-        contentList.setClipToPadding(true);
-    }
-
-    private Drawable fontDialogHeaderBackground(int bgColor) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(bgColor);
-        // The outer font-dialog frame owns the rounded corners/border. Making
-        // the header rectangular prevents the visible double-border/blended edge.
-        drawable.setCornerRadius(0f);
-        return drawable;
-    }
-
-    private View fontDialogHeaderSeparator(int bgColor) {
-        View separator = new View(this);
-        separator.setBackgroundColor(dialogActionPanelLineColor(bgColor));
-        separator.setClickable(false);
-        separator.setFocusable(false);
-        return separator;
-    }
-
-    private FrameLayout makeClippedDialogScrollFrame(@NonNull ScrollView scroll,
-                                                     @NonNull ViewGroup contentList,
-                                                     int bgColor) {
-        constrainDialogScrollArea(scroll, contentList);
-
-        FrameLayout clipFrame = new FrameLayout(this);
-        clipFrame.setBackgroundColor(bgColor);
-        clipFrame.setClipChildren(true);
-        clipFrame.setClipToPadding(true);
-        clipFrame.setOverScrollMode(View.OVER_SCROLL_NEVER);
-
-        scroll.setBackgroundColor(bgColor);
-        scroll.setFillViewport(false);
-        scroll.setClipChildren(true);
-        scroll.setClipToPadding(true);
-        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        scroll.setVerticalFadingEdgeEnabled(false);
-        scroll.setPadding(0, 0, 0, 0);
-
-        contentList.setBackgroundColor(bgColor);
-        contentList.setClipChildren(true);
-        contentList.setClipToPadding(true);
-        scroll.addView(contentList, new ScrollView.LayoutParams(
-                ScrollView.LayoutParams.MATCH_PARENT,
-                ScrollView.LayoutParams.WRAP_CONTENT));
-
-        clipFrame.addView(scroll, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-        return clipFrame;
-    }
-
-    private void preserveFontDialogHeaderBarrier(@NonNull ViewGroup panel, @NonNull View scrollClip) {
-        panel.setClipChildren(true);
-        panel.setClipToPadding(true);
-        scrollClip.setClipToOutline(false);
-        if (scrollClip instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) scrollClip;
-            group.setClipChildren(true);
-            group.setClipToPadding(true);
-        }
-    }
-
-    private TextView makeDocumentFontDialogTitle(String text, int bgColor, int fgColor) {
-        TextView title = new TextView(this);
-        title.setText(text);
-        title.setTextColor(fgColor);
-        title.setTextSize(22f);
-        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        title.setGravity(Gravity.CENTER);
-        title.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-        title.setPadding(dpToPx(18), dpToPx(18), dpToPx(18), dpToPx(14));
-        return title;
-    }
-
-    private TextView makeDocumentDialogLabel(String text, int color, float sp) {
-        TextView tv = new TextView(this);
-        tv.setText(text);
-        tv.setTextColor(color);
-        tv.setTextSize(sp);
-        tv.setLineSpacing(0f, 1.05f);
-        return tv;
-    }
-
-    private TextView makeDocumentDialogActionText(String text, int fgColor, int gravity) {
-        TextView tv = new TextView(this);
-        tv.setText(text);
-        tv.setTextColor(fgColor);
-        tv.setTextSize(16f);
-        tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        tv.setGravity(gravity);
-        tv.setSingleLine(true);
-        tv.setPadding(0, 0, 0, 0);
-        return tv;
-    }
-
-    private TextView makeDocumentFontActionRow(String text, int fgColor) {
-        return makeDocumentFontActionRow(text, fgColor, false);
-    }
-
-    private TextView makeDocumentFontActionRow(String text, int fgColor, boolean selected) {
-        TextView row = new TextView(this);
-        row.setText(text);
-        row.setTextColor(fgColor);
-        row.setTextSize(16f);
-        row.setTypeface(selected ? android.graphics.Typeface.DEFAULT_BOLD : android.graphics.Typeface.DEFAULT);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        // Keep the rounded row background but remove the radio/circle icon.
-        // This matches the intended TXT/EPUB/Word font picker style.
-        row.setPadding(dpToPx(18), 0, dpToPx(18), 0);
-        row.setCompoundDrawables(null, null, null, null);
-        row.setCompoundDrawablePadding(0);
-        GradientDrawable bg = new GradientDrawable();
-        int panel = dialogPanel();
-        boolean darkPanel = isDarkColor(panel);
-        int normalFill = blendColors(panel, fgColor, darkPanel ? 0.055f : 0.035f);
-        int selectedFill = blendColors(panel, fgColor, darkPanel ? 0.120f : 0.075f);
-        int normalStroke = blendColors(panel, fgColor, darkPanel ? 0.130f : 0.100f);
-        int selectedStroke = blendColors(panel, fgColor, darkPanel ? 0.420f : 0.360f);
-
-        // Keep every font row as a rounded card. Selection is indicated only by
-        // stronger text weight and outline; no radio/circle icon is used.
-        bg.setColor(selected ? selectedFill : normalFill);
-        bg.setCornerRadius(dpToPx(10));
-        bg.setStroke(1, selected ? selectedStroke : normalStroke);
-        row.setBackground(bg);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(48));
-        lp.setMargins(0, 0, 0, dpToPx(8));
-        row.setLayoutParams(lp);
-        return row;
-    }
-
-    private GradientDrawable positionedActionPanelBackground(int fill, int line) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(fill);
-        // Let the outer rounded frame clip the bottom corners. This removes the
-        // extra color-blend strip between the border and the bottom action row.
-        drawable.setCornerRadius(0f);
-        return drawable;
-    }
-
-    private View fontDialogBottomSeparator(int bgColor) {
-        View separator = new View(this);
-        separator.setBackgroundColor(dialogActionPanelLineColor(bgColor));
-        separator.setClickable(false);
-        separator.setFocusable(false);
-        return separator;
-    }
-
-    private int dialogActionPanelFillColor(int bgColor) {
-        // Keep the bottom action panel the same color as the main font dialog.
-        // A separate panel color created a visible blended strip near the bottom border.
-        return bgColor;
-    }
-
-    private int dialogActionPanelLineColor(int bgColor) {
-        return readerLine;
-    }
-
-    private Drawable fontDialogOuterBackground(int bgColor) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(bgColor);
-        drawable.setCornerRadius(dpToPx(16));
-        return drawable;
-    }
-
-    private Drawable fontDialogOuterBorderOverlay(int bgColor) {
-        final int borderColor = dialogActionPanelLineColor(bgColor);
-        final float strokeWidth = 1f;
-        final float radius = dpToPx(16);
-        return new Drawable() {
-            private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            private final RectF rect = new RectF();
-
-            {
-                paint.setStyle(Paint.Style.STROKE);
-                paint.setStrokeWidth(strokeWidth);
-                paint.setColor(borderColor);
-            }
-
-            @Override
-            public void draw(Canvas canvas) {
-                Rect bounds = getBounds();
-                float half = strokeWidth / 2f;
-                rect.set(bounds.left + half, bounds.top + half,
-                        bounds.right - half, bounds.bottom - half);
-                canvas.drawRoundRect(rect, Math.max(0f, radius - half),
-                        Math.max(0f, radius - half), paint);
-            }
-
-            @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); }
-            @Override public void setColorFilter(ColorFilter colorFilter) { paint.setColorFilter(colorFilter); }
-            @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
-        };
-    }
-
-    private android.app.Dialog createDocumentFontDialog(@NonNull View content, int maxWidthDp) {
-        android.app.Dialog dialog = new android.app.Dialog(this);
-        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
-        dialog.setCanceledOnTouchOutside(true);
-
-        final int bg = dialogBg();
-
-        FrameLayout outerFrame = new FrameLayout(this);
-        outerFrame.setBackground(fontDialogOuterBackground(bg));
-        outerFrame.setForeground(fontDialogOuterBorderOverlay(bg));
-        outerFrame.setClipChildren(true);
-        outerFrame.setClipToPadding(true);
-        outerFrame.setClipToOutline(true);
-        outerFrame.setPadding(0, 0, 0, 0);
-
-        content.setBackgroundColor(Color.TRANSPARENT);
-        if (content instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) content;
-            group.setClipChildren(true);
-            group.setClipToPadding(true);
-        }
-
-        outerFrame.addView(content, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT));
-
-        dialog.setContentView(outerFrame);
-
-        android.view.Window window = dialog.getWindow();
-        if (window != null) {
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-            android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
-            lp.copyFrom(window.getAttributes());
-            int screenWidth = getResources().getDisplayMetrics().widthPixels;
-            int cappedWidth = Math.min(Math.round(screenWidth * 0.85f), dpToPx(maxWidthDp));
-            lp.width = Math.max(dpToPx(220), cappedWidth);
-            lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
-            lp.y = dpToPx(DOCUMENT_TOOLBAR_POPUP_Y_DP);
-            lp.dimAmount = 0.16f;
-            window.setAttributes(lp);
-            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        }
-        return dialog;
-    }
-
-
-    private TextView makeDialogActionRow(String text, Runnable action) {
-        TextView row = new TextView(this);
-        row.setText(text);
-        row.setTextColor(dialogFg());
-        row.setTextSize(16f);
-        row.setGravity(android.view.Gravity.CENTER);
-        row.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-        row.setPadding(0, 0, 0, 0);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(dialogPanel());
-        bg.setCornerRadius(dpToPx(10));
-        row.setBackground(bg);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(48));
-        lp.setMargins(0, 0, 0, dpToPx(8));
-        row.setLayoutParams(lp);
-        row.setOnClickListener(v -> action.run());
-        return row;
-    }
-
-    private void refreshCurrentDocumentFont() {
-        clearDocumentEdgeArm();
-        if (!pages.isEmpty() && currentPage >= 0 && currentPage < pages.size()) {
-            showPage(currentPage, 0);
-        }
-    }
-
-    private static final class ReadingFontOption {
-        final String value;
-        final String englishLabel;
-        final String koreanLabel;
-
-        ReadingFontOption(String value, String englishLabel, String koreanLabel) {
-            this.value = value;
-            this.englishLabel = englishLabel;
-            this.koreanLabel = koreanLabel;
-        }
-    }
-
-    private List<ReadingFontOption> getReadingFontOptions() {
-        List<ReadingFontOption> options = new ArrayList<>();
-        if (shouldOfferDocumentDefaultFont()) {
-            options.add(new ReadingFontOption(DOCUMENT_FONT_DEFAULT, "Default font", "기본 글꼴"));
-        }
-        options.add(new ReadingFontOption("default", "System Sans (recommended)", "시스템 산세리프 (추천)"));
-        options.add(new ReadingFontOption(FONT_OPTION_SYSTEM_CURRENT, "Current system font", "현재 시스템 글꼴"));
-        options.add(new ReadingFontOption("korean_sans", "Korean/System Sans", "한글 산세리프"));
-        options.add(new ReadingFontOption("korean_serif", "Korean/System Serif", "한글 명조/세리프"));
-        options.add(new ReadingFontOption("serif", "Serif", "세리프"));
-        options.add(new ReadingFontOption("monospace", "Monospace", "고정폭"));
-        options.add(new ReadingFontOption("sans_medium", "Sans Medium", "산세리프 미디엄"));
-        options.add(new ReadingFontOption("sans_condensed", "Sans Condensed", "산세리프 압축"));
-        options.add(new ReadingFontOption("sans_light", "Sans Light", "산세리프 라이트"));
-        addDocumentUserFontOptions(options);
-
-        String current = currentDocumentFontSelection();
-        if (!DOCUMENT_FONT_DEFAULT.equals(current) && !isCuratedReadingFontValue(current) && !containsReadingFontOption(options, current)) {
-            if (FontManager.isSystemFamilyValue(current)) {
-                String familyName = FontManager.getSystemFamilyName(current);
-                options.add(new ReadingFontOption(current,
-                        "Saved system font: " + familyName,
-                        "저장된 시스템 글꼴: " + familyName));
-            } else {
-                options.add(new ReadingFontOption(current,
-                        "Installed/Custom: " + current,
-                        "설치/사용자 글꼴: " + current));
-            }
-        }
-        return options;
-    }
-
-    private void addDocumentUserFontOptions(@NonNull List<ReadingFontOption> options) {
-        try {
-            FontManager fontManager = FontManager.getInstance();
-            if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
-
-            for (String fontName : fontManager.getUserAddedFontNames(this)) {
-                if (fontName == null || fontName.trim().isEmpty()) continue;
-                String value = normalizeReadingFontValue(fontName);
-                if (isCuratedReadingFontValue(value) || containsReadingFontOption(options, value)) continue;
-                options.add(new ReadingFontOption(value,
-                        "Added font: " + fontName,
-                        "추가한 글꼴: " + fontName));
-            }
-        } catch (Throwable ignored) {
-            // Font scanning should not block the Word/EPUB More menu.
-        }
-    }
-
-    private boolean containsReadingFontOption(@NonNull List<ReadingFontOption> options, String value) {
-        for (ReadingFontOption option : options) {
-            if (option.value.equals(value)) return true;
-        }
-        return false;
-    }
-
-    private boolean isCuratedReadingFontValue(String value) {
-        switch (normalizeReadingFontValue(value)) {
-            case "default":
-            case DOCUMENT_FONT_DEFAULT:
-            case "system_current":
-            case "korean_sans":
-            case "korean_serif":
-            case "serif":
-            case "monospace":
-            case "sans_medium":
-            case "sans_condensed":
-            case "sans_light":
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private String getReadingFontLabel(@NonNull ReadingFontOption option) {
-        return localizedText(option.englishLabel, option.koreanLabel);
-    }
-
-    private String normalizeReadingFontValue(String fontName) {
-        if (fontName == null || fontName.trim().isEmpty()) return "default";
-        String trimmed = fontName.trim();
-        if (FontManager.isSystemFamilyValue(trimmed)) return trimmed;
-        switch (trimmed) {
-            case "Default (Sans-serif)":
-            case "DEFAULT":
-                return "default";
-            case "Serif":
-            case "SERIF":
-                return "serif";
-            case "Monospace":
-            case "MONOSPACE":
-                return "monospace";
-            case "default":
-            case DOCUMENT_FONT_DEFAULT:
-            case "system_current":
-            case "korean_sans":
-            case "korean_serif":
-            case "serif":
-            case "monospace":
-            case "sans_medium":
-            case "sans_condensed":
-            case "sans_light":
-                return trimmed;
-            default:
-                return trimmed;
-        }
+        documentFontController().showDocumentFontDialog();
     }
 
     private String buildDocumentFontCss() {
-        selectedDocumentFontFile = null;
-        String value = currentDocumentFontSelection();
-        if (DOCUMENT_FONT_DEFAULT.equals(value)) {
-            if ("Word".equals(docType)) return wordDefaultFontRule();
-            return "";
-        }
-        String fallback = documentFontFallbackCss(value);
-        String family = fallback;
-        String filePath = resolveDocumentFontFilePath(value);
-        if (filePath != null) {
-            selectedDocumentFontFile = new File(filePath);
-            family = "'TextViewSelectedDocumentFont', " + fallback;
-            return "@font-face{font-family:'TextViewSelectedDocumentFont';src:url('https://" + LOCAL_HOST + FONT_PREFIX + "selected');}" +
-                    documentFontRule(family);
-        }
-        if (FontManager.isSystemFamilyValue(value)) {
-            String name = FontManager.getSystemFamilyName(value);
-            if (!name.isEmpty()) family = "'" + cssQuote(name) + "', " + fallback;
-        } else if (!isCuratedReadingFontValue(value)) {
-            family = "'" + cssQuote(value) + "', " + fallback;
-        }
-        return documentFontRule(family);
-    }
-
-    private String documentFontRule(String family) {
-        return "body,.page,p,div,span,td,th,li,pre{font-family:" + family + " !important;}";
-    }
-
-    private String wordDefaultFontRule() {
-        if (wordDefaultFontFamily == null || wordDefaultFontFamily.trim().isEmpty()) return "";
-        String family = "'" + cssQuote(wordDefaultFontFamily.trim()) + "', " + wordFontFallbackFamily(wordDefaultFontFamily);
-        return "body,.page,p,div,span,td,th,li,pre{font-family:" + family + ";}";
-    }
-
-    private String wordFontFallbackFamily(String family) {
-        String lower = family == null ? "" : family.toLowerCase(Locale.US);
-        if (lower.contains("serif") || lower.contains("명조") || lower.contains("times") || lower.contains("batang")) {
-            return "serif";
-        }
-        if (lower.contains("mono") || lower.contains("courier") || lower.contains("consolas")) {
-            return "monospace";
-        }
-        return "sans-serif";
-    }
-
-    private String documentFontFallbackCss(String value) {
-        switch (normalizeReadingFontValue(value)) {
-            case "serif":
-            case "korean_serif":
-                return "serif";
-            case "monospace":
-                return "monospace";
-            case "sans_medium":
-                return "'sans-serif-medium', sans-serif";
-            case "sans_condensed":
-                return "'sans-serif-condensed', sans-serif";
-            case "sans_light":
-                return "'sans-serif-light', sans-serif";
-            case "default":
-            case DOCUMENT_FONT_DEFAULT:
-            case "system_current":
-            case "korean_sans":
-            default:
-                return "sans-serif";
-        }
-    }
-
-    private String resolveDocumentFontFilePath(String value) {
-        if (isCuratedReadingFontValue(value) || FontManager.isSystemFamilyValue(value)) return null;
-        try {
-            FontManager fontManager = FontManager.getInstance();
-            if (!fontManager.isScanned()) fontManager.scanFontsSync(this);
-            String path = fontManager.getFontPathForName(value);
-            if (path != null && new File(path).isFile()) return path;
-        } catch (Throwable ignored) {
-            // Fall back to CSS family name if the font file is not directly readable.
-        }
-        return null;
+        return documentFontController().buildDocumentFontCss();
     }
 
     private WebResourceResponse interceptSelectedDocumentFont() {
-        File fontFile = selectedDocumentFontFile;
-        if (fontFile == null || !fontFile.isFile()) return null;
-        try {
-            return new WebResourceResponse(
-                    mimeForPath(fontFile.getName()),
-                    "UTF-8",
-                    new FileInputStream(fontFile));
-        } catch (IOException e) {
-            return null;
-        }
-    }
-
-    private String cssQuote(String text) {
-        if (text == null) return "";
-        return text.replace("\\", "\\\\").replace("'", "\\'");
+        return documentFontController().interceptSelectedDocumentFont();
     }
 
     private String localizedText(String english, String korean) {
@@ -2064,384 +1047,36 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
 
+    private DocumentSearchController documentSearchController() {
+        return new DocumentSearchController(this);
+    }
+
     private void showDocumentSearchDialog() {
-        FrameLayout targetContainer = getDocumentSearchPanelTargetContainer();
-        if (targetContainer == null) return;
-
-        if (isDocumentSearchPanelVisible() && documentSearchInputView != null) {
-            focusDocumentSearchInput(documentSearchInputView);
-            return;
-        }
-
-        final int fg = dialogFg();
-        final int sub = dialogSub();
-
-        clearDocumentSearchPanelContainers();
-        targetContainer.setBackgroundColor(shouldOverlayDocumentSearchPanel() ? Color.TRANSPARENT : readerBg);
-
-        FrameLayout titleBox = new FrameLayout(this);
-        titleBox.setPadding(dpToPx(18), dpToPx(10), dpToPx(18), dpToPx(4));
-        titleBox.setBackgroundColor(Color.TRANSPARENT);
-
-        TextView title = new TextView(this);
-        title.setText(getString(R.string.find_in_text));
-        title.setTextColor(fg);
-        title.setTextSize(20f);
-        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        title.setGravity(Gravity.CENTER);
-        title.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-        titleBox.addView(title, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER));
-
-        TextView matchStatus = new TextView(this);
-        matchStatus.setText("0 / 0");
-        matchStatus.setTextColor(sub);
-        matchStatus.setTextSize(12f);
-        matchStatus.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
-        titleBox.addView(matchStatus, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER_VERTICAL | Gravity.END));
-        documentSearchStatusView = matchStatus;
-
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(Color.TRANSPARENT);
-        box.setPadding(dpToPx(18), dpToPx(8), dpToPx(18), dpToPx(6));
-
-        EditText input = makeDialogInput(getString(R.string.search_text_hint));
-        documentSearchInputView = input;
-        String rememberedQuery = activeDocumentSearchQuery;
-        if ((rememberedQuery == null || rememberedQuery.isEmpty()) && prefs != null) {
-            rememberedQuery = prefs.getLastReaderSearchQuery();
-        }
-        if (rememberedQuery == null) rememberedQuery = "";
-        input.setText(rememberedQuery);
-        if (!rememberedQuery.isEmpty()) {
-            input.setSelection(input.getText().length());
-            activeDocumentSearchTotal = countDocumentMatches(rememberedQuery);
-            updateDocumentSearchStatus(matchStatus);
-        }
-        box.addView(input, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(50)));
-
-        TextView hint = new TextView(this);
-        hint.setText(getString(R.string.search_hint_multiple));
-        hint.setTextColor(sub);
-        hint.setTextSize(12f);
-        hint.setGravity(Gravity.START);
-        hint.setPadding(0, dpToPx(5), 0, dpToPx(5));
-        box.addView(hint, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setGravity(Gravity.CENTER);
-        buttons.setPadding(0, dpToPx(4), 0, 0);
-
-        TextView prevButton = makeDocumentSearchDialogButton(getString(R.string.find_previous), fg);
-        TextView closeButton = makeDocumentSearchDialogButton(getString(R.string.close), fg);
-        TextView nextButton = makeDocumentSearchDialogButton(getString(R.string.find_next), fg);
-
-        buttons.addView(prevButton, new LinearLayout.LayoutParams(0, dpToPx(42), 1f));
-        buttons.addView(closeButton, new LinearLayout.LayoutParams(0, dpToPx(42), 1f));
-        buttons.addView(nextButton, new LinearLayout.LayoutParams(0, dpToPx(42), 1f));
-        box.addView(buttons, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        LinearLayout panel = makeDialogBox();
-        panel.setPadding(0, 0, 0, dpToPx(6));
-        panel.addView(titleBox, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-        panel.addView(box, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        prevButton.setOnClickListener(v -> performDocumentSearchMove(
-                input.getText() != null ? input.getText().toString() : "", false, matchStatus));
-        nextButton.setOnClickListener(v -> performDocumentSearchMove(
-                input.getText() != null ? input.getText().toString() : "", true, matchStatus));
-        closeButton.setOnClickListener(v -> hideDocumentSearchPanel(true, true));
-
-        input.setOnEditorActionListener((v, actionId, event) -> {
-            performDocumentSearchMove(input.getText() != null ? input.getText().toString() : "", true, matchStatus);
-            return true;
-        });
-
-        targetContainer.addView(panel, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER));
-        targetContainer.setVisibility(View.VISIBLE);
-        targetContainer.requestLayout();
-        if (shouldOverlayDocumentSearchPanel()) {
-            fixedLayoutFindOffsetActive = true;
-            targetContainer.post(this::applyFixedLayoutFindOffsetCssIfNeeded);
-            targetContainer.postDelayed(this::applyFixedLayoutFindOffsetCssIfNeeded, 180);
-        } else if (webView != null) {
-            webView.requestLayout();
-        }
-        focusDocumentSearchInput(input);
+        documentSearchController().showDocumentSearchDialog();
     }
 
-    private void focusDocumentSearchInput(@NonNull EditText input) {
-        input.postDelayed(() -> {
-            if (activityDestroyed || input != documentSearchInputView) return;
-            input.requestFocus();
-            Object service = getSystemService(INPUT_METHOD_SERVICE);
-            if (service instanceof android.view.inputmethod.InputMethodManager) {
-                ((android.view.inputmethod.InputMethodManager) service).showSoftInput(input,
-                        android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
-            }
-        }, 80);
-    }
-
-    private void hideDocumentSearchPanel(boolean saveQuery, boolean clearWebView) {
-        if (saveQuery && prefs != null && documentSearchInputView != null) {
-            prefs.setLastReaderSearchQuery(documentSearchInputView.getText() != null
-                    ? documentSearchInputView.getText().toString()
-                    : "");
-        }
-        if (documentSearchInputView != null) {
-            Object service = getSystemService(INPUT_METHOD_SERVICE);
-            if (service instanceof android.view.inputmethod.InputMethodManager) {
-                ((android.view.inputmethod.InputMethodManager) service).hideSoftInputFromWindow(
-                        documentSearchInputView.getWindowToken(), 0);
-            }
-        }
-        documentSearchInputView = null;
-        documentSearchStatusView = null;
-        boolean wasInlineVisible = documentSearchPanelContainer != null
-                && documentSearchPanelContainer.getVisibility() == View.VISIBLE;
-        boolean wasFixedLayoutOverlayVisible = shouldOverlayDocumentSearchPanel()
-                && documentSearchOverlayContainer != null
-                && documentSearchOverlayContainer.getVisibility() == View.VISIBLE;
-        clearDocumentSearchPanelContainers();
-        clearDocumentSearchState(clearWebView);
-        if (wasFixedLayoutOverlayVisible) setFixedLayoutFindOffsetActive(false);
-        if (wasInlineVisible && webView != null) webView.requestLayout();
-    }
-
-    private boolean shouldOverlayDocumentSearchPanel() {
-        // Fixed-layout EPUB pages are deliberately kept at their original page geometry.
-        // Do not insert the search panel into the vertical document layout for those
-        // pages; shrinking the WebView makes the centered fixed page appear to drop
-        // far below its normal position when Find opens. Overlaying the panel keeps
-        // the page box stable while still allowing native WebView find/highlight.
-        return "EPUB".equals(docType) && epubFixedLayoutLike;
-    }
-
-    private FrameLayout getDocumentSearchPanelTargetContainer() {
-        if (shouldOverlayDocumentSearchPanel() && documentSearchOverlayContainer != null) {
-            return documentSearchOverlayContainer;
-        }
-        return documentSearchPanelContainer;
+    void hideDocumentSearchPanel(boolean saveQuery, boolean clearWebView) {
+        documentSearchController().hideDocumentSearchPanel(saveQuery, clearWebView);
     }
 
     private boolean isDocumentSearchPanelVisible() {
-        return (documentSearchPanelContainer != null
-                && documentSearchPanelContainer.getVisibility() == View.VISIBLE)
-                || (documentSearchOverlayContainer != null
-                && documentSearchOverlayContainer.getVisibility() == View.VISIBLE);
+        return documentSearchController().isDocumentSearchPanelVisible();
     }
 
-    private void clearDocumentSearchPanelContainers() {
-        if (documentSearchPanelContainer != null) {
-            documentSearchPanelContainer.removeAllViews();
-            documentSearchPanelContainer.setVisibility(View.GONE);
-            documentSearchPanelContainer.requestLayout();
-        }
-        if (documentSearchOverlayContainer != null) {
-            documentSearchOverlayContainer.removeAllViews();
-            documentSearchOverlayContainer.setVisibility(View.GONE);
-            documentSearchOverlayContainer.requestLayout();
-        }
+    void applyDocumentSearchHighlightAfterPageLoad() {
+        documentSearchController().applyDocumentSearchHighlightAfterPageLoad();
     }
 
-    private TextView makeDocumentSearchDialogButton(String label, int fg) {
-        TextView button = new TextView(this);
-        button.setText(label);
-        button.setTextColor(fg);
-        button.setTextSize(14f);
-        button.setGravity(Gravity.CENTER);
-        button.setPadding(dpToPx(4), 0, dpToPx(4), 0);
-        button.setBackgroundColor(Color.TRANSPARENT);
-        return button;
+    void clearDocumentSearchState(boolean clearWebView) {
+        documentSearchController().clearDocumentSearchState(clearWebView);
     }
 
-    private void performDocumentSearchMove(String rawQuery, boolean forward, TextView matchStatus) {
-        String query = rawQuery == null ? "" : rawQuery.trim();
-        if (query.isEmpty()) {
-            if (prefs != null) prefs.setLastReaderSearchQuery("");
-            clearDocumentSearchState(true);
-            if (matchStatus != null) matchStatus.setText("0 / 0");
-            Toast.makeText(this, getString(R.string.enter_search_text), Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        activeDocumentSearchTotal = countDocumentMatches(query);
-        if (activeDocumentSearchTotal <= 0) {
-            activeDocumentSearchQuery = query;
-            activeDocumentSearchPage = -1;
-            activeDocumentSearchOrdinal = 0;
-            activeDocumentSearchCountOnPage = 0;
-            if (prefs != null) prefs.setLastReaderSearchQuery(query);
-            clearWebViewDocumentMatches();
-            if (matchStatus != null) matchStatus.setText("0 / 0");
-            Toast.makeText(this, getString(R.string.not_found), Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        boolean queryChanged = !query.equalsIgnoreCase(activeDocumentSearchQuery == null ? "" : activeDocumentSearchQuery);
-        activeDocumentSearchQuery = query;
-        if (prefs != null) prefs.setLastReaderSearchQuery(query);
-
-        if (queryChanged || activeDocumentSearchPage != currentPage || activeDocumentSearchCountOnPage <= 0) {
-            if (pageContainsDocumentQuery(currentPage, query)) {
-                applyDocumentSearchHighlight(query, forward);
-                updateDocumentSearchStatus(matchStatus);
-                return;
-            }
-        } else {
-            boolean canMoveWithinPage = forward
-                    ? activeDocumentSearchOrdinal < activeDocumentSearchCountOnPage
-                    : activeDocumentSearchOrdinal > 1;
-            if (canMoveWithinPage && webView != null) {
-                // Roll back the forced same-page follow correction.  Let WebView's
-                // native findNext()/FindListener own match selection and scrolling;
-                // the previous manual ordinal + reveal pass made Word results drift
-                // under the find popup on some documents.
-                webView.findNext(forward);
-                return;
-            }
-        }
-
-        int target = findNextDocumentSearchPage(query, currentPage, forward);
-        if (target >= 0) {
-            activeDocumentSearchPage = target;
-            showPage(target, Integer.compare(target, currentPage));
-            documentSearchSelectLastAfterCount = !forward;
-            updateDocumentSearchStatus(matchStatus);
-        } else {
-            Toast.makeText(this, getString(R.string.not_found), Toast.LENGTH_SHORT).show();
-            updateDocumentSearchStatus(matchStatus);
-        }
+    void updateDocumentSearchStatus(TextView matchStatus) {
+        documentSearchController().updateDocumentSearchStatus(matchStatus);
     }
 
-    private void applyDocumentSearchHighlightAfterPageLoad() {
-        if (webView == null || activeDocumentSearchQuery == null || activeDocumentSearchQuery.trim().isEmpty()) return;
-        if (!pageContainsDocumentQuery(currentPage, activeDocumentSearchQuery)) {
-            clearWebViewDocumentMatches();
-            updateDocumentSearchStatus(documentSearchStatusView);
-            return;
-        }
-        webView.postDelayed(() -> {
-            if (!activityDestroyed) applyDocumentSearchHighlight(activeDocumentSearchQuery, !documentSearchSelectLastAfterCount);
-        }, 60);
-    }
-
-    private void scheduleDocumentSearchReveal() {
-        // Intentionally no-op. Word/EPUB document find now uses native WebView
-        // selection/scroll behavior only, avoiding extra reveal/follow correction.
-    }
-
-    private void applyDocumentSearchHighlight(String query, boolean forward) {
-        if (webView == null || query == null || query.trim().isEmpty()) return;
-        activeDocumentSearchPage = currentPage;
-        documentSearchSelectLastAfterCount = !forward;
-        webView.clearMatches();
-        webView.findAllAsync(query);
-    }
-
-    private int findNextDocumentSearchPage(String query, int fromPage, boolean forward) {
-        if (pages.isEmpty() || query == null || query.trim().isEmpty()) return -1;
-        int count = pages.size();
-        for (int step = 1; step <= count; step++) {
-            int idx = forward
-                    ? (fromPage + step) % count
-                    : (fromPage - step + count) % count;
-            if (pageContainsDocumentQuery(idx, query)) return idx;
-        }
-        return -1;
-    }
-
-    private boolean pageContainsDocumentQuery(int pageIndex, String query) {
-        if (pageIndex < 0 || pageIndex >= pages.size() || query == null || query.trim().isEmpty()) return false;
-        String text = htmlToText(pages.get(pageIndex).html).toLowerCase(Locale.ROOT);
-        return text.contains(query.trim().toLowerCase(Locale.ROOT));
-    }
-
-    private int countDocumentMatches(String query) {
-        if (query == null || query.trim().isEmpty()) return 0;
-        String needle = query.trim().toLowerCase(Locale.ROOT);
-        int total = 0;
-        for (Page page : pages) {
-            total += countOccurrencesIgnoreCase(htmlToText(page.html), needle);
-        }
-        return total;
-    }
-
-    private int countDocumentMatchesBeforePage(String query, int pageIndex) {
-        if (query == null || query.trim().isEmpty()) return 0;
-        String needle = query.trim().toLowerCase(Locale.ROOT);
-        int total = 0;
-        for (int i = 0; i < Math.min(pageIndex, pages.size()); i++) {
-            total += countOccurrencesIgnoreCase(htmlToText(pages.get(i).html), needle);
-        }
-        return total;
-    }
-
-    private int countOccurrencesIgnoreCase(String text, String lowerNeedle) {
-        if (text == null || lowerNeedle == null || lowerNeedle.isEmpty()) return 0;
-        String haystack = text.toLowerCase(Locale.ROOT);
-        int total = 0;
-        int pos = 0;
-        while ((pos = haystack.indexOf(lowerNeedle, pos)) >= 0) {
-            total++;
-            pos += Math.max(1, lowerNeedle.length());
-        }
-        return total;
-    }
-
-    private void updateDocumentSearchStatus(TextView matchStatus) {
-        if (matchStatus == null) return;
-        if (activeDocumentSearchQuery == null || activeDocumentSearchQuery.trim().isEmpty()) {
-            matchStatus.setText("0 / 0");
-            return;
-        }
-        if (activeDocumentSearchTotal <= 0) {
-            activeDocumentSearchTotal = countDocumentMatches(activeDocumentSearchQuery);
-        }
-        int pageOrdinal = Math.max(0, activeDocumentSearchOrdinal);
-        int globalOrdinal = pageOrdinal > 0
-                ? countDocumentMatchesBeforePage(activeDocumentSearchQuery, currentPage) + pageOrdinal
-                : 0;
-        matchStatus.setText(String.format(Locale.getDefault(), "%d / %d", globalOrdinal, Math.max(0, activeDocumentSearchTotal)));
-    }
-
-    private void clearDocumentSearchState(boolean clearWebView) {
-        activeDocumentSearchQuery = "";
-        activeDocumentSearchPage = -1;
-        activeDocumentSearchOrdinal = 0;
-        activeDocumentSearchCountOnPage = 0;
-        activeDocumentSearchTotal = 0;
-        documentSearchSelectLastAfterCount = false;
-        if (clearWebView) clearWebViewDocumentMatches();
-    }
-
-    private void clearWebViewDocumentMatches() {
-        if (webView == null) return;
-        try {
-            webView.clearMatches();
-        } catch (Throwable ignored) {
-            // WebView search cleanup should not crash the viewer.
-        }
+    void scheduleDocumentSearchReveal() {
+        documentSearchController().scheduleDocumentSearchReveal();
     }
 
     private void showFileInfoDialog() {
@@ -2545,12 +1180,12 @@ public class DocumentPageActivity extends AppCompatActivity {
         return String.format(Locale.getDefault(), "Page %d / %d", page, Math.max(1, totalPages));
     }
 
-    private int dialogBg() { return readerBg; }
-    private int dialogPanel() { return readerPanel; }
-    private int dialogFg() { return readerFg; }
-    private int dialogSub() { return readerSub; }
+    int dialogBg() { return readerBg; }
+    int dialogPanel() { return readerPanel; }
+    int dialogFg() { return readerFg; }
+    int dialogSub() { return readerSub; }
 
-    private LinearLayout makeDialogBox() {
+    LinearLayout makeDialogBox() {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dpToPx(18), dpToPx(14), dpToPx(18), dpToPx(10));
@@ -2562,7 +1197,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         return box;
     }
 
-    private TextView makeDialogTitle(String text) {
+    TextView makeDialogTitle(String text) {
         TextView title = new TextView(this);
         title.setText(text);
         title.setTextColor(dialogFg());
@@ -2574,7 +1209,30 @@ public class DocumentPageActivity extends AppCompatActivity {
         return title;
     }
 
-    private EditText makeDialogInput(String hint) {
+    TextView makeDialogActionRow(String text, Runnable action) {
+        TextView row = new TextView(this);
+        row.setText(text);
+        row.setTextColor(dialogFg());
+        row.setTextSize(16f);
+        row.setGravity(Gravity.CENTER);
+        row.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        row.setPadding(0, 0, 0, 0);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(dialogPanel());
+        bg.setCornerRadius(dpToPx(10));
+        row.setBackground(bg);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(48));
+        lp.setMargins(0, 0, 0, dpToPx(8));
+        row.setLayoutParams(lp);
+        row.setOnClickListener(v -> {
+            if (action != null) action.run();
+        });
+        return row;
+    }
+
+    EditText makeDialogInput(String hint) {
         int overlay = !isDarkColor(dialogBg())
                 ? R.style.ThemeOverlay_TextView_ReaderDialogLight
                 : R.style.ThemeOverlay_TextView_ReaderDialogDark;
@@ -2664,124 +1322,24 @@ public class DocumentPageActivity extends AppCompatActivity {
         primary.setOnClickListener(v -> primaryAction.run());
     }
 
-    private void showCustomDialog(LinearLayout box, String closeText) {
-        showCustomDialog(box, closeText, false);
+    android.app.Dialog createStablePositionedDialog(@NonNull View content,
+                                                    int yDp,
+                                                    boolean adjustResize,
+                                                    boolean legacyBookmarkWidth) {
+        int widthPx = legacyBookmarkWidth ? legacyBookmarkDialogWidthPx() : txtReaderDialogWidthPx();
+        return AdaptiveDialogLayoutHelper.createStableBottomDialog(this, content, yDp, adjustResize, widthPx);
     }
 
-    private void showCustomDialog(LinearLayout box, String closeText, boolean oneHandLower) {
-        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
-        addDialogBottomActions(box, closeText, () -> {
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, false, false);
-        dialogRef[0].show();
+    ScrollView wrapAdaptiveDialogContent(@NonNull View content, @NonNull ViewGroup outerFrame) {
+        return AdaptiveDialogLayoutHelper.wrapAdaptiveContent(this, content, outerFrame);
     }
 
-    private android.app.Dialog createStablePositionedDialog(@NonNull View content,
-                                                             int yDp,
-                                                             boolean adjustResize,
-                                                             boolean legacyBookmarkWidth) {
-        android.app.Dialog dialog = new android.app.Dialog(this);
-        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
-        dialog.setCanceledOnTouchOutside(true);
-
-        FrameLayout outerFrame = new FrameLayout(this);
-        outerFrame.setBackgroundColor(Color.TRANSPARENT);
-        outerFrame.setClipChildren(true);
-        outerFrame.setClipToPadding(true);
-
-        // Keep the content view's own rounded/background drawable.
-        // Do not force it transparent here; the dialog window/background is already transparent
-        // so clearing this background makes the popup body invisible.
-        if (content instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) content;
-            group.setClipChildren(true);
-            group.setClipToPadding(true);
-        }
-        ScrollView adaptiveScroll = wrapAdaptiveDialogContent(content, outerFrame);
-        dialog.setContentView(outerFrame);
-
-        android.view.Window window = dialog.getWindow();
-        if (window != null) {
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-            android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
-            lp.copyFrom(window.getAttributes());
-            lp.width = legacyBookmarkWidth ? legacyBookmarkDialogWidthPx() : txtReaderDialogWidthPx();
-            lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
-            lp.y = dpToPx(yDp);
-            lp.dimAmount = 0.16f;
-            window.setAttributes(lp);
-            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            if (adjustResize) {
-                window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-            }
-        }
-        applyAdaptiveDialogMaxHeight(dialog, adaptiveScroll, legacyBookmarkWidth ? legacyBookmarkDialogWidthPx() : txtReaderDialogWidthPx());
-        return dialog;
-    }
-
-    private ScrollView wrapAdaptiveDialogContent(@NonNull View content, @NonNull ViewGroup outerFrame) {
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(false);
-        scroll.setClipChildren(true);
-        scroll.setClipToPadding(true);
-        scroll.setVerticalScrollBarEnabled(false);
-        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-        scroll.addView(content, new ScrollView.LayoutParams(
-                ScrollView.LayoutParams.MATCH_PARENT,
-                ScrollView.LayoutParams.WRAP_CONTENT));
-        outerFrame.addView(scroll, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT));
-        return scroll;
-    }
-
-    private void applyAdaptiveDialogMaxHeight(@NonNull android.app.Dialog dialog, @NonNull View adaptiveView, int widthPx) {
-        // Apply the constrained-window cap before dialog.show().  Posting this work
-        // after attach made bottom-positioned bookmark dialogs visibly drop/land in
-        // split-screen and pop-up modes because the window height changed after it
-        // was already on screen.  Normal full-screen mode still returns early below.
-        int availableHeight = currentVisibleWindowHeightPx();
-        if (availableHeight <= 0) return;
-        if (!shouldApplyAdaptiveDialogMaxHeight(availableHeight)) return;
-
-        int maxHeight = Math.max(dpToPx(220), Math.round(availableHeight * 0.88f) - dpToPx(24));
-        adaptiveView.measure(
-                View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int measured = adaptiveView.getMeasuredHeight();
-        if (measured > maxHeight) {
-            ViewGroup.LayoutParams lp = adaptiveView.getLayoutParams();
-            lp.height = maxHeight;
-            adaptiveView.setLayoutParams(lp);
-        }
-    }
-
-    private boolean shouldApplyAdaptiveDialogMaxHeight(int availableHeightPx) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N && isInMultiWindowMode()) {
-            return true;
-        }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && isInPictureInPictureMode()) {
-            return true;
-        }
-        int fullHeightPx = getResources().getDisplayMetrics().heightPixels;
-        return fullHeightPx > 0 && availableHeightPx < Math.round(fullHeightPx * 0.82f);
-    }
-
-    private int currentVisibleWindowHeightPx() {
-        Rect rect = new Rect();
-        View decor = getWindow() != null ? getWindow().getDecorView() : null;
-        if (decor != null) {
-            decor.getWindowVisibleDisplayFrame(rect);
-            if (rect.height() > dpToPx(240)) return rect.height();
-            if (decor.getHeight() > dpToPx(240)) return decor.getHeight();
-        }
-        return getResources().getDisplayMetrics().heightPixels;
+    void applyAdaptiveDialogMaxHeight(@NonNull android.app.Dialog dialog, @NonNull View adaptiveView, int widthPx) {
+        AdaptiveDialogLayoutHelper.applyAdaptiveMaxHeight(this, adaptiveView, widthPx);
     }
 
 
-    private void addDialogBottomActions(LinearLayout box, String primaryText, Runnable primaryAction) {
+    void addDialogBottomActions(LinearLayout box, String primaryText, Runnable primaryAction) {
         addDialogBottomActions(box, null, null, primaryText, primaryAction);
     }
 
@@ -2824,91 +1382,11 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
 
-    private void loadFromIntent(Intent intent) {
-        final int generation = ++loadGeneration;
-        updateLoadingIndicatorTheme();
-        progressBar.setVisibility(View.VISIBLE);
-        webView.setVisibility(View.INVISIBLE);
-        closeResourceZip();
-        pages.clear();
-        wordRelationships.clear();
-        epubHasDocumentFont = false;
-        epubFixedLayoutLike = false;
-        wordHasDocumentFont = false;
-        wordDefaultFontFamily = null;
-        documentFontOverride = null;
-        hideDocumentSearchPanel(false, false);
-        clearDocumentSearchState(false);
-
-        executor.execute(() -> {
-            try {
-                String path = intent.getStringExtra(EXTRA_FILE_PATH);
-                String uriString = intent.getStringExtra(EXTRA_FILE_URI);
-                if (path != null && !path.isEmpty()) {
-                    localFile = new File(path);
-                } else if (uriString != null && !uriString.isEmpty()) {
-                    Uri uri = Uri.parse(uriString);
-                    String displayName = FileUtils.getFileNameFromUri(this, uri);
-                    if (displayName == null || displayName.trim().isEmpty()) displayName = "document";
-                    localFile = FileUtils.copyUriToLocal(this, uri, displayName);
-                } else {
-                    throw new IOException("No file path or URI supplied");
-                }
-
-                filePath = localFile.getAbsolutePath();
-                fileName = localFile.getName();
-                String lower = fileName.toLowerCase(Locale.ROOT);
-                pages.clear();
-
-                if (lower.endsWith(".epub")) {
-                    docType = "EPUB";
-                    loadEpubPages(localFile);
-                } else if (FileUtils.isWordFile(fileName)) {
-                    docType = "Word";
-                    loadWordPages(localFile);
-                } else {
-                    throw new IOException("Unsupported document type: " + fileName);
-                }
-
-                if (pages.isEmpty()) throw new IOException("No renderable pages found");
-
-                int jump = intent.getIntExtra(EXTRA_JUMP_TO_PAGE, -1);
-                if (jump >= 0 && jump < pages.size()) {
-                    currentPage = jump;
-                } else {
-                    ReaderState state = bookmarkManager.getReadingState(filePath);
-                    if (state != null && state.getCharPosition() >= 0 && state.getCharPosition() < pages.size()) {
-                        currentPage = state.getCharPosition();
-                    } else {
-                        currentPage = 0;
-                    }
-                }
-
-                if (activityDestroyed || generation != loadGeneration) return;
-                runOnUiThread(() -> {
-                    if (activityDestroyed || generation != loadGeneration) return;
-                    if (getSupportActionBar() != null) getSupportActionBar().setTitle(fileName);
-                    if (progressBar != null) progressBar.setVisibility(View.GONE);
-                    if (webView != null) webView.setVisibility(View.VISIBLE);
-                    showPage(currentPage, 0);
-                });
-            } catch (Exception e) {
-                if (activityDestroyed || generation != loadGeneration) return;
-                runOnUiThread(() -> {
-                    if (!activityDestroyed) showLoadError(e);
-                });
-            }
-        });
+    void loadFromIntent(Intent intent) {
+        pageLoader().loadFromIntent(intent);
     }
 
-    private void showLoadError(Exception e) {
-        if (activityDestroyed) return;
-        if (progressBar != null) progressBar.setVisibility(View.GONE);
-        Toast.makeText(this, getString(R.string.error_prefix) + e.getMessage(), Toast.LENGTH_SHORT).show();
-        finish();
-    }
-
-    private String applyReaderThemeCss(String html) {
+    String applyReaderThemeCss(String html) {
         if ("EPUB".equals(docType) && epubFixedLayoutLike) {
             // Fixed-layout EPUB pages already received only the centering CSS in
             // prepareEpubHtml(). Do not add reader-theme/reflow CSS here.
@@ -2943,82 +1421,20 @@ public class DocumentPageActivity extends AppCompatActivity {
         return String.format(Locale.US, "#%06X", 0xFFFFFF & color);
     }
 
-    private void showPage(int page, int direction) {
-        if (activityDestroyed || webView == null || page < 0 || page >= pages.size()) return;
-        if ("EPUB".equals(docType) && epubFixedLayoutLike
-                && (webView.getWidth() <= 0 || webView.getHeight() <= 0)) {
-            final int requestedPage = page;
-            webView.post(() -> {
-                if (!activityDestroyed && webView != null) showPage(requestedPage, 0);
-            });
-            return;
-        }
-        if (direction != 0 && pageTurnInFlight) return;
-        if (direction != 0) {
-            pageTurnInFlight = true;
-            webView.removeCallbacks(releasePageTurnRunnable);
-            webView.postDelayed(releasePageTurnRunnable, 190);
-        }
-        int visualSlideDirection = visualSlideDirectionForPageDelta(direction);
-        pendingSlideDirection = visualSlideDirection;
-        currentPage = page;
-        Page p = pages.get(page);
-        String baseUrl = "https://" + LOCAL_HOST + "/";
-        if ("EPUB".equals(docType) && p.sourcePath != null) {
-            String parent = parentPath(p.sourcePath);
-            baseUrl = "https://" + LOCAL_HOST + EPUB_PREFIX + parent;
-            if (!baseUrl.endsWith("/")) baseUrl += "/";
-        }
-        prepareDocumentSlide(visualSlideDirection);
-        wordSelectionActive = false;
-        webView.removeCallbacks(checkWordSelectionAfterScrollRunnable);
-        webView.getSettings().setJavaScriptEnabled("Word".equals(docType));
-        configureWebViewForCurrentPage();
-        applyEpubBoundaryMarginsIfNeeded();
-        lastAppliedDocumentThemeSignature = documentThemeSignature();
-        String htmlForDisplay = p.html;
-        if ("EPUB".equals(docType) && epubFixedLayoutLike) {
-            htmlForDisplay = prepareFixedLayoutEpubHtml(htmlForDisplay);
-        }
-        webView.loadDataWithBaseURL(baseUrl, applyReaderThemeCss(htmlForDisplay), "text/html", "UTF-8", null);
-        updateStatus();
-        saveReadingState();
+    private String cssQuote(String text) {
+        if (text == null) return "";
+        return text.replace("\\", "\\\\").replace("'", "\\'");
     }
 
-    private void prepareDocumentSlide(int direction) {
-        if (webView == null || direction == 0) return;
-        webView.animate().cancel();
-        float distance = Math.max(dpToPx(56), webView.getWidth() * 0.18f);
-        webView.setTranslationX(direction > 0 ? distance : -distance);
-        webView.setAlpha(0.72f);
+    void showPage(int page, int direction) {
+        pageDisplay().showPage(page, direction);
     }
 
-    private void runDocumentSlideInAnimation() {
-        if (webView == null) return;
-        int direction = pendingSlideDirection;
-        pendingSlideDirection = 0;
-        if (direction == 0) {
-            webView.setTranslationX(0f);
-            webView.setAlpha(1.0f);
-            pageTurnInFlight = false;
-            return;
-        }
-        webView.animate()
-                .translationX(0f)
-                .alpha(1.0f)
-                .setDuration(135)
-                .setInterpolator(new android.view.animation.DecelerateInterpolator())
-                .withEndAction(() -> pageTurnInFlight = false)
-                .start();
+    void runDocumentSlideInAnimation() {
+        pageDisplay().runSlideInAnimation();
     }
 
-    private void updateStatus() {
-        pageStatus.setText(String.format(Locale.getDefault(), "%s %d / %d", docType, currentPage + 1, pages.size()));
-        prevButton.setEnabled(currentPage > 0);
-        nextButton.setEnabled(currentPage < pages.size() - 1);
-    }
-
-    private void addBookmarkForCurrentPage() {
+    void addBookmarkForCurrentPage() {
         if (filePath == null || pages.isEmpty()) return;
 
         String excerpt = String.format(Locale.getDefault(), "%s %d / %d", docType, currentPage + 1, pages.size());
@@ -3044,385 +1460,23 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
     private void showBookmarksDialog() {
-        if (filePath == null) return;
-
-        final int bg = readerBg;
-        final int panel = readerPanel;
-        final int fg = readerFg;
-        final int sub = readerSub;
-        final int line = readerLine;
-
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dpToPx(18), dpToPx(16), dpToPx(18), dpToPx(10));
-        GradientDrawable boxBg = new GradientDrawable();
-        boxBg.setColor(bg);
-        boxBg.setCornerRadius(dpToPx(16));
-        boxBg.setStroke(Math.max(1, dpToPx(1)), line);
-        box.setBackground(boxBg);
-
-        TextView title = new TextView(this);
-        title.setText(getString(R.string.bookmark));
-        title.setTextColor(fg);
-        title.setTextSize(22f);
-        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        title.setGravity(android.view.Gravity.CENTER);
-        title.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-        title.setPadding(0, 0, 0, dpToPx(4));
-        box.addView(title, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        TextView currentInfo = new TextView(this);
-        currentInfo.setTextColor(blendColors(bg, fg, 0.76f));
-        currentInfo.setTextSize(12f);
-        currentInfo.setGravity(android.view.Gravity.CENTER);
-        currentInfo.setSingleLine(false);
-        currentInfo.setLineSpacing(0f, 1.08f);
-        currentInfo.setPadding(0, 0, 0, dpToPx(10));
-        box.addView(currentInfo, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-        TextView hintButton = new TextView(this);
-        hintButton.setText(getString(R.string.bookmark_hints_show));
-        hintButton.setContentDescription(getString(R.string.bookmark_hints_show));
-        hintButton.setTextColor(blendColors(bg, fg, 0.76f));
-        hintButton.setTextSize(12f);
-        hintButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        hintButton.setGravity(android.view.Gravity.CENTER);
-        hintButton.setPadding(0, dpToPx(6), 0, dpToPx(4));
-        hintButton.setOnClickListener(v -> showBookmarkHintsPopup());
-        box.addView(hintButton, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        TextView saveButton = new TextView(this);
-        saveButton.setText(getString(R.string.add_current_bookmark));
-        saveButton.setGravity(android.view.Gravity.CENTER);
-        saveButton.setTextColor(fg);
-        saveButton.setTextSize(16f);
-        saveButton.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        saveButton.setPadding(0, dpToPx(12), 0, dpToPx(12));
-        android.graphics.drawable.GradientDrawable saveBg = new android.graphics.drawable.GradientDrawable();
-        boolean darkBookmarkDialog = isDarkColor(bg);
-        int saveFill = blendColors(bg, fg, darkBookmarkDialog ? 0.135f : 0.085f);
-        int saveStroke = blendColors(bg, fg, darkBookmarkDialog ? 0.460f : 0.360f);
-        saveBg.setColor(saveFill);
-        saveBg.setCornerRadius(dpToPx(14));
-        saveBg.setStroke(Math.max(1, dpToPx(1)), saveStroke);
-        saveButton.setBackground(saveBg);
-        LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        saveLp.setMargins(0, dpToPx(8), 0, 0);
-
-        RecyclerView rv = new RecyclerView(this);
-        rv.setLayoutManager(new LinearLayoutManager(this));
-        rv.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        rv.setItemAnimator(null);
-        rv.setBackgroundColor(Color.TRANSPARENT);
-        rv.setPadding(0, dpToPx(8), 0, 0);
-        rv.setClipToPadding(false);
-        BookmarkFolderAdapter adapter = new BookmarkFolderAdapter();
-        adapter.setThemeColors(bg, fg, sub, panel);
-        Set<String> expandedFolders = new HashSet<>();
-        expandedFolders.add(filePath);
-        rv.setAdapter(adapter);
-
-        TextView emptyText = new TextView(this);
-        emptyText.setText(getString(R.string.no_bookmarks_hint));
-        emptyText.setTextColor(blendColors(bg, fg, 0.76f));
-        emptyText.setGravity(android.view.Gravity.CENTER);
-        emptyText.setPadding(0, dpToPx(18), 0, dpToPx(18));
-        box.addView(emptyText, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams bookmarkListLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(430));
-        box.addView(rv, bookmarkListLp);
-        box.addView(saveButton, saveLp);
-
-        TextView closeButton = new TextView(this);
-        closeButton.setText(getString(R.string.close));
-        closeButton.setGravity(android.view.Gravity.CENTER);
-        closeButton.setTextColor(fg);
-        closeButton.setTextSize(16f);
-        closeButton.setPadding(0, dpToPx(14), 0, dpToPx(10));
-        box.addView(closeButton, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        android.app.Dialog dialog = createStablePositionedDialog(box, 34, false, true);
-
-        final Runnable[] refreshRef = new Runnable[1];
-        refreshRef[0] = () -> {
-            List<Bookmark> all = bookmarkManager.getAllBookmarks();
-            adapter.setBookmarks(all, expandedFolders, filePath);
-            // Keep the bookmark dialog height stable even when the list is empty.
-            // This prevents the window from bouncing when the first bookmark is added.
-            emptyText.setVisibility(View.GONE);
-            rv.setVisibility(View.VISIBLE);
-            LinearLayout.LayoutParams rvLp = (LinearLayout.LayoutParams) rv.getLayoutParams();
-            if (rvLp != null && rvLp.height != dpToPx(430)) {
-                rvLp.height = dpToPx(430);
-                rv.setLayoutParams(rvLp);
-            }
-            currentInfo.setText(getString(R.string.all_bookmarks_status,
-                    adapter.getFolderCount(), all.size(), currentPage + 1, pages.size()));
-        };
-
-        saveButton.setOnClickListener(v -> {
-            addBookmarkForCurrentPage();
-            expandedFolders.add(filePath);
-            refreshRef[0].run();
-        });
-        closeButton.setOnClickListener(v -> dialog.dismiss());
-
-        adapter.setListener(new BookmarkFolderAdapter.Listener() {
-            @Override public void onFolderClick(String folderFilePath) {
-                if (expandedFolders.contains(folderFilePath)) expandedFolders.remove(folderFilePath);
-                else expandedFolders.add(folderFilePath);
-                refreshRef[0].run();
-            }
-
-            @Override public void onFolderDelete(String folderFilePath, String expansionKey, String folderName, int bookmarkCount) {
-                showBookmarkFolderDeleteConfirm(folderFilePath, folderName, bookmarkCount, () -> {
-                    expandedFolders.remove(folderFilePath);
-                    expandedFolders.remove(expansionKey);
-                    refreshRef[0].run();
-                });
-            }
-
-            @Override public void onBookmarkClick(Bookmark b) {
-                navigateToBookmark(b);
-                dialog.dismiss();
-            }
-
-            @Override public void onBookmarkDelete(Bookmark b) {
-                showBookmarkDeleteConfirm(b, refreshRef[0]);
-            }
-
-            @Override public void onBookmarkEdit(Bookmark b) {
-                showBookmarkMemoEditDialog(b, refreshRef[0]);
-            }
-        });
-
-        refreshRef[0].run();
-        dialog.show();
+        new DocumentBookmarkDialogController(this).showBookmarksDialog();
     }
 
-    private void showBookmarkHintsPopup() {
-        LinearLayout box = makeDialogBox();
-        box.addView(makeDialogTitle(getString(R.string.bookmark_hints_show)));
-
-        TextView message = new TextView(this);
-        message.setText(getString(R.string.bookmark_folder_hint));
-        message.setTextColor(dialogSub());
-        message.setTextSize(13f);
-        message.setLineSpacing(0f, 1.12f);
-        message.setPadding(0, 0, 0, dpToPx(12));
-        box.addView(message, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
-        addDialogBottomActions(box, getString(R.string.ok), () -> {
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        dialogRef[0] = createSmallBookmarkHintDialog(box);
-        dialogRef[0].show();
+    int documentPageCount() {
+        return pages.size();
     }
 
-    private android.app.Dialog createSmallBookmarkHintDialog(@NonNull View content) {
-        android.app.Dialog dialog = new android.app.Dialog(this);
-        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
-        dialog.setCanceledOnTouchOutside(true);
-
-        FrameLayout outerFrame = new FrameLayout(this);
-        outerFrame.setBackgroundColor(Color.TRANSPARENT);
-        outerFrame.setClipChildren(true);
-        outerFrame.setClipToPadding(true);
-        if (content instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) content;
-            group.setClipChildren(true);
-            group.setClipToPadding(true);
-        }
-        ScrollView adaptiveScroll = wrapAdaptiveDialogContent(content, outerFrame);
-        dialog.setContentView(outerFrame);
-
-        android.view.Window window = dialog.getWindow();
-        if (window != null) {
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.setGravity(android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
-            android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
-            lp.copyFrom(window.getAttributes());
-            int screenWidth = getResources().getDisplayMetrics().widthPixels;
-            lp.width = Math.max(dpToPx(240), Math.min(Math.round(screenWidth * 0.74f), dpToPx(360)));
-            lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
-            lp.y = dpToPx(112);
-            lp.dimAmount = 0.16f;
-            window.setAttributes(lp);
-            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        }
-        applyAdaptiveDialogMaxHeight(dialog, adaptiveScroll, Math.max(dpToPx(240), Math.min(Math.round(getResources().getDisplayMetrics().widthPixels * 0.74f), dpToPx(360))));
-        return dialog;
+    boolean hasValidCurrentDocumentPage() {
+        return !pages.isEmpty() && currentPage >= 0 && currentPage < pages.size();
     }
 
-    private void navigateToBookmark(@NonNull Bookmark b) {
-        String path = b.getFilePath();
-        if (path == null || path.trim().isEmpty()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + "(missing path)", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        File target = new File(path.trim());
-        if (!target.exists()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (path.equals(filePath) || target.getAbsolutePath().equals(filePath)) {
-            showPage(b.getCharPosition(), Integer.compare(b.getCharPosition(), currentPage));
-            return;
-        }
-        Intent intent;
-        String targetPath = target.getAbsolutePath();
-        if (FileUtils.isPdfFile(target.getName())) {
-            intent = new Intent(this, PdfReaderActivity.class);
-            intent.putExtra(PdfReaderActivity.EXTRA_FILE_PATH, targetPath);
-            intent.putExtra(PdfReaderActivity.EXTRA_JUMP_TO_PAGE, b.getCharPosition());
-        } else if (FileUtils.isEpubFile(target.getName()) || FileUtils.isWordFile(target.getName())) {
-            intent = new Intent(this, DocumentPageActivity.class);
-            intent.putExtra(DocumentPageActivity.EXTRA_FILE_PATH, targetPath);
-            intent.putExtra(DocumentPageActivity.EXTRA_JUMP_TO_PAGE, b.getCharPosition());
-        } else {
-            intent = new Intent(this, ReaderActivity.class);
-            intent.putExtra(ReaderActivity.EXTRA_FILE_PATH, targetPath);
-            intent.putExtra(ReaderActivity.EXTRA_JUMP_TO_POSITION, b.getCharPosition());
-            intent.putExtra(ReaderActivity.EXTRA_JUMP_DISPLAY_PAGE, b.getPageNumber());
-            intent.putExtra(ReaderActivity.EXTRA_JUMP_TOTAL_PAGES, b.getTotalPages());
-        }
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        startActivity(intent);
+    String documentPageHtml(int index) {
+        if (index < 0 || index >= pages.size()) return "";
+        return pages.get(index).html;
     }
 
-    private void showBookmarkDeleteConfirm(@NonNull Bookmark bookmark, @NonNull Runnable afterDelete) {
-        LinearLayout box = makeDialogBox();
-        box.addView(makeDialogTitle(getString(R.string.delete_bookmark)));
-
-        TextView message = new TextView(this);
-        message.setText(bookmark.getFileName() + "\n\n" + bookmark.getDisplayText());
-        message.setTextColor(dialogSub());
-        message.setTextSize(14f);
-        message.setLineSpacing(0f, 1.15f);
-        message.setPadding(0, 0, 0, dpToPx(12));
-        box.addView(message, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
-        addDialogBottomActions(box, getString(R.string.delete), () -> {
-            bookmarkManager.deleteBookmark(bookmark.getId());
-            afterDelete.run();
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, false, false);
-        dialogRef[0].show();
-    }
-
-    private void showBookmarkFolderDeleteConfirm(String folderFilePath, String folderName, int bookmarkCount, @NonNull Runnable afterDelete) {
-        LinearLayout box = makeDialogBox();
-        box.addView(makeDialogTitle(getString(R.string.delete_bookmark_folder)));
-
-        TextView message = new TextView(this);
-        String displayName = folderName != null && !folderName.trim().isEmpty() ? folderName.trim() : getString(R.string.bookmark);
-        message.setText(displayName + "\n\n"
-                + getString(R.string.delete_bookmark_folder_message, bookmarkCount)
-                + "\n" + getString(R.string.delete_bookmark_folder_note));
-        message.setTextColor(dialogSub());
-        message.setTextSize(14f);
-        message.setLineSpacing(0f, 1.15f);
-        message.setPadding(0, 0, 0, dpToPx(12));
-        box.addView(message, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
-        addDialogBottomActions(box, getString(R.string.delete), () -> {
-            bookmarkManager.deleteBookmarksForFile(folderFilePath);
-            afterDelete.run();
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, false, false);
-        dialogRef[0].show();
-    }
-
-    private void showBookmarkMemoEditDialog(@NonNull Bookmark bookmark, @NonNull Runnable afterSave) {
-        LinearLayout box = makeDialogBox();
-        box.addView(makeDialogTitle(getString(R.string.edit_bookmark_memo)));
-
-        EditText input = makeDialogInput(getString(R.string.optional_memo));
-        input.setText(bookmark.getLabel());
-        input.setSelectAllOnFocus(true);
-        box.addView(input, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(52)));
-
-        final android.app.Dialog[] dialogRef = new android.app.Dialog[1];
-
-        LinearLayout actions = new LinearLayout(this);
-        actions.setTag("dialog_actions");
-        actions.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.END);
-        actions.setPadding(0, dpToPx(8), 0, 0);
-
-        TextView cancel = new TextView(this);
-        cancel.setText(getString(R.string.cancel));
-        cancel.setTextColor(dialogSub());
-        cancel.setTextSize(16f);
-        cancel.setGravity(android.view.Gravity.CENTER);
-        cancel.setPadding(dpToPx(14), 0, dpToPx(14), 0);
-
-        TextView clear = new TextView(this);
-        clear.setText(getString(R.string.clear_memo));
-        clear.setTextColor(dialogSub());
-        clear.setTextSize(16f);
-        clear.setGravity(android.view.Gravity.CENTER);
-        clear.setPadding(dpToPx(14), 0, dpToPx(14), 0);
-
-        TextView save = new TextView(this);
-        save.setText(getString(R.string.save));
-        save.setTextColor(dialogFg());
-        save.setTextSize(16f);
-        save.setGravity(android.view.Gravity.CENTER);
-        save.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        save.setPadding(dpToPx(18), 0, dpToPx(18), 0);
-
-        actions.addView(cancel, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
-        actions.addView(clear, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
-        actions.addView(save, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(46)));
-        box.addView(actions, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        cancel.setOnClickListener(v -> {
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        clear.setOnClickListener(v -> {
-            bookmark.setLabel("");
-            bookmarkManager.updateBookmark(bookmark);
-            afterSave.run();
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-        save.setOnClickListener(v -> {
-            bookmark.setLabel(input.getText().toString().trim());
-            bookmarkManager.updateBookmark(bookmark);
-            afterSave.run();
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-        });
-
-        dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, true, false);
-        dialogRef[0].show();
-    }
-
-    private void saveReadingState() {
+    void saveReadingState() {
         if (filePath == null || prefs == null || !prefs.getAutoSavePosition()) return;
         ReaderState state = new ReaderState(filePath);
         state.setCharPosition(currentPage);
@@ -3444,7 +1498,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
     }
 
-    private void loadEpubPages(File file) throws Exception {
+    void loadEpubPages(File file) throws Exception {
         closeResourceZip();
         resourceZip = new ZipFile(file);
         epubFixedLayoutLike = detectEpubFixedLayoutLike(resourceZip);
@@ -3464,209 +1518,18 @@ public class DocumentPageActivity extends AppCompatActivity {
 
 
     private boolean detectEpubFixedLayoutLike(@NonNull ZipFile zip) {
-        try {
-            // EPUB 3 fixed-layout metadata.
-            ZipEntry containerEntry = zip.getEntry("META-INF/container.xml");
-            if (containerEntry != null) {
-                Document containerDoc;
-                try (InputStream is = zip.getInputStream(containerEntry)) {
-                    containerDoc = secureDocumentBuilder().parse(is);
-                }
-                NodeList rootFiles = containerDoc.getElementsByTagName("rootfile");
-                if (rootFiles.getLength() == 0) rootFiles = containerDoc.getElementsByTagNameNS("*", "rootfile");
-                if (rootFiles.getLength() > 0) {
-                    Node fullPathAttr = rootFiles.item(0).getAttributes() != null
-                            ? rootFiles.item(0).getAttributes().getNamedItem("full-path") : null;
-                    if (fullPathAttr != null) {
-                        String opfPath = fullPathAttr.getNodeValue();
-                        ZipEntry opfEntry = zip.getEntry(opfPath);
-                        if (opfEntry != null) {
-                            String opf = readZipEntryString(zip, opfEntry);
-                            String lower = opf != null ? opf.toLowerCase(Locale.US) : "";
-                            if (lower.contains("rendition:layout") && lower.contains("pre-paginated")) return true;
-                            if (lower.contains("fixed layout") || lower.contains("fixed-layout")) return true;
-                        }
-                    }
-                }
-            }
-
-            // Many EPUB 2 fixed-layout/demo books omit rendition metadata but put
-            // fixed numeric page dimensions in each XHTML viewport.  Detect those
-            // and preserve the original HTML/CSS instead of reflowing it.
-            Enumeration<? extends ZipEntry> entries = zip.entries();
-            int scanned = 0;
-            java.util.regex.Pattern viewport = java.util.regex.Pattern.compile(
-                    "(?is)<meta[^>]+name\\s*=\\s*['\\\"]viewport['\\\"][^>]+content\\s*=\\s*['\\\"][^'\\\"]*width\\s*=\\s*([0-9]{2,5})[^'\\\"]*height\\s*=\\s*([0-9]{2,5})");
-            while (entries.hasMoreElements() && scanned < 80) {
-                ZipEntry entry = entries.nextElement();
-                if (entry == null || entry.isDirectory() || !isEpubHtmlPath(entry.getName())) continue;
-                scanned++;
-                String html = readZipEntryString(zip, entry);
-                if (html == null) continue;
-                java.util.regex.Matcher m = viewport.matcher(html);
-                if (m.find()) {
-                    try {
-                        int w = Integer.parseInt(m.group(1));
-                        int h = Integer.parseInt(m.group(2));
-                        if (w >= 100 && h >= 100) return true;
-                    } catch (Exception ignored) {}
-                }
-            }
-        } catch (Throwable ignored) {
-            // Fall through to reflowable handling if detection fails.
-        }
-        return false;
+        return DocumentArchiveUtils.detectEpubFixedLayoutLike(zip);
     }
 
     private boolean detectEpubDeclaredFont(@NonNull ZipFile zip) {
-        try {
-            Enumeration<? extends ZipEntry> entries = zip.entries();
-            int scanned = 0;
-            while (entries.hasMoreElements() && scanned < 160) {
-                ZipEntry entry = entries.nextElement();
-                if (entry == null || entry.isDirectory()) continue;
-                String name = entry.getName();
-                if (name == null) continue;
-                String lower = name.toLowerCase(Locale.US);
-                if (!(lower.endsWith(".css") || lower.endsWith(".html") || lower.endsWith(".xhtml") || lower.endsWith(".htm"))) {
-                    continue;
-                }
-                scanned++;
-                String text = readZipEntryString(zip, entry);
-                if (text == null) continue;
-                String compact = text.toLowerCase(Locale.US);
-                if (compact.contains("@font-face") || compact.contains("font-family")) {
-                    return true;
-                }
-            }
-        } catch (Throwable ignored) {
-            // If detection fails, fall back to normal TextView Reader font handling.
-        }
-        return false;
+        return DocumentArchiveUtils.detectEpubDeclaredFont(zip);
     }
 
     private String detectWordDefaultFontFamily(@NonNull ZipFile zip) {
-        String fromStyles = detectWordDefaultFontFromStyles(zip);
-        if (fromStyles != null && !fromStyles.trim().isEmpty()) return fromStyles.trim();
-
-        String fromDocument = detectWordFirstDeclaredFont(zip);
-        if (fromDocument != null && !fromDocument.trim().isEmpty()) return fromDocument.trim();
-
-        String fromFontTable = detectWordFirstFontTableName(zip);
-        if (fromFontTable != null && !fromFontTable.trim().isEmpty()) return fromFontTable.trim();
-        return null;
+        return DocumentWordUtils.detectDefaultFontFamily(zip);
     }
 
-    private String detectWordDefaultFontFromStyles(@NonNull ZipFile zip) {
-        try {
-            ZipEntry styles = zip.getEntry("word/styles.xml");
-            if (styles == null) return null;
-            Document stylesDoc;
-            try (InputStream is = zip.getInputStream(styles)) {
-                stylesDoc = secureDocumentBuilder().parse(is);
-            }
-
-            Node docDefaults = firstNodeByLocalName(stylesDoc, "docDefaults");
-            String font = firstFontFamilyUnderNode(docDefaults);
-            if (font != null) return font;
-
-            Node normalStyle = findWordStyleById(stylesDoc, "Normal");
-            font = firstFontFamilyUnderNode(normalStyle);
-            if (font != null) return font;
-        } catch (Throwable ignored) {
-            // Fall back to scanning document/fontTable entries.
-        }
-        return null;
-    }
-
-    private Node findWordStyleById(@NonNull Document stylesDoc, @NonNull String styleId) {
-        NodeList styles = stylesDoc.getElementsByTagNameNS("*", "style");
-        if (styles.getLength() == 0) styles = stylesDoc.getElementsByTagName("w:style");
-        if (styles.getLength() == 0) styles = stylesDoc.getElementsByTagName("style");
-        for (int i = 0; i < styles.getLength(); i++) {
-            Node style = styles.item(i);
-            String id = attr(style, "w:styleId", "styleId");
-            if (styleId.equalsIgnoreCase(id)) return style;
-        }
-        return null;
-    }
-
-    private String detectWordFirstDeclaredFont(@NonNull ZipFile zip) {
-        try {
-            ZipEntry documentXml = zip.getEntry("word/document.xml");
-            if (documentXml == null) return null;
-            Document doc;
-            try (InputStream is = zip.getInputStream(documentXml)) {
-                doc = secureDocumentBuilder().parse(is);
-            }
-            return firstFontFamilyUnderNode(doc.getDocumentElement());
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private String detectWordFirstFontTableName(@NonNull ZipFile zip) {
-        try {
-            ZipEntry fontTable = zip.getEntry("word/fontTable.xml");
-            if (fontTable == null) return null;
-            Document fontDoc;
-            try (InputStream is = zip.getInputStream(fontTable)) {
-                fontDoc = secureDocumentBuilder().parse(is);
-            }
-            NodeList fonts = fontDoc.getElementsByTagNameNS("*", "font");
-            if (fonts.getLength() == 0) fonts = fontDoc.getElementsByTagName("w:font");
-            if (fonts.getLength() == 0) fonts = fontDoc.getElementsByTagName("font");
-            for (int i = 0; i < fonts.getLength(); i++) {
-                String name = sanitizeWordFontName(attr(fonts.item(i), "w:name", "name"));
-                if (name != null) return name;
-            }
-        } catch (Throwable ignored) {
-            // Missing fontTable is normal for simple DOCX files.
-        }
-        return null;
-    }
-
-    private String firstFontFamilyUnderNode(Node root) {
-        if (root == null) return null;
-        if ("rFonts".equals(root.getLocalName()) || "w:rFonts".equals(root.getNodeName())) {
-            String font = wordFontFromRFonts(root);
-            if (font != null) return font;
-        }
-        NodeList nodes = root.getChildNodes();
-        for (int i = 0; i < nodes.getLength(); i++) {
-            String font = firstFontFamilyUnderNode(nodes.item(i));
-            if (font != null) return font;
-        }
-        return null;
-    }
-
-    private String wordFontFromRFonts(Node rFonts) {
-        String font = sanitizeWordFontName(attr(rFonts, "w:ascii", "ascii"));
-        if (font != null) return font;
-        font = sanitizeWordFontName(attr(rFonts, "w:hAnsi", "hAnsi"));
-        if (font != null) return font;
-        font = sanitizeWordFontName(attr(rFonts, "w:eastAsia", "eastAsia"));
-        if (font != null) return font;
-        font = sanitizeWordFontName(attr(rFonts, "w:cs", "cs"));
-        if (font != null) return font;
-        font = sanitizeWordFontName(attr(rFonts, "w:asciiTheme", "asciiTheme"));
-        if (font != null) return font;
-        font = sanitizeWordFontName(attr(rFonts, "w:hAnsiTheme", "hAnsiTheme"));
-        if (font != null) return font;
-        font = sanitizeWordFontName(attr(rFonts, "w:eastAsiaTheme", "eastAsiaTheme"));
-        if (font != null) return font;
-        return sanitizeWordFontName(attr(rFonts, "w:cstheme", "cstheme"));
-    }
-
-    private String sanitizeWordFontName(String name) {
-        if (name == null) return null;
-        String trimmed = name.trim();
-        if (trimmed.isEmpty()) return null;
-        if (trimmed.startsWith("+") || trimmed.toLowerCase(Locale.US).contains("theme")) return null;
-        return trimmed;
-    }
-
-    private void loadWordPages(File file) throws Exception {
+    void loadWordPages(File file) throws Exception {
         closeResourceZip();
         resourceZip = new ZipFile(file);
         wordRelationships.clear();
@@ -3719,11 +1582,11 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
     }
 
-    private int dpToPx(float dp) {
+    int dpToPx(float dp) {
         return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
-    private WebResourceResponse interceptLocalResource(Uri uri) {
+    WebResourceResponse interceptLocalResource(Uri uri) {
         if (uri == null) return null;
         if (!LOCAL_HOST.equalsIgnoreCase(uri.getHost())) {
             return new WebResourceResponse("text/plain", "UTF-8",
@@ -3768,7 +1631,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         }
     }
 
-    private String prepareFixedLayoutEpubHtml(String html) {
+    String prepareFixedLayoutEpubHtml(String html) {
         if (html == null) html = "";
         int[] viewport = extractFixedLayoutViewportSize(html);
         String css;
@@ -3870,12 +1733,12 @@ public class DocumentPageActivity extends AppCompatActivity {
         return Math.max(fallbackGap, overlayHeight + fallbackGap);
     }
 
-    private void setFixedLayoutFindOffsetActive(boolean active) {
+    void setFixedLayoutFindOffsetActive(boolean active) {
         fixedLayoutFindOffsetActive = active;
         applyFixedLayoutFindOffsetCssIfNeeded();
     }
 
-    private void applyFixedLayoutFindOffsetCssIfNeeded() {
+    void applyFixedLayoutFindOffsetCssIfNeeded() {
         if (!"EPUB".equals(docType) || !epubFixedLayoutLike || webView == null) return;
         if (activityDestroyed) return;
         if (!fixedLayoutFindOffsetActive) {
@@ -4006,447 +1869,69 @@ public class DocumentPageActivity extends AppCompatActivity {
     }
 
     private String renderWordParagraph(Node p) {
-        StringBuilder inline = new StringBuilder();
-        appendWordInlineHtmlLimited(p, inline, p);
-
-        StringBuilder out = new StringBuilder();
-        if (hasVisibleHtml(inline)) {
-            out.append("<p").append(wordParagraphStyle(p)).append(">");
-            out.append(inline);
-            out.append("</p>");
-        }
-        appendWordTextBoxes(p, out);
-        return out.toString();
+        return DocumentWordUtils.renderParagraph(p, wordRelationships, LOCAL_HOST);
     }
 
     private String renderWordTable(Node table) {
-        StringBuilder out = new StringBuilder();
-        out.append("<table>");
-        NodeList rows = table.getChildNodes();
-        for (int i = 0; i < rows.getLength(); i++) {
-            Node row = rows.item(i);
-            String local = row.getLocalName();
-            String name = row.getNodeName();
-            if (!"tr".equals(local) && !"w:tr".equals(name)) continue;
-            out.append("<tr>");
-            NodeList cells = row.getChildNodes();
-            for (int j = 0; j < cells.getLength(); j++) {
-                Node cell = cells.item(j);
-                String cl = cell.getLocalName();
-                String cn = cell.getNodeName();
-                if (!"tc".equals(cl) && !"w:tc".equals(cn)) continue;
-                out.append("<td>");
-                NodeList ps = cell.getChildNodes();
-                for (int k = 0; k < ps.getLength(); k++) {
-                    Node cp = ps.item(k);
-                    String pl = cp.getLocalName();
-                    String pn = cp.getNodeName();
-                    if ("p".equals(pl) || "w:p".equals(pn)) out.append(renderWordParagraph(cp));
-                    else if ("tbl".equals(pl) || "w:tbl".equals(pn)) out.append(renderWordTable(cp));
-                }
-                out.append("</td>");
-            }
-            out.append("</tr>");
-        }
-        out.append("</table>");
-        return out.toString();
-    }
-
-    private void appendWordInlineHtmlLimited(Node node, StringBuilder out, Node rootParagraph) {
-        if (node == null) return;
-        String local = node.getLocalName();
-        String name = node.getNodeName();
-
-        if (node != rootParagraph && ("p".equals(local) || "w:p".equals(name)
-                || "tbl".equals(local) || "w:tbl".equals(name)
-                || "txbxContent".equals(local) || "w:txbxContent".equals(name))) {
-            return;
-        }
-
-        if ("t".equals(local) || "w:t".equals(name)) {
-            out.append(escapeWordText(node));
-            return;
-        }
-        if ("tab".equals(local) || "w:tab".equals(name)) {
-            out.append("&emsp;");
-            return;
-        }
-        if ("br".equals(local) || "w:br".equals(name) || "cr".equals(local) || "w:cr".equals(name)) {
-            if (!isPageBreakNode(node)) out.append("<br>");
-            return;
-        }
-        if ("blip".equals(local) || "a:blip".equals(name)) {
-            String img = imageSourceForBlip(node);
-            if (img != null) out.append("<img class=\"word-img\" src=\"").append(img).append("\"/>");
-            return;
-        }
-
-        boolean run = "r".equals(local) || "w:r".equals(name);
-        String runSuffix = "";
-        if (run) {
-            WordRunStyle style = readRunStyle(node);
-            if (style.hasStyle()) {
-                out.append("<span style=\"").append(style.css).append("\">");
-                runSuffix = "</span>" + runSuffix;
-            }
-            if (style.bold) { out.append("<b>"); runSuffix = "</b>" + runSuffix; }
-            if (style.italic) { out.append("<i>"); runSuffix = "</i>" + runSuffix; }
-            if (style.underline) { out.append("<u>"); runSuffix = "</u>" + runSuffix; }
-        }
-
-        NodeList children = node.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            appendWordInlineHtmlLimited(children.item(i), out, rootParagraph);
-        }
-
-        if (run) out.append(runSuffix);
-    }
-
-    private void appendWordTextBoxes(Node node, StringBuilder out) {
-        if (node == null) return;
-        String local = node.getLocalName();
-        String name = node.getNodeName();
-        if ("txbxContent".equals(local) || "w:txbxContent".equals(name)) {
-            StringBuilder box = new StringBuilder();
-            NodeList children = node.getChildNodes();
-            for (int i = 0; i < children.getLength(); i++) {
-                Node child = children.item(i);
-                String cl = child.getLocalName();
-                String cn = child.getNodeName();
-                if ("p".equals(cl) || "w:p".equals(cn)) box.append(renderWordParagraph(child));
-                else if ("tbl".equals(cl) || "w:tbl".equals(cn)) box.append(renderWordTable(child));
-            }
-            if (box.length() > 0) out.append("<div class=\"textbox\">").append(box).append("</div>");
-            return;
-        }
-        NodeList children = node.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) appendWordTextBoxes(children.item(i), out);
-    }
-
-    private boolean hasVisibleHtml(StringBuilder html) {
-        if (html == null || html.length() == 0) return false;
-        String text = html.toString().replaceAll("(?is)<[^>]+>", "")
-                .replace("&nbsp;", " ").replace("&emsp;", " ").trim();
-        return !text.isEmpty() || html.indexOf("<img") >= 0;
-    }
-
-    private String wordParagraphStyle(Node p) {
-        StringBuilder css = new StringBuilder();
-        Node pPr = firstDirectChildByLocalName(p, "pPr");
-        if (pPr != null) {
-            Node jc = firstDirectChildByLocalName(pPr, "jc");
-            String align = attr(jc, "w:val", "val");
-            if (align != null) {
-                if ("center".equalsIgnoreCase(align)) css.append("text-align:center;");
-                else if ("right".equalsIgnoreCase(align) || "end".equalsIgnoreCase(align)) css.append("text-align:right;");
-                else if ("both".equalsIgnoreCase(align)) css.append("text-align:justify;");
-            }
-        }
-        return css.length() > 0 ? " style=\"" + css + "\"" : "";
-    }
-
-    private static class WordRunStyle {
-        boolean bold;
-        boolean italic;
-        boolean underline;
-        String css = "";
-        boolean hasStyle() { return css != null && css.length() > 0; }
-    }
-
-    private WordRunStyle readRunStyle(Node run) {
-        WordRunStyle style = new WordRunStyle();
-        Node props = firstDirectChildByLocalName(run, "rPr");
-        if (props != null) {
-            style.bold = firstDirectChildByLocalName(props, "b") != null;
-            style.italic = firstDirectChildByLocalName(props, "i") != null;
-            style.underline = firstDirectChildByLocalName(props, "u") != null;
-            StringBuilder css = new StringBuilder();
-            Node color = firstDirectChildByLocalName(props, "color");
-            String colorVal = attr(color, "w:val", "val");
-            if (colorVal != null && colorVal.matches("[0-9A-Fa-f]{6}")) css.append("color:#").append(colorVal).append(";");
-            Node sz = firstDirectChildByLocalName(props, "sz");
-            String szVal = attr(sz, "w:val", "val");
-            if (szVal != null) {
-                try {
-                    double halfPoints = Double.parseDouble(szVal);
-                    double px = Math.max(8.0, halfPoints / 2.0 * 1.3333);
-                    css.append("font-size:").append(String.format(Locale.US, "%.1f", px)).append("px;");
-                } catch (Exception ignored) {}
-            }
-            style.css = css.toString();
-        }
-        return style;
-    }
-
-    private String escapeWordText(Node textNode) {
-        String raw = textNode.getTextContent();
-        if (raw == null) return "";
-        String escaped = escapeHtml(raw).replace("  ", " &nbsp;");
-        if (raw.startsWith(" ")) escaped = "&nbsp;" + escaped.substring(1);
-        if (raw.endsWith(" ") && escaped.length() > 0) escaped = escaped.substring(0, escaped.length() - 1) + "&nbsp;";
-        return escaped;
-    }
-
-    private boolean isPageBreakNode(Node node) {
-        if (node == null) return false;
-        if (!"br".equals(node.getLocalName()) && !"w:br".equals(node.getNodeName())) return false;
-        String type = attr(node, "w:type", "type");
-        return "page".equalsIgnoreCase(type);
-    }
-
-    private String imageSourceForBlip(Node blip) {
-        String rid = attr(blip, "r:embed", "embed");
-        if (rid == null) rid = attr(blip, "r:link", "link");
-        if (rid == null) return null;
-        String target = wordRelationships.get(rid);
-        if (target == null) return null;
-        return "https://" + LOCAL_HOST + "/" + target;
-    }
-
-    private String attr(Node node, String qualified, String localName) {
-        if (node == null || node.getAttributes() == null) return null;
-        Node a = node.getAttributes().getNamedItem(qualified);
-        if (a == null) a = node.getAttributes().getNamedItem(localName);
-        if (a == null) a = node.getAttributes().getNamedItemNS("*", localName);
-        return a != null ? a.getNodeValue() : null;
+        return DocumentWordUtils.renderTable(table, wordRelationships, LOCAL_HOST);
     }
 
     private void loadWordRelationships(ZipFile zip) {
-        try {
-            ZipEntry rels = zip.getEntry("word/_rels/document.xml.rels");
-            if (rels == null) return;
-            Document relDoc;
-            try (InputStream is = zip.getInputStream(rels)) {
-                relDoc = secureDocumentBuilder().parse(is);
-            }
-            NodeList relsList = relDoc.getElementsByTagName("Relationship");
-            if (relsList.getLength() == 0) relsList = relDoc.getElementsByTagNameNS("*", "Relationship");
-            for (int i = 0; i < relsList.getLength(); i++) {
-                Node r = relsList.item(i);
-                String id = attr(r, "Id", "Id");
-                String target = attr(r, "Target", "Target");
-                String mode = attr(r, "TargetMode", "TargetMode");
-                if (id == null || target == null || "External".equalsIgnoreCase(mode)) continue;
-                if (target.startsWith("/")) target = target.substring(1);
-                else target = "word/" + target;
-                wordRelationships.put(id, normalizeZipPath(target));
-            }
-        } catch (Exception ignored) {}
+        wordRelationships.clear();
+        wordRelationships.putAll(DocumentWordUtils.loadRelationships(zip));
     }
 
     private boolean containsWordPageBreak(Node node) {
-        if (node == null) return false;
-        String local = node.getLocalName();
-        String name = node.getNodeName();
-        if ("lastRenderedPageBreak".equals(local) || "w:lastRenderedPageBreak".equals(name)) return true;
-        if ("br".equals(local) || "w:br".equals(name)) {
-            NamedNodeMap attrs = node.getAttributes();
-            Node type = attrs != null ? attrs.getNamedItem("w:type") : null;
-            if (type == null && attrs != null) type = attrs.getNamedItem("type");
-            if ("page".equalsIgnoreCase(type != null ? type.getNodeValue() : null)) return true;
-        }
-        NodeList children = node.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            if (containsWordPageBreak(children.item(i))) return true;
-        }
-        return false;
+        return DocumentWordUtils.containsPageBreak(node);
     }
 
     private List<String> findEpubSpinePaths(ZipFile zip) {
-        ArrayList<String> result = new ArrayList<>();
-        try {
-            ZipEntry containerEntry = zip.getEntry("META-INF/container.xml");
-            if (containerEntry == null) return result;
-
-            Document containerDoc;
-            try (InputStream is = zip.getInputStream(containerEntry)) {
-                containerDoc = secureDocumentBuilder().parse(is);
-            }
-
-            NodeList rootFiles = containerDoc.getElementsByTagName("rootfile");
-            if (rootFiles.getLength() == 0) rootFiles = containerDoc.getElementsByTagNameNS("*", "rootfile");
-            if (rootFiles.getLength() == 0) return result;
-
-            Node rootFile = rootFiles.item(0);
-            NamedNodeMap rootAttrs = rootFile.getAttributes();
-            Node fullPathAttr = rootAttrs != null ? rootAttrs.getNamedItem("full-path") : null;
-            if (fullPathAttr == null) return result;
-
-            String opfPath = fullPathAttr.getNodeValue();
-            ZipEntry opfEntry = zip.getEntry(opfPath);
-            if (opfEntry == null) return result;
-
-            Document opfDoc;
-            try (InputStream is = zip.getInputStream(opfEntry)) {
-                opfDoc = secureDocumentBuilder().parse(is);
-            }
-
-            String basePath = parentPath(opfPath);
-            Map<String, String> manifest = new LinkedHashMap<>();
-            NodeList items = opfDoc.getElementsByTagName("item");
-            if (items.getLength() == 0) items = opfDoc.getElementsByTagNameNS("*", "item");
-            for (int i = 0; i < items.getLength(); i++) {
-                Node item = items.item(i);
-                NamedNodeMap attrs = item.getAttributes();
-                if (attrs == null) continue;
-                Node id = attrs.getNamedItem("id");
-                Node href = attrs.getNamedItem("href");
-                if (id != null && href != null) {
-                    manifest.put(id.getNodeValue(), normalizeZipPath(basePath + "/" + decodeHref(href.getNodeValue())));
-                }
-            }
-
-            NodeList itemRefs = opfDoc.getElementsByTagName("itemref");
-            if (itemRefs.getLength() == 0) itemRefs = opfDoc.getElementsByTagNameNS("*", "itemref");
-            for (int i = 0; i < itemRefs.getLength(); i++) {
-                Node itemRef = itemRefs.item(i);
-                NamedNodeMap attrs = itemRef.getAttributes();
-                if (attrs == null) continue;
-                Node idRef = attrs.getNamedItem("idref");
-                if (idRef == null) continue;
-                String path = manifest.get(idRef.getNodeValue());
-                if (path != null && isEpubHtmlPath(path) && zip.getEntry(path) != null) result.add(path);
-            }
-        } catch (Exception ignored) {}
-        return result;
+        return DocumentArchiveUtils.findEpubSpinePaths(zip);
     }
 
     private List<String> findEpubHtmlEntries(ZipFile zip) {
-        ArrayList<String> result = new ArrayList<>();
-        java.util.Enumeration<? extends ZipEntry> entries = zip.entries();
-        while (entries.hasMoreElements()) {
-            ZipEntry entry = entries.nextElement();
-            if (!entry.isDirectory() && isEpubHtmlPath(entry.getName())) result.add(entry.getName());
-        }
-        java.util.Collections.sort(result);
-        return result;
+        return DocumentArchiveUtils.findEpubHtmlEntries(zip);
     }
 
     private String readZipEntryString(ZipFile zip, ZipEntry entry) throws IOException {
-        try (InputStream is = zip.getInputStream(entry)) {
-            byte[] data = readAllBytes(is);
-            return new String(data, StandardCharsets.UTF_8);
-        }
+        return DocumentArchiveUtils.readZipEntryString(zip, entry);
     }
 
     private byte[] readAllBytes(InputStream is) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] buf = new byte[8192];
-        int n;
-        while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
-        return out.toByteArray();
+        return DocumentArchiveUtils.readAllBytes(is);
     }
 
     private DocumentBuilder secureDocumentBuilder() throws Exception {
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        factory.setNamespaceAware(true);
-        factory.setExpandEntityReferences(false);
-        try { factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true); } catch (Exception ignored) {}
-        try { factory.setFeature("http://xml.org/sax/features/external-general-entities", false); } catch (Exception ignored) {}
-        try { factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false); } catch (Exception ignored) {}
-        try { factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false); } catch (Exception ignored) {}
-        return factory.newDocumentBuilder();
+        return DocumentArchiveUtils.secureDocumentBuilder();
     }
 
     private Node firstNodeByLocalName(Document doc, String localName) {
-        NodeList list = doc.getElementsByTagNameNS("*", localName);
-        if (list.getLength() > 0) return list.item(0);
-        list = doc.getElementsByTagName("w:" + localName);
-        if (list.getLength() > 0) return list.item(0);
-        list = doc.getElementsByTagName(localName);
-        if (list.getLength() > 0) return list.item(0);
-        return null;
-    }
-
-    private Node firstDirectChildByLocalName(Node node, String localName) {
-        NodeList children = node.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            Node child = children.item(i);
-            if (localName.equals(child.getLocalName()) || ("w:" + localName).equals(child.getNodeName())) return child;
-        }
-        return null;
+        return DocumentArchiveUtils.firstNodeByLocalName(doc, localName);
     }
 
     private String titleFromHtml(String html) {
-        if (html == null) return "";
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?is)<title[^>]*>(.*?)</title>").matcher(html);
-        if (m.find()) return htmlToText(m.group(1)).trim();
-        m = java.util.regex.Pattern.compile("(?is)<h1[^>]*>(.*?)</h1>").matcher(html);
-        if (m.find()) return htmlToText(m.group(1)).trim();
-        return "";
-    }
-
-    private String htmlToText(String raw) {
-        if (raw == null) return "";
-        return raw.replaceAll("(?is)<[^>]+>", " ")
-                .replace("&nbsp;", " ")
-                .replace("&amp;", "&")
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replaceAll("\\s+", " ");
-    }
-
-    private String escapeHtml(String s) {
-        if (s == null) return "";
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                .replace("\"", "&quot;");
-    }
-
-    private boolean isEpubHtmlPath(String path) {
-        String lower = path == null ? "" : path.toLowerCase(Locale.ROOT);
-        return lower.endsWith(".xhtml") || lower.endsWith(".html") || lower.endsWith(".htm");
-    }
-
-    private String parentPath(String path) {
-        if (path == null) return "";
-        int slash = path.lastIndexOf('/');
-        return slash >= 0 ? path.substring(0, slash) : "";
+        return DocumentArchiveUtils.titleFromHtml(html);
     }
 
     private String fileNameFromPath(String path) {
-        if (path == null) return "";
-        int slash = path.lastIndexOf('/');
-        return slash >= 0 ? path.substring(slash + 1) : path;
+        return DocumentArchiveUtils.fileNameFromPath(path);
     }
 
-    private String decodeHref(String href) {
-        if (href == null) return "";
-        try { return URLDecoder.decode(href, "UTF-8"); } catch (Exception e) { return href; }
+
+    String htmlToText(String raw) {
+        return DocumentArchiveUtils.htmlToText(raw);
+    }
+
+    String parentPath(String path) {
+        return DocumentArchiveUtils.parentPath(path);
     }
 
     private String normalizeZipPath(String path) {
-        if (path == null) return "";
-        String normalized = path.replace('\\', '/');
-        while (normalized.contains("//")) normalized = normalized.replace("//", "/");
-        ArrayList<String> parts = new ArrayList<>();
-        for (String part : normalized.split("/")) {
-            if (part.isEmpty() || ".".equals(part)) continue;
-            if ("..".equals(part)) {
-                if (!parts.isEmpty()) parts.remove(parts.size() - 1);
-            } else {
-                parts.add(part);
-            }
-        }
-        StringBuilder out = new StringBuilder();
-        for (int i = 0; i < parts.size(); i++) {
-            if (i > 0) out.append('/');
-            out.append(parts.get(i));
-        }
-        return out.toString();
+        return DocumentArchiveUtils.normalizeZipPath(path);
     }
 
-    private String mimeForPath(String path) {
-        String lower = path == null ? "" : path.toLowerCase(Locale.ROOT);
-        if (lower.endsWith(".css")) return "text/css";
-        if (lower.endsWith(".png")) return "image/png";
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
-        if (lower.endsWith(".gif")) return "image/gif";
-        if (lower.endsWith(".svg")) return "image/svg+xml";
-        if (lower.endsWith(".webp")) return "image/webp";
-        if (lower.endsWith(".ttf")) return "font/ttf";
-        if (lower.endsWith(".otf")) return "font/otf";
-        if (lower.endsWith(".woff")) return "font/woff";
-        if (lower.endsWith(".woff2")) return "font/woff2";
-        return "application/octet-stream";
+    String mimeForPath(String path) {
+        return DocumentArchiveUtils.mimeForPath(path);
     }
+
 }
