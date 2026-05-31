@@ -2,14 +2,28 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow.
 
-Current version: **2.2.0**
+Current version: **2.2.1**
 
+
+## 2.2.1 release summary
+
+- Updated Android version metadata to `versionCode 2210` and `versionName "2.2.1"`.
+- Added archive browsing and extraction for ZIP/CBZ, encrypted ZIP/7z prompts, standard split ZIP handling, numeric `.001` split handling for supported archive families, TAR-family formats, and single-file compressor streams (`.gz`, `.bz2`, `.xz`, `.lzma`, `.Z`). RAR/CBR and lzip `.lz` remain unsupported.
+- Added image-sequence viewing for archive/comic workflows, including recursive image order inside ZIP/CBZ-style archives, remembered CBZ reopen position, smoother zoomed-image pan/fling, and stable image-info dialog styling.
+- Reworked the main quick-search type chips with five visible compact slots, Archive and Image filters, drawer-gesture blocking across the filter strip, and release-only snap behavior.
+- Added main-screen long-press actions for containing-folder jump, cut/copy queueing, archive extraction queueing, conflict handling, and same-folder overwrite/create-copy decisions.
+- Fixed tablet/large-screen drawer behavior so selecting drawer shortcuts, recent folders, or recent files closes the drawer instead of leaving a stale visible drawer panel.
+- Reduced first-open TXT flicker by keeping the loading overlay until initial layout and saved-position restoration complete.
+- Consolidated large-TXT final page movement, slider/go-to-page movement, bookmark jumps, partition switching, and related math into dedicated controllers and regression-tested utility logic.
+- Refactored the main Android activities toward controller/helper structure. The largest remaining activity files are now below roughly 2,000 lines, with `ReaderActivity` reduced to a shell around the TXT reader controllers.
+- Added and expanded unit/instrumentation coverage for TXT continuity, large-TXT page model behavior, partition switching, tap zones, file utilities, and image-sequence state.
 
 ## 2.2.0 release summary
 
 - Updated Android version metadata to `versionCode 2200` and `versionName "2.2.0"`.
 - Recent-file rows now show compact reading-progress percentages beside saved files, and long filenames remain clipped within the title area so the progress badge does not cover partially visible title text.
 - Starting TXT Auto Page Turn now closes the bottom toolbar and returns the TXT viewer to body reading mode before the timer begins.
+- The TXT viewer toolbar now keeps **More** fixed on the right while the other actions slide horizontally, with direct Home, Font, display-rule, and text-encoding buttons.
 - Hardened legacy CJK encoding disambiguation so Chinese GBK / GB18030 / Big5 text is no longer pulled into Korean `windows-949` or single-byte code pages just because the wrong decode produces clean-looking characters.
 - Encoding-family conflict resolution now respects confident ICU/Mozilla family hints instead of forcing a fixed regional priority order. CJK hints still protect multibyte Chinese/Japanese/Korean text from single-byte theft, while confident single-byte hints for Western Latin, Greek, Cyrillic, Hebrew, Arabic, Thai, or Vietnamese are accepted when the detector path is not weak or internally conflicting. Weak US-ASCII fallback hints are still ignored. Concrete Western detector hints are accepted rather than being overridden by a Vietnamese heuristic; this matches the current policy of trusting explicit ICU/Mozilla family results while still ignoring weak US-ASCII-style fallbacks.
 - Vietnamese remains supported through `windows-1258` scoring/detection, but explicit Western detector hints are accepted by policy instead of being overridden by a Vietnamese heuristic.
@@ -445,6 +459,16 @@ Command-line build:
 ./gradlew assembleDebug
 ```
 
+Command-line verification:
+
+```bash
+./gradlew testDebugUnitTest
+./gradlew compileReleaseJavaWithJavac
+./gradlew connectedDebugAndroidTest
+```
+
+The instrumentation suite includes optional large-TXT real-file checks. The local fixture is intentionally not committed; place it at `app/src/androidTest/assets/large_txt_real_fixture.txt` when you need to rerun those checks. Without that file, the real-fixture cases are skipped and the synthetic continuity tests still run.
+
 ## Requirements
 
 - Android Studio
@@ -464,15 +488,21 @@ Main dependencies:
 - ConstraintLayout
 - Activity
 - DrawerLayout
+- JUniversalChardet
+- Apache Commons Compress
+- XZ for Java
+- Zip4j
+
+See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for runtime, test, and build-tool notices.
 
 ## Project structure
 
 ```text
 app/src/main/java/com/textview/reader/
-├── MainActivity.java              # File browser, drawer, sort, shortcuts, file actions
-├── ReaderActivity.java            # TXT reader
-├── PdfReaderActivity.java         # PDF reader
-├── DocumentPageActivity.java      # EPUB/Word reader
+├── MainActivity.java              # Main file-browser shell; drawer/actions live in controllers
+├── ReaderActivity.java            # TXT reader shell; paging/bookmarks/search live in controllers
+├── PdfReaderActivity.java         # PDF reader shell and rendering host
+├── DocumentPageActivity.java      # EPUB/Word reader shell and WebView host
 ├── BookmarkListActivity.java      # Bookmark manager screen
 ├── SettingsActivity.java          # Settings and backup/import
 ├── ThemeEditorActivity.java       # Custom theme editor
@@ -496,4 +526,3 @@ Do not upload duplicate root-level Android folders such as `java/`, `res/`, or r
 ## Release notes
 
 See [`CHANGELOG.md`](CHANGELOG.md) and [`PATCHNOTES.md`](PATCHNOTES.md).
-

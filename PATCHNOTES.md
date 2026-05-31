@@ -1,5 +1,38 @@
+# Patch Notes
+
+## 2.2.1
+
+This 2.2.1 package is prepared for GitHub upload with Android metadata `versionCode 2210` and `versionName "2.2.1"`.
+
+### Main screen, drawer, and file operations
+
+- Added long-press actions for containing-folder jump, cut/copy queueing, archive extraction queueing, overwrite/create-copy conflict handling, and folder move bookmark rebinding.
+- Unified pending cut/copy/extract jobs under one top-bar pending-action dropdown with inline cancellation and clear-all behavior.
+- Added ZIP/CBZ archive browsing, encrypted ZIP/7z password prompts, standard split ZIP handling, numeric `.001` split support for supported archive families, TAR-family extraction, and single-file compressor streams (`.gz`, `.bz2`, `.xz`, `.lzma`, `.Z`). RAR/CBR and lzip `.lz` are still unsupported.
+- Added Archive and Image quick filters, compact five-slot quick-filter layout, full filter-strip drawer-gesture blocking, and release-only snapping.
+- Fixed tablet/large-screen drawer selection behavior so drawer shortcuts, drawer recent folders, and recent-file taps close a stale visible drawer panel.
+- Kept the multi-file selection dropdown compact, borderless, non-scrollable, and height-wrapped so all actions are visible at once.
+
+### TXT reader continuity and bookmark model
+
+- Kept first-open TXT content hidden behind the loading overlay until initial layout and saved-position restore are ready.
+- Moved large-TXT final page model, exact-anchor lookup, partition switching, page jump, bookmark navigation, and related state into focused controllers.
+- Added bookmark page-model routing so bookmark save/update/restore uses the same final large-TXT page model as slider and Go to Page whenever that exact model is ready.
+- Preserved legacy bookmark fallback and anchor-context restoration for older metadata or stale layout signatures.
+- Kept lookahead/lookbehind as manual-scroll continuity buffers only; they are not used as separate page-count models.
+
+### Image/archive reading
+
+- Archive image entries can open into continuous image viewing with recursive internal ordering and remembered CBZ reopen position.
+- Zoomed image pan now supports smoother drag, fling inertia, bounds clamping, and touch/scale cancellation safety.
+- Image information dialog styling is centralized in `ImageDialogStyleController`.
+
+### Refactor and tests
+
+- `MainActivity`, `ReaderActivity`, `DocumentPageActivity`, `PdfReaderActivity`, and `SettingsActivity` are now substantially controller-based. The largest remaining activities are around or below 2,000 lines, with `ReaderActivity` reduced to a compact TXT shell around reader controllers.
+- Added/expanded unit and instrumentation coverage for large-TXT continuity math, exact page-index state, page direction state, page-model math, partition switching, tap zones, image sequence state, file utilities, and `CustomReaderView` continuity.
+
 ## 2.2.0
-This 2.2.0 package is prepared as the current final-page navigation patch. It uses Android metadata `versionCode 2200` and `versionName "2.2.0"`.
 
 ### CJK encoding disambiguation
 
@@ -45,7 +78,6 @@ This 2.2.0 package is prepared as the current final-page navigation patch. It us
 - Android app metadata is `versionCode 2200` and `versionName "2.2.0"`.
 
 ## 2.1.9
-This 2.1.9 package is prepared as the current final-page navigation patch. It uses Android metadata `versionCode 2190` and `versionName "2.1.9"`.
 
 ### Reading theme and TXT rule UI polish
 
@@ -83,6 +115,8 @@ This 2.1.9 package is prepared as the current final-page navigation patch. It us
 - File-row long-hold highlight now rebinds on theme changes, preventing stale pressed colors from carrying across Light/Dark/Deep Navy/Custom modes.
 - Custom main-theme default base colors now follow the Deep Navy palette, including reading-card `#00091D` and shortcut-box `#001530` defaults.
 - Restored rounded progress mapping for font-size and line-spacing sliders so reopened settings match the value shown while adjusting.
+
+This 2.1.9 package is prepared as the current final-page navigation patch. It uses Android metadata `versionCode 2190` and `versionName "2.1.9"`.
 
 ### Large TXT final-page navigation
 
@@ -400,3 +434,4 @@ This section remains the 2.1.4 release history. It is not folded into later rele
 ### Verification note
 
 ZIP integrity and Markdown structure were checked. Full Gradle verification should be run locally in Android Studio or another network-enabled environment if the Gradle wrapper needs to download Gradle.
+

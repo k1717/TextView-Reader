@@ -29,6 +29,32 @@ The project contains local vector drawable icons for standard UI actions such as
 
 Material Symbols / Material Icons are distributed by Google under the Apache License 2.0.
 
+
+### Apache Commons Compress
+
+Artifact: `org.apache.commons:commons-compress:1.28.0`
+
+Use in this project: archive extraction support for 7z, TAR-family formats, numeric split archives that are reassembled before extraction, and single-file compressor streams such as GZ/BZ2/XZ/LZMA/Z.
+
+License: Apache License 2.0.
+
+### XZ for Java
+
+Artifact: `org.tukaani:xz:1.10`
+
+Use in this project: XZ/LZMA2 decompression support used by 7z and `.tar.xz` / `.txz` extraction.
+
+License: 0BSD.
+
+
+### Zip4j
+
+Artifact: `net.lingala.zip4j:zip4j:2.11.5`
+
+Use in this project: ZIP/CBZ extraction, encrypted ZIP handling, and standard split ZIP archive handling.
+
+License: Apache License 2.0.
+
 ### JUniversalChardet
 
 Artifact: `com.github.albfernandez:juniversalchardet:2.5.0`
@@ -48,6 +74,17 @@ Artifact: `junit:junit:4.13.2`
 License: Eclipse Public License 1.0.
 
 JUnit also depends on Hamcrest at test runtime in standard Gradle/Maven resolution. Keep its BSD-style notice if distributing a bundled test-runtime package. Normal source releases that only declare the Maven dependency do not vendor Hamcrest source or binaries.
+
+### AndroidX Test
+
+Used artifacts:
+
+- `androidx.test:runner:1.6.2`
+- `androidx.test.ext:junit:1.2.1`
+
+Use in this project: Android instrumentation tests for TXT reader paging continuity.
+
+License: Apache License 2.0.
 
 ## Build tooling
 

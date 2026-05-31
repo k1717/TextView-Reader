@@ -1,12 +1,19 @@
-# TextView Reader 2.2.0 GitHub Upload Notes
-
-Use this package as the GitHub submission source for **TextView Reader 2.2.0**.
+# TextView Reader 2.2.1 GitHub Upload Notes
 
 This source package uses Android metadata:
 
-- `versionCode 2200`
-- `versionName "2.2.0"`
+- `versionCode 2210`
+- `versionName "2.2.1"`
 - package ID `com.textview.reader`
+
+## 2.2.1 release summary
+
+- Android metadata remains `versionCode 2210` and `versionName "2.2.1"`.
+- Main file operations now include containing-folder jump, cut/copy queueing, archive extraction queueing, conflict handling, pending-action dropdown cleanup, and tablet drawer close fixes.
+- Archive support covers ZIP/CBZ browsing, encrypted ZIP/7z prompts, standard split ZIP, supported numeric `.001` split archive families, TAR-family formats, and single-file compressor streams. RAR/CBR and lzip `.lz` remain unsupported.
+- TXT large-file navigation, final page movement, bookmark page metadata, partition switching, and exact page-model logic are split into dedicated controllers and utility tests.
+- Image viewing now supports smoother zoomed pan/fling and archive/comic image sequences.
+- The public source tree has been cleaned for upload: no build outputs, APK/AAB files, keystores, local SDK paths, Android Studio workspace files, or local large-TXT fixtures should be included.
 
 ## 2.2.0 release summary
 
@@ -48,7 +55,7 @@ Highlights:
 ## Suggested commit message
 
 ```text
-Update TextView Reader 2.2.0 source
+Update TextView Reader 2.2.1 source and docs
 ```
 
 ## Safe upload contents
@@ -86,6 +93,14 @@ app/src/main/AndroidManifest.xml
 app/src/main/ic_launcher-playstore.png
 ```
 
+Optional local-only instrumentation fixtures are not part of the upload. To rerun the real large-TXT validation locally, place the file at:
+
+```text
+app/src/androidTest/assets/large_txt_real_fixture.txt
+```
+
+If this file is absent, those real-fixture instrumentation cases are skipped.
+
 ## Do not upload
 
 ```text
@@ -93,6 +108,7 @@ app/src/main/ic_launcher-playstore.png
 .idea/
 build/
 app/build/
+app/src/androidTest/assets/large_txt_real_fixture.txt
 local.properties
 *.apk
 *.aab
@@ -120,7 +136,7 @@ captures/
 6. Click **Add file > Upload files**.
 7. Drag the selected contents into GitHub.
 8. Wait until GitHub finishes processing the files.
-9. Commit with the suggested message above, or a similarly concise 2.2.0 update message.
+9. Commit with the suggested message above, or a similarly concise 2.2.1 update message.
 
 ## Important limitation
 

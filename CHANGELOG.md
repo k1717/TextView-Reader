@@ -1,3 +1,45 @@
+
+## 2.2.1 - 2026-05-30
+This package uses Android metadata `versionCode 2210` and `versionName "2.2.1"`.
+
+### Main screen and file operations
+
+- Added long-press actions for containing-folder jump, cut/copy queueing, archive extraction queueing, conflict handling, and same-folder overwrite/create-copy decisions.
+- Unified pending cut/copy/extract jobs under one top-bar pending-action dropdown with inline cancellation and clear-all handling.
+- Added archive browsing and extraction for ZIP/CBZ, encrypted ZIP/7z prompts, standard split ZIP handling, numeric `.001` split handling for supported archive families, TAR-family formats, and single-file compressor streams (`.gz`, `.bz2`, `.xz`, `.lzma`, `.Z`). RAR/CBR and lzip `.lz` remain unsupported.
+- Added image entries from archive/comic flows into a continuous image sequence, including remembered CBZ reopen position and recursive image ordering under the current archive folder.
+- Updated the main quick-search type chips with five compact visible slots, Archive and Image filters, drawer-gesture blocking across the full filter strip, and release-only snap behavior to avoid drag jitter.
+- Fixed tablet/large-screen drawer selection behavior so drawer shortcuts, drawer recent folders, and recent-file taps close the drawer instead of leaving a stale visible drawer panel.
+- Kept the multi-file selection dropdown compact at 150dp, removed its outline, removed internal scroll/height caps, and let all actions show at once.
+- Tuned main long-hold action sheets so the regular file/folder popup uses the narrower stable-dialog width, preserves full long filenames by wrapping, and keeps action rows scrollable where needed.
+
+### TXT reader continuity and bookmarks
+
+- Reduced first-open TXT flicker by keeping the loading overlay until the initial text layout and saved-position restore pass complete.
+- Consolidated large-TXT final page movement, slider/go-to-page movement, bookmark jumps, partition switching, exact-anchor lookup, and page-model math into dedicated controllers and utility logic.
+- Added `ReaderBookmarkPageModelController` and `ReaderBookmarkNavigator` so bookmark save/update/restore paths prefer the same final large-TXT page model used by slider and Go to Page.
+- Kept legacy bookmark anchor fallback behavior for stale layout signatures and older bookmark metadata.
+- Preserved the rule that lookahead/lookbehind buffers are continuity aids for manual scroll, not independent page-count sources.
+
+### Image viewer
+
+- Improved zoomed-image movement with smoother pan handling, fling inertia, bounds clamping, parent-intercept suppression while zoomed, and fling cancellation on new touch/scale/image changes.
+- Moved image-info dialog construction and styling into `ImageDialogStyleController`.
+
+### Refactor and maintainability
+
+- Refactored `MainActivity`, `ReaderActivity`, `DocumentPageActivity`, `PdfReaderActivity`, and `SettingsActivity` toward controller/helper-based shells while preserving existing user-facing behavior.
+- Split main theme, selection mode, drawer rendering, drawer gesture handling, archive extraction, clipboard/pending actions, share, confirmation dialogs, image opening, and dropdown styling into focused controllers/helpers.
+- Split TXT reader chrome/loading, lifecycle, memory, file loading/apply, large-text state/cache/read/prefetch/paging/jump/partition handoff, page jump, bookmark action/navigation/page-model, search, tap navigation, seek, preferences, toolbar, appearance, font, display-rule, and tools dialogs into dedicated controllers.
+- Centralized adaptive bottom-dialog window creation and multi-window height limiting in `AdaptiveDialogLayoutHelper`.
+- Current large activity sizes are roughly: `MainActivity` 1,900 lines, `ReaderActivity` 1,463 lines, `DocumentPageActivity` 1,937 lines, `PdfReaderActivity` 1,881 lines, and `SettingsActivity` 1,421 lines.
+
+### Tests
+
+- Added Android instrumentation coverage for `CustomReaderView` TXT paging continuity: forward taps, backward taps, exact page anchors, overlap behavior, and partition seam handoff.
+- Added unit coverage for large-TXT continuity math, exact page index state, page direction state, page-model math, partition switching, tap zones, file utilities, and image-sequence state.
+- Optional real large-TXT fixture checks remain local-only and are skipped when `app/src/androidTest/assets/large_txt_real_fixture.txt` is absent.
+
 ## 2.2.0 - 2026-05-28
 This package uses Android metadata `versionCode 2200` and `versionName "2.2.0"`.
 

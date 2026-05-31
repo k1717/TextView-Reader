@@ -25,13 +25,18 @@ The app may store local-only data needed for reading behavior:
 - optional PIN-lock state;
 - PDF reading-mode preference;
 - saved TXT display rules, including rule text, scope, enabled state, case-sensitivity setting, regex setting, ordering, and source-file labels/paths used for current-file-only rules;
-- disposable TXT page/index cache metadata for large-file handling.
+- disposable TXT page/index cache metadata for large-file handling;
+- temporary extracted archive entries used when opening files from archives.
 
 This data stays on the device unless the user manually exports, backs up, shares, deletes, or transfers it.
 
 ## Folder shortcuts
 
 Folder shortcuts store local folder paths selected by the user. They are used only to show faster navigation entries in the app drawer. Removing a folder shortcut removes the shortcut entry; it does not delete the folder or files.
+
+## Archive browsing and extraction
+
+Opening a file inside an archive may temporarily extract that selected entry into app cache so the appropriate viewer can read it. Long-press archive extraction writes files only after the user chooses a destination and confirms the extraction/conflict choice. Temporary archive cache data is disposable and is not a cloud upload or network transfer.
 
 ## TXT display rules and actual-file editing
 
@@ -57,4 +62,4 @@ The optional PIN lock is an app-level convenience lock. It is not a substitute f
 
 ## Generated cache data
 
-Disposable TXT page/index cache bookkeeping is used only for generated cache data under app cache storage. Cache cleanup must not remove bookmarks, reading history, saved reading position, folder shortcuts, or user documents.
+Disposable TXT page/index cache bookkeeping and temporary archive-entry extraction data are used only for generated cache data under app cache storage. Cache cleanup must not remove bookmarks, reading history, saved reading position, folder shortcuts, or user documents.

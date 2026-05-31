@@ -1,11 +1,11 @@
 # Public release build checklist
 
-This source package is prepared for public GitHub distribution of TextView Reader 2.2.0.
+This source package is prepared for public GitHub distribution of TextView Reader 2.2.1.
 The app version metadata remains:
 
 ```text
-versionCode 2200
-versionName "2.2.0"
+versionCode 2210
+versionName "2.2.1"
 ```
 
 ## Keystore policy
@@ -37,6 +37,8 @@ Losing this keystore prevents normal updates to the same installed app package.
 
 ```bash
 ./gradlew clean
+./gradlew testDebugUnitTest
+./gradlew compileReleaseJavaWithJavac
 ./gradlew assembleRelease
 ```
 
@@ -71,7 +73,35 @@ Expected results:
 
 ## Public-source notes
 
+- Upload the contents of the extracted project folder, not the outer extracted folder itself.
 - `*.keystore`, `*.jks`, `local.properties`, and build outputs are ignored by git.
 - R8/minify and resource shrinking are enabled for release builds.
 - JUniversalChardet remains active for TXT encoding detection.
 - Network cleartext is disabled, and WebView resource interception explicitly blocks non-local requests.
+
+## Pre-upload source check
+
+Before uploading through the GitHub web UI, confirm the extracted source tree does not include:
+
+```text
+.gradle/
+.idea/
+build/
+app/build/
+app/src/androidTest/assets/large_txt_real_fixture.txt
+local.properties
+*.apk
+*.aab
+*.apks
+*.jks
+*.keystore
+*.pem
+*.p12
+.env
+.env.*
+secrets.properties
+google-services.json
+captures/
+*.hprof
+*.log
+```

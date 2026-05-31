@@ -25,6 +25,8 @@ Thank you for improving TextView Reader.
 ## Code style expectations
 
 - Prefer small, focused changes.
+- Keep large Android activities as thin lifecycle/routing shells when practical; move feature logic into focused controllers/helpers instead of adding new monolithic blocks.
+- Protect TXT continuity work carefully: tap/page movement, final page count, large-TXT partition switching, bookmark restore, search jumps, and lookahead/lookbehind behavior should share the same page-model assumptions.
 - Keep reader state, bookmarks, folder shortcuts, and file actions safe and predictable.
 - Folder shortcut removal must remove only the shortcut entry, never the folder or its files.
 - Viewer activities should continue using single-viewer reuse behavior where appropriate.
@@ -43,5 +45,6 @@ When behavior changes, update the relevant docs:
 
 - `README.md` for user-visible features and build instructions.
 - `CHANGELOG.md` for release changes.
+- `PATCHNOTES.md` for patch-level summaries intended for GitHub releases.
 - `PRIVACY.md` for data, permissions, TXT display-rule storage, or file-writing behavior.
 - `GITHUB_UPLOAD_NOTES.md` for packaging/upload workflow changes.

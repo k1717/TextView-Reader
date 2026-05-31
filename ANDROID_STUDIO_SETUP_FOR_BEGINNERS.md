@@ -8,8 +8,8 @@ TextView Reader is a Java Android reader for TXT, PDF, EPUB, and Word documents.
 2. Open Android Studio.
 3. Click **Open**.
 4. Select the unzipped project root folder, not the `app/` folder.
-   - Correct: `TextView_Reader_2.1.2_github_ready/`
-   - Wrong: `TextView_Reader_2.1.2_github_ready/app/`
+   - Correct: the extracted project root folder that contains `app/`, `gradle/`, `README.md`, and `settings.gradle`
+   - Wrong: the nested `app/` folder
 5. Wait for **Gradle Sync**.
 
 ## 2. Install missing SDK if Android Studio asks
@@ -53,15 +53,16 @@ After the app installs:
 1. Give storage/all-files permission if prompted.
 2. Open a `.txt` file.
 3. Drag-scroll normally.
-4. Use the TXT bottom toolbar: Find, Page, Bookmark, Settings, and More.
+4. Use the TXT bottom toolbar: Find, Go to Page/Position, Bookmarks, Settings, and More.
 5. Add a TXT bookmark, then close and reopen the file to confirm the saved position restores.
 6. In the TXT viewer, use **More > Add display rule** on a disposable TXT file and confirm the visible text changes after the rule window closes.
 7. In Settings opened from that TXT viewer, check **TXT Display Rules** and confirm the rule appears with its enabled/scope/case/regex options.
 8. Only with a disposable TXT file, test **Edit Actual TXT File** once in copy mode and confirm it creates or overwrites the same `*_edited.txt` copy.
 9. Open a PDF and verify horizontal/vertical reading mode behavior.
-10. Open an EPUB and verify Settings > EPUB layout changes apply after returning to the viewer.
-11. Change the reader theme from Settings while an EPUB is open and confirm the page refreshes to the new theme.
-12. Export and import a backup if you need to verify bookmarks/settings backup behavior.
+10. Open a ZIP/CBZ archive and verify archive browsing or image opening if you changed archive code.
+11. Open an EPUB and verify Settings > EPUB layout changes apply after returning to the viewer.
+12. Change the reader theme from Settings while an EPUB is open and confirm the page refreshes to the new theme.
+13. Export and import a backup if you need to verify bookmarks/settings backup behavior.
 
 ## 6. Current notes
 
