@@ -78,6 +78,18 @@ Expected results:
 - R8/minify and resource shrinking are enabled for release builds.
 - JUniversalChardet remains active for TXT encoding detection.
 - Network cleartext is disabled, and WebView resource interception explicitly blocks non-local requests.
+- Keep `LICENSE` and `THIRD_PARTY_NOTICES.md` in the public source tree.
+
+## Binary-release notice files
+
+If an APK/AAB is attached to a GitHub Release, attach or link the following files with the release materials:
+
+```text
+LICENSE
+THIRD_PARTY_NOTICES.md
+```
+
+The Android packaging configuration excludes duplicate `META-INF/LICENSE*` and `META-INF/NOTICE*` resources from the packaged app to avoid merge conflicts. Therefore, do not rely on the APK/AAB alone as the only third-party notice carrier. Keep the root license and notice files available beside the binary release or in the release description.
 
 ## Pre-upload source check
 

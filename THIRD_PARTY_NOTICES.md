@@ -100,6 +100,16 @@ Artifact: `com.android.application` plugin version `9.1.1`
 
 License: Android Software Development Kit License / Google Maven distribution terms for the Android build tooling. The plugin is resolved by Gradle and is not vendored in this repository.
 
+### Gradle Foojay Toolchains Resolver Convention Plugin
+
+Artifact: `org.gradle.toolchains.foojay-resolver-convention:org.gradle.toolchains.foojay-resolver-convention.gradle.plugin:1.0.0`
+
+Use in this project: Java toolchain resolver configuration in `settings.gradle`. It is a build-time Gradle settings plugin used to resolve Java runtimes through the Foojay Disco API. It is not vendored in this repository.
+
+License: Apache License 2.0.
+
+Upstream project pages identify this plugin as a Gradle-owned Foojay toolchain resolver and point to Gradle's Foojay / Disco toolchains sources. Keep this notice if the plugin remains in `settings.gradle`.
+
 ## Release-distribution note
 
 The Gradle packaging block may exclude duplicate `META-INF/LICENSE*` and `META-INF/NOTICE*` files from packaged Android resources to avoid resource merge conflicts. That does not remove the need to provide third-party notices with public binary releases. Include this file, the root `LICENSE`, and any generated dependency-license report if one is later added to the build.

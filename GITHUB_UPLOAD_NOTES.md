@@ -1,5 +1,7 @@
 # TextView Reader 2.2.1 GitHub Upload Notes
 
+Use this package as the GitHub submission source for **TextView Reader 2.2.1**.
+
 This source package uses Android metadata:
 
 - `versionCode 2210`
@@ -58,6 +60,12 @@ Highlights:
 Update TextView Reader 2.2.1 source and docs
 ```
 
+## License / notice files
+
+Keep the root `LICENSE` and `THIRD_PARTY_NOTICES.md` files in the repository. `THIRD_PARTY_NOTICES.md` lists runtime dependencies, test dependencies, Android/Gradle build tooling, and the Foojay toolchain resolver plugin used by `settings.gradle`.
+
+If publishing an APK/AAB as a GitHub Release asset, include `LICENSE` and `THIRD_PARTY_NOTICES.md` with the release assets or link them clearly from the release description. The release build may exclude duplicate dependency `META-INF/LICENSE*` / `META-INF/NOTICE*` resources from the packaged app, so the public release page should carry the notice files separately.
+
 ## Safe upload contents
 
 Upload the contents of the clean source folder, not the outer folder itself.
@@ -71,6 +79,7 @@ gradle/
 README.md
 CHANGELOG.md
 LICENSE
+THIRD_PARTY_NOTICES.md
 PRIVACY.md
 CONTRIBUTING.md
 ANDROID_STUDIO_SETUP_FOR_BEGINNERS.md
