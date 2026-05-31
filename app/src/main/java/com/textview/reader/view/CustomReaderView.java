@@ -1,5 +1,7 @@
 package com.textview.reader.view;
 
+import com.textview.reader.UiColorUtils;
+
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -412,11 +414,7 @@ public class CustomReaderView extends View {
     }
 
     private boolean isLightColor(int color) {
-        int r = Color.red(color);
-        int g = Color.green(color);
-        int b = Color.blue(color);
-        double luminance = (0.299 * r + 0.587 * g + 0.114 * b);
-        return luminance > 160;
+        return UiColorUtils.isLightColor(color);
     }
 
     private void rebuildLayout() {

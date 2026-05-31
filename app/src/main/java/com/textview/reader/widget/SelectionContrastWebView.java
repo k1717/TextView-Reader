@@ -1,5 +1,7 @@
 package com.textview.reader.widget;
 
+import com.textview.reader.UiColorUtils;
+
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -219,9 +221,6 @@ public class SelectionContrastWebView extends WebView {
     }
 
     private boolean isDark(int color) {
-        int r = Color.red(color);
-        int g = Color.green(color);
-        int b = Color.blue(color);
-        return ((0.299 * r + 0.587 * g + 0.114 * b) / 255.0) < 0.5;
+        return UiColorUtils.isDarkColor(color);
     }
 }

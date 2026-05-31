@@ -1,5 +1,7 @@
 package com.textview.reader.model;
 
+import com.textview.reader.UiColorUtils;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -64,8 +66,7 @@ public class Theme {
         int r = (bgColor >> 16) & 0xFF;
         int g = (bgColor >> 8) & 0xFF;
         int b = bgColor & 0xFF;
-        double luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-        boolean light = luminance > 160.0;
+        boolean light = UiColorUtils.isLightColor(bgColor);
 
         int max = Math.max(r, Math.max(g, b));
 
@@ -185,7 +186,6 @@ public class Theme {
         int r = (backgroundColor >> 16) & 0xFF;
         int g = (backgroundColor >> 8) & 0xFF;
         int b = backgroundColor & 0xFF;
-        double luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
-        return luminance < 0.5;
+        return UiColorUtils.isDarkColor(backgroundColor);
     }
 }

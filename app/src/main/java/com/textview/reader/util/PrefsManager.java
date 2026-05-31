@@ -1,5 +1,7 @@
 package com.textview.reader.util;
 
+import com.textview.reader.UiColorUtils;
+
 import java.io.File;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -417,17 +419,11 @@ public class PrefsManager {
     }
 
     private boolean isLightColor(int color) {
-        double luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color));
-        return luminance > 160;
+        return UiColorUtils.isLightColor(color);
     }
 
     private int blendColors(int bottomColor, int topColor, float topAlpha) {
-        topAlpha = Math.max(0f, Math.min(1f, topAlpha));
-        float bottomAlpha = 1f - topAlpha;
-        int r = Math.round(Color.red(topColor) * topAlpha + Color.red(bottomColor) * bottomAlpha);
-        int g = Math.round(Color.green(topColor) * topAlpha + Color.green(bottomColor) * bottomAlpha);
-        int b = Math.round(Color.blue(topColor) * topAlpha + Color.blue(bottomColor) * bottomAlpha);
-        return Color.rgb(r, g, b);
+        return UiColorUtils.blendColors(bottomColor, topColor, topAlpha);
     }
 
     public int getMainBgColor(Context context) {
@@ -886,6 +882,16 @@ public class PrefsManager {
     public void setSortMode(int m) { prefs.edit().putInt("sort_mode", m).apply(); }
     public int getRecentSortMode() { return prefs.getInt("recent_sort_mode", SORT_RECENT_READ); }
     public void setRecentSortMode(int m) { prefs.edit().putInt("recent_sort_mode", m).apply(); }
+    public int getArchiveSortMode() { return prefs.getInt("archive_sort_mode", SORT_NAME_ASC); }
+    public void setArchiveSortMode(int m) { prefs.edit().putInt("archive_sort_mode", m).apply(); }
+    public String getArchiveLastImageEntryPath(String archivePath) {
+        if (archivePath == null || archivePath.trim().isEmpty()) return "";
+        return prefs.getString("archive_last_image_" + Integer.toHexString(archivePath.hashCode()), "");
+    }
+    public void setArchiveLastImageEntryPath(String archivePath, String entryPath) {
+        if (archivePath == null || archivePath.trim().isEmpty()) return;
+        prefs.edit().putString("archive_last_image_" + Integer.toHexString(archivePath.hashCode()), entryPath == null ? "" : entryPath).apply();
+    }
     public boolean getShowHiddenFiles() { return prefs.getBoolean("show_hidden", false); }
     public void setShowHiddenFiles(boolean v) { prefs.edit().putBoolean("show_hidden", v).apply(); }
 

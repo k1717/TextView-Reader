@@ -188,6 +188,94 @@ public class BookmarkManager {
     }
 
     /**
+     * Rebind saved progress and bookmarks after the app moves a local file.
+     */
+    public void moveFileReferences(String oldPath, String newPath) {
+        if (oldPath == null || newPath == null || oldPath.equals(newPath)) return;
+
+        boolean statesChanged = false;
+        ReaderState state = readingStates.remove(oldPath);
+        if (state != null) {
+            state.setFilePath(newPath);
+            readingStates.put(newPath, state);
+            statesChanged = true;
+        }
+
+        boolean bookmarksChanged = false;
+        String newName = new File(newPath).getName();
+        for (Bookmark bookmark : bookmarks) {
+            if (oldPath.equals(bookmark.getFilePath())) {
+                bookmark.setFilePath(newPath);
+                bookmark.setFileName(newName);
+                bookmarksChanged = true;
+            }
+        }
+
+        if (statesChanged) saveReadingStates();
+        if (bookmarksChanged) saveBookmarks();
+    }
+
+    /**
+     * Rebind saved progress and bookmarks after the app moves a local folder.
+     */
+    public void movePathPrefixReferences(String oldRootPath, String newRootPath) {
+        if (oldRootPath == null || newRootPath == null || oldRootPath.equals(newRootPath)) return;
+        String oldPrefix = oldRootPath.endsWith(File.separator) ? oldRootPath : oldRootPath + File.separator;
+        String newPrefix = newRootPath.endsWith(File.separator) ? newRootPath : newRootPath + File.separator;
+
+        boolean statesChanged = false;
+        Map<String, ReaderState> updatedStates = new HashMap<>();
+        Iterator<Map.Entry<String, ReaderState>> stateIterator = readingStates.entrySet().iterator();
+        while (stateIterator.hasNext()) {
+            Map.Entry<String, ReaderState> entry = stateIterator.next();
+            String path = entry.getKey();
+            if (path == null) continue;
+
+            String replacement = null;
+            if (path.equals(oldRootPath)) {
+                replacement = newRootPath;
+            } else if (path.startsWith(oldPrefix)) {
+                replacement = newPrefix + path.substring(oldPrefix.length());
+            }
+
+            if (replacement != null) {
+                ReaderState state = entry.getValue();
+                stateIterator.remove();
+                if (state != null) {
+                    state.setFilePath(replacement);
+                    updatedStates.put(replacement, state);
+                }
+                statesChanged = true;
+            }
+        }
+        if (!updatedStates.isEmpty()) {
+            readingStates.putAll(updatedStates);
+        }
+
+        boolean bookmarksChanged = false;
+        for (Bookmark bookmark : bookmarks) {
+            String path = bookmark.getFilePath();
+            if (path == null) continue;
+
+            String replacement = null;
+            if (path.equals(oldRootPath)) {
+                replacement = newRootPath;
+            } else if (path.startsWith(oldPrefix)) {
+                replacement = newPrefix + path.substring(oldPrefix.length());
+            }
+
+            if (replacement != null) {
+                bookmark.setFilePath(replacement);
+                bookmark.setFileName(new File(replacement).getName());
+                bookmarksChanged = true;
+            }
+        }
+
+        if (statesChanged) saveReadingStates();
+        if (bookmarksChanged) saveBookmarks();
+    }
+
+    /**
      * Clear all recent-file entries / saved reading states without touching bookmarks.
      */
     public void clearReadingStates() {
