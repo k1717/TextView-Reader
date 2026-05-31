@@ -20,8 +20,9 @@ android {
         applicationId "com.textview.reader"
         minSdk 24
         targetSdk 35
-        versionCode 2200
-        versionName "2.2.0"
+        versionCode 2210
+        versionName "2.2.1"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -72,5 +73,10 @@ dependencies {
     implementation 'androidx.activity:activity:1.9.3'
     implementation 'androidx.drawerlayout:drawerlayout:1.2.0'
     implementation 'com.github.albfernandez:juniversalchardet:2.5.0'
+    implementation 'org.apache.commons:commons-compress:1.28.0'
+    implementation 'org.tukaani:xz:1.10'
+    implementation 'net.lingala.zip4j:zip4j:2.11.5'
     testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
 }
