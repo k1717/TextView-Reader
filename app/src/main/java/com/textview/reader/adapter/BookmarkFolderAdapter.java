@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.textview.reader.R;
+import com.textview.reader.UiColorUtils;
 import com.textview.reader.model.Bookmark;
 import com.textview.reader.util.FileUtils;
 
@@ -126,17 +127,11 @@ public class BookmarkFolderAdapter extends RecyclerView.Adapter<RecyclerView.Vie
     }
 
     private static boolean isLightColor(int color) {
-        double luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0;
-        return luminance >= 0.5;
+        return UiColorUtils.isHalfLightColor(color);
     }
 
     private static int blendColors(int bottomColor, int topColor, float topAlpha) {
-        topAlpha = Math.max(0f, Math.min(1f, topAlpha));
-        float bottomAlpha = 1f - topAlpha;
-        int r = Math.round(Color.red(topColor) * topAlpha + Color.red(bottomColor) * bottomAlpha);
-        int g = Math.round(Color.green(topColor) * topAlpha + Color.green(bottomColor) * bottomAlpha);
-        int b = Math.round(Color.blue(topColor) * topAlpha + Color.blue(bottomColor) * bottomAlpha);
-        return Color.rgb(r, g, b);
+        return UiColorUtils.blendColors(bottomColor, topColor, topAlpha);
     }
 
     private GradientDrawable rowBackground(int color, int strokeColor, float radiusDp, float strokeDp, View view) {

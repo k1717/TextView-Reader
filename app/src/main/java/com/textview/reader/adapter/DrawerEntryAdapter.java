@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.textview.reader.R;
+import com.textview.reader.UiColorUtils;
 import com.textview.reader.model.DrawerEntry;
 import com.textview.reader.util.PrefsManager;
 
@@ -211,8 +212,7 @@ public class DrawerEntryAdapter extends RecyclerView.Adapter<DrawerEntryAdapter.
         }
 
         private int readableTextColorForBackground(int color) {
-            double luminance = 0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color);
-            return luminance > 150 ? Color.rgb(32, 33, 36) : Color.WHITE;
+            return UiColorUtils.readableChipTextColorForBackground(color);
         }
 
         private int dpToPx(float dp) {

@@ -3,6 +3,7 @@ package com.textview.reader.adapter;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.os.Handler;
 import android.text.TextUtils;
@@ -16,6 +17,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 import com.textview.reader.R;
@@ -27,15 +29,21 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
+
+    private static final int MULTI_SELECT_LONG_PRESS_MS = 1200;
+    private static final Object SELECTION_PAYLOAD = "selection_payload";
 
     public interface OnFileClickListener {
         void onFileClick(File file);
         void onFileLongClick(File file);
+        void onFileMultiSelectLongClick(File file);
     }
 
     private final List<File> files = new ArrayList<>();
@@ -44,6 +52,8 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
     private boolean sortEnabled = true;
     private int touchCancelGeneration = 0;
     private boolean showReadingProgress = false;
+    private boolean selectionMode = false;
+    private final Set<String> selectedPaths = new LinkedHashSet<>();
     private final Map<String, Integer> readingProgressByPath = new HashMap<>();
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
 
@@ -72,6 +82,43 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
             notifyItemRangeChanged(0, getItemCount());
         }
     }
+    public void setSelectionState(boolean active, @NonNull Set<String> paths) {
+        boolean modeChanged = selectionMode != active;
+        Set<String> oldSelection = new LinkedHashSet<>(selectedPaths);
+        selectionMode = active;
+        selectedPaths.clear();
+        selectedPaths.addAll(paths);
+        if (getItemCount() <= 0) return;
+
+        if (modeChanged) {
+            notifyItemRangeChanged(0, getItemCount(), SELECTION_PAYLOAD);
+            return;
+        }
+
+        LinkedHashSet<String> changed = new LinkedHashSet<>(oldSelection);
+        changed.addAll(selectedPaths);
+        for (String path : changed) {
+            boolean wasSelected = oldSelection.contains(path);
+            boolean isSelected = selectedPaths.contains(path);
+            if (wasSelected != isSelected) notifyPathChanged(path, SELECTION_PAYLOAD);
+        }
+    }
+
+    private void notifyPathChanged(@NonNull String path, @Nullable Object payload) {
+        for (int i = 0; i < files.size(); i++) {
+            File file = files.get(i);
+            if (file != null && path.equals(file.getAbsolutePath())) {
+                if (payload == null) notifyItemChanged(i); else notifyItemChanged(i, payload);
+                return;
+            }
+        }
+    }
+
+    @NonNull
+    public ArrayList<File> getFilesSnapshot() {
+        return new ArrayList<>(files);
+    }
+
 
     public void cancelPendingPresses() {
         touchCancelGeneration++;
@@ -186,6 +233,15 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) { holder.bind(files.get(position)); }
 
     @Override
+    public void onBindViewHolder(@NonNull ViewHolder holder, int position, @NonNull List<Object> payloads) {
+        if (!payloads.isEmpty()) {
+            holder.bindSelectionState(files.get(position));
+            return;
+        }
+        super.onBindViewHolder(holder, position, payloads);
+    }
+
+    @Override
     public int getItemCount() { return files.size(); }
 
     @Override
@@ -230,15 +286,18 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
     public class ViewHolder extends RecyclerView.ViewHolder {
         ImageView icon;
         LinearLayout textContainer;
-        TextView name, info, progress;
+        TextView name, info, progress, selectionMarker;
 
         private final Handler touchHandler = new Handler(Looper.getMainLooper());
         private float downX;
         private float downY;
         private boolean tapCancelled;
         private boolean longPressed;
+        private boolean multiSelectPressed;
+        private boolean consumeUpAfterMultiSelect;
         private final int tapSlop;
         private Runnable pendingLongPress;
+        private Runnable pendingMultiSelectPress;
 
         ViewHolder(View v) {
             super(v);
@@ -247,6 +306,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
             name = v.findViewById(R.id.file_name);
             info = v.findViewById(R.id.file_info);
             progress = v.findViewById(R.id.file_progress);
+            selectionMarker = v.findViewById(R.id.file_selection_marker);
             tapSlop = Math.max(10, ViewConfiguration.get(v.getContext()).getScaledTouchSlop());
 
             v.setOnTouchListener((view, event) -> {
@@ -256,26 +316,38 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                         downY = event.getY();
                         tapCancelled = false;
                         longPressed = false;
+                        multiSelectPressed = false;
+                        consumeUpAfterMultiSelect = false;
                         view.setPressed(true);
-                        if (pendingLongPress != null) {
-                            touchHandler.removeCallbacks(pendingLongPress);
-                            pendingLongPress = null;
-                        }
+                        clearPendingTouchCallbacks();
+
                         final int longPressGeneration = touchCancelGeneration;
                         pendingLongPress = () -> {
+                            if (longPressGeneration == touchCancelGeneration
+                                    && !tapCancelled
+                                    && !multiSelectPressed
+                                    && listener != null) {
+                                longPressed = true;
+                                view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                            }
+                        };
+                        pendingMultiSelectPress = () -> {
                             if (longPressGeneration == touchCancelGeneration
                                     && !tapCancelled
                                     && listener != null) {
                                 int pos = getBindingAdapterPosition();
                                 if (pos != RecyclerView.NO_POSITION) {
-                                    longPressed = true;
+                                    multiSelectPressed = true;
+                                    consumeUpAfterMultiSelect = true;
+                                    longPressed = false;
                                     view.setPressed(false);
                                     view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
-                                    listener.onFileLongClick(files.get(pos));
+                                    listener.onFileMultiSelectLongClick(files.get(pos));
                                 }
                             }
                         };
                         touchHandler.postDelayed(pendingLongPress, ViewConfiguration.getLongPressTimeout());
+                        touchHandler.postDelayed(pendingMultiSelectPress, MULTI_SELECT_LONG_PRESS_MS);
                         return true;
 
                     case MotionEvent.ACTION_MOVE:
@@ -284,24 +356,28 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                         if (Math.hypot(dx, dy) > tapSlop) {
                             tapCancelled = true;
                             view.setPressed(false);
-                            if (pendingLongPress != null) {
-                            touchHandler.removeCallbacks(pendingLongPress);
-                            pendingLongPress = null;
-                        }
+                            clearPendingTouchCallbacks();
                         }
                         return true;
 
                     case MotionEvent.ACTION_UP:
                         view.setPressed(false);
-                        if (pendingLongPress != null) {
-                            touchHandler.removeCallbacks(pendingLongPress);
-                            pendingLongPress = null;
+                        clearPendingTouchCallbacks();
+                        if (consumeUpAfterMultiSelect) {
+                            consumeUpAfterMultiSelect = false;
+                            return true;
                         }
-                        if (!tapCancelled && !longPressed && listener != null) {
+                        if (!tapCancelled && listener != null) {
                             int pos = getBindingAdapterPosition();
                             if (pos != RecyclerView.NO_POSITION) {
-                                view.performClick();
-                                listener.onFileClick(files.get(pos));
+                                if (multiSelectPressed) {
+                                    return true;
+                                } else if (longPressed) {
+                                    listener.onFileLongClick(files.get(pos));
+                                } else {
+                                    view.performClick();
+                                    listener.onFileClick(files.get(pos));
+                                }
                             }
                         }
                         return true;
@@ -309,10 +385,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                     case MotionEvent.ACTION_CANCEL:
                         view.setPressed(false);
                         tapCancelled = true;
-                        if (pendingLongPress != null) {
-                            touchHandler.removeCallbacks(pendingLongPress);
-                            pendingLongPress = null;
-                        }
+                        clearPendingTouchCallbacks();
                         return false;
 
                     default:
@@ -324,10 +397,19 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
         void cancelPendingPress() {
             tapCancelled = true;
             longPressed = false;
+            multiSelectPressed = false;
             itemView.setPressed(false);
+            clearPendingTouchCallbacks();
+        }
+
+        private void clearPendingTouchCallbacks() {
             if (pendingLongPress != null) {
                 touchHandler.removeCallbacks(pendingLongPress);
                 pendingLongPress = null;
+            }
+            if (pendingMultiSelectPress != null) {
+                touchHandler.removeCallbacks(pendingMultiSelectPress);
+                pendingMultiSelectPress = null;
             }
         }
 
@@ -369,9 +451,27 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
             updateReadingProgressBadge(file);
             icon.setImageTintList(ColorStateList.valueOf(iconTint));
             itemView.setPressed(false);
-            itemView.setSelected(false);
-            itemView.setActivated(false);
             itemView.setBackground(makeFileRowBackground(prefs));
+            bindSelectionState(file);
+        }
+
+        void bindSelectionState(@NonNull File file) {
+            PrefsManager prefs = PrefsManager.getInstance(itemView.getContext());
+            boolean selected = selectionMode && selectedPaths.contains(file.getAbsolutePath());
+            itemView.setPressed(false);
+            itemView.setSelected(selected);
+            itemView.setActivated(selected);
+            if (selectionMarker != null) {
+                selectionMarker.setVisibility(selected ? View.VISIBLE : View.GONE);
+                if (selected) {
+                    boolean dark = prefs.shouldUseDarkColors(itemView.getContext());
+                    int markerBg = prefs.getMainFileLongHoldColor(itemView.getContext());
+                    int markerFg = dark ? Color.WHITE : Color.rgb(24, 24, 24);
+                    selectionMarker.setTextColor(markerFg);
+                    selectionMarker.setBackground(makeSelectionMarkerBackground(markerBg, markerFg));
+                    selectionMarker.bringToFront();
+                }
+            }
         }
 
         private void updateReadingProgressBadge(@NonNull File file) {
@@ -427,11 +527,20 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
             return Math.round(dp * itemView.getResources().getDisplayMetrics().density);
         }
 
+        private GradientDrawable makeSelectionMarkerBackground(int bg, int fg) {
+            GradientDrawable drawable = new GradientDrawable();
+            drawable.setShape(GradientDrawable.OVAL);
+            drawable.setColor(bg);
+            drawable.setStroke(Math.max(1, dpToPx(1)), fg);
+            return drawable;
+        }
+
         private StateListDrawable makeFileRowBackground(@NonNull PrefsManager prefs) {
             int pressed = prefs.getMainFileLongHoldColor(itemView.getContext());
             StateListDrawable states = new StateListDrawable();
             states.addState(new int[]{android.R.attr.state_pressed}, new ColorDrawable(pressed));
             states.addState(new int[]{android.R.attr.state_focused}, new ColorDrawable(pressed));
+            states.addState(new int[]{android.R.attr.state_activated}, new ColorDrawable(pressed));
             states.addState(new int[]{android.R.attr.state_selected}, new ColorDrawable(pressed));
             states.addState(new int[]{}, new ColorDrawable(Color.TRANSPARENT));
             return states;
