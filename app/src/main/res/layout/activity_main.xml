@@ -112,7 +112,7 @@
 
                 <TextView
                     android:id="@+id/recent_clear_all"
-                    android:layout_width="64dp"
+                    android:layout_width="52dp"
                     android:layout_height="34dp"
                     android:background="@android:color/transparent"
                     android:gravity="center"
@@ -161,7 +161,7 @@
             android:clipToPadding="false"
             android:visibility="gone">
 
-            <androidx.recyclerview.widget.RecyclerView
+            <com.textview.reader.view.TinyPartialItemClipRecyclerView
                 android:id="@+id/file_list"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -192,73 +192,111 @@
             android:paddingEnd="10dp"
             android:paddingBottom="6dp">
 
-            <LinearLayout
-                android:id="@+id/file_type_filter_row"
+            <HorizontalScrollView
+                android:id="@+id/file_type_filter_scroll"
                 android:layout_width="match_parent"
-                android:layout_height="34dp"
-                android:baselineAligned="false"
-                android:gravity="center"
-                android:orientation="horizontal">
+                android:layout_height="38dp"
+                android:fillViewport="true"
+                android:overScrollMode="never"
+                android:scrollbars="none">
 
-                <TextView
-                    android:id="@+id/filter_all"
-                    android:layout_width="0dp"
-                    android:layout_height="30dp"
-                    android:layout_marginEnd="4dp"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:singleLine="true"
-                    android:text="@string/file_filter_all"
-                    android:textSize="12sp" />
+                <LinearLayout
+                    android:id="@+id/file_type_filter_row"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:baselineAligned="false"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="1dp"
+                    android:paddingEnd="1dp">
 
-                <TextView
-                    android:id="@+id/filter_general"
-                    android:layout_width="0dp"
-                    android:layout_height="30dp"
-                    android:layout_marginStart="4dp"
-                    android:layout_marginEnd="4dp"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:singleLine="true"
-                    android:text="@string/file_filter_general"
-                    android:textSize="12sp" />
+                    <TextView
+                        android:id="@+id/filter_all"
+                        android:layout_width="52dp"
+                        android:layout_height="30dp"
+                        android:layout_marginEnd="0dp"
+                        android:gravity="center"
+                        android:singleLine="true"
+                        android:text="@string/file_filter_all"
+                        android:textSize="12sp" />
 
-                <TextView
-                    android:id="@+id/filter_pdf"
-                    android:layout_width="0dp"
-                    android:layout_height="30dp"
-                    android:layout_marginStart="4dp"
-                    android:layout_marginEnd="4dp"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:singleLine="true"
-                    android:text="@string/file_filter_pdf"
-                    android:textSize="12sp" />
+                    <TextView
+                        android:id="@+id/filter_general"
+                        android:layout_width="52dp"
+                        android:layout_height="30dp"
+                        android:layout_marginStart="4dp"
+                        android:layout_marginEnd="0dp"
+                        android:gravity="center"
+                        android:singleLine="true"
+                        android:text="@string/file_filter_general"
+                        android:textSize="12sp" />
 
-                <TextView
-                    android:id="@+id/filter_epub"
-                    android:layout_width="0dp"
-                    android:layout_height="30dp"
-                    android:layout_marginStart="4dp"
-                    android:layout_marginEnd="4dp"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:singleLine="true"
-                    android:text="@string/file_filter_epub"
-                    android:textSize="12sp" />
+                    <TextView
+                        android:id="@+id/filter_txt"
+                        android:layout_width="52dp"
+                        android:layout_height="30dp"
+                        android:layout_marginStart="4dp"
+                        android:layout_marginEnd="0dp"
+                        android:gravity="center"
+                        android:singleLine="true"
+                        android:text="@string/file_filter_txt"
+                        android:textSize="12sp" />
 
-                <TextView
-                    android:id="@+id/filter_word"
-                    android:layout_width="0dp"
-                    android:layout_height="30dp"
-                    android:layout_marginStart="4dp"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:singleLine="true"
-                    android:text="@string/file_filter_word"
-                    android:textSize="12sp" />
+                    <TextView
+                        android:id="@+id/filter_archive"
+                        android:layout_width="52dp"
+                        android:layout_height="30dp"
+                        android:layout_marginStart="4dp"
+                        android:layout_marginEnd="0dp"
+                        android:gravity="center"
+                        android:singleLine="true"
+                        android:text="@string/file_filter_archive"
+                        android:textSize="12sp" />
 
-            </LinearLayout>
+                    <TextView
+                        android:id="@+id/filter_pdf"
+                        android:layout_width="52dp"
+                        android:layout_height="30dp"
+                        android:layout_marginStart="4dp"
+                        android:layout_marginEnd="0dp"
+                        android:gravity="center"
+                        android:singleLine="true"
+                        android:text="@string/file_filter_pdf"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/filter_epub"
+                        android:layout_width="52dp"
+                        android:layout_height="30dp"
+                        android:layout_marginStart="4dp"
+                        android:layout_marginEnd="0dp"
+                        android:gravity="center"
+                        android:singleLine="true"
+                        android:text="@string/file_filter_epub"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/filter_word"
+                        android:layout_width="52dp"
+                        android:layout_height="30dp"
+                        android:layout_marginStart="4dp"
+                        android:gravity="center"
+                        android:singleLine="true"
+                        android:text="@string/file_filter_word"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/filter_img"
+                        android:layout_width="52dp"
+                        android:layout_height="30dp"
+                        android:layout_marginStart="4dp"
+                        android:gravity="center"
+                        android:singleLine="true"
+                        android:text="@string/file_filter_img"
+                        android:textSize="12sp" />
+
+                </LinearLayout>
+            </HorizontalScrollView>
 
             <LinearLayout
                 android:layout_width="match_parent"

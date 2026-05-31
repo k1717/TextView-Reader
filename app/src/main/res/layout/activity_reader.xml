@@ -133,7 +133,7 @@
             android:paddingStart="48dp"
             android:paddingEnd="48dp"
             android:splitTrack="false"
-                        android:progressBackgroundTint="#555555"
+            android:progressBackgroundTint="#555555"
             android:progressTint="#9E9E9E"
             android:thumbTint="#D6D6D6" />
 
@@ -144,40 +144,118 @@
             android:gravity="center"
             android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/btn_open_file"
-                style="@style/ReaderBottomButton"
-                android:drawableTop="@drawable/ic_bottom_search"
-                android:text="@string/find" />
+            <HorizontalScrollView
+                android:id="@+id/toolbar_action_scroll"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="5"
+                android:fillViewport="false"
+                android:overScrollMode="never"
+                android:scrollbars="none">
 
-            <TextView
-                android:id="@+id/btn_page_move"
-                style="@style/ReaderBottomButton"
-                android:drawableTop="@drawable/ic_bottom_page"
-                android:text="@string/bottom_page" />
+                <LinearLayout
+                    android:id="@+id/toolbar_scroll_actions"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:baselineAligned="false"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/btn_bookmark"
-                style="@style/ReaderBottomButton"
-                android:drawableTop="@drawable/ic_bottom_bookmark"
-                android:text="@string/bookmark" />
+                    <TextView
+                        android:id="@+id/btn_home"
+                        style="@style/ReaderBottomButton"
+                        android:layout_width="62dp"
+                        android:layout_weight="0"
+                        android:drawableTop="@drawable/ic_bottom_home"
+                        android:text="@string/toolbar_home" />
 
+                    <TextView
+                        android:id="@+id/btn_open_file"
+                        style="@style/ReaderBottomButton"
+                        android:layout_width="62dp"
+                        android:layout_weight="0"
+                        android:drawableTop="@drawable/ic_bottom_open_file"
+                        android:text="@string/toolbar_open_file" />
 
-            <TextView
-                android:id="@+id/btn_auto_page"
-                style="@style/ReaderBottomButton"
-                android:drawableTop="@drawable/ic_bottom_auto_page"
-                android:text="@string/auto_page_turn_toolbar" />
+                    <TextView
+                        android:id="@+id/btn_find"
+                        style="@style/ReaderBottomButton"
+                        android:layout_width="62dp"
+                        android:layout_weight="0"
+                        android:drawableTop="@drawable/ic_bottom_search"
+                        android:text="@string/find" />
 
-            <TextView
-                android:id="@+id/btn_settings"
-                style="@style/ReaderBottomButton"
-                android:drawableTop="@drawable/ic_bottom_settings"
-                android:text="@string/settings" />
+                    <TextView
+                        android:id="@+id/btn_page_move"
+                        style="@style/ReaderBottomButton"
+                        android:layout_width="62dp"
+                        android:layout_weight="0"
+                        android:drawableTop="@drawable/ic_bottom_page"
+                        android:text="@string/bottom_page" />
+
+                    <TextView
+                        android:id="@+id/btn_bookmark"
+                        style="@style/ReaderBottomButton"
+                        android:layout_width="62dp"
+                        android:layout_weight="0"
+                        android:drawableTop="@drawable/ic_bottom_bookmark"
+                        android:text="@string/bookmark" />
+
+                    <TextView
+                        android:id="@+id/btn_auto_page"
+                        style="@style/ReaderBottomButton"
+                        android:layout_width="62dp"
+                        android:layout_weight="0"
+                        android:drawableTop="@drawable/ic_bottom_auto_page"
+                        android:text="@string/auto_page_turn_toolbar" />
+
+                    <TextView
+                        android:id="@+id/btn_settings"
+                        style="@style/ReaderBottomButton"
+                        android:layout_width="62dp"
+                        android:layout_weight="0"
+                        android:drawableTop="@drawable/ic_bottom_settings"
+                        android:text="@string/settings" />
+
+                    <TextView
+                        android:id="@+id/btn_font"
+                        style="@style/ReaderBottomButton"
+                        android:layout_width="62dp"
+                        android:layout_weight="0"
+                        android:drawableTop="@drawable/ic_bottom_font"
+                        android:text="@string/font" />
+
+                    <TextView
+                        android:id="@+id/btn_rule_add"
+                        style="@style/ReaderBottomButton"
+                        android:layout_width="62dp"
+                        android:layout_weight="0"
+                        android:drawableTop="@drawable/ic_bottom_rule_add"
+                        android:text="@string/toolbar_rule_add" />
+
+                    <TextView
+                        android:id="@+id/btn_rule_manage"
+                        style="@style/ReaderBottomButton"
+                        android:layout_width="62dp"
+                        android:layout_weight="0"
+                        android:drawableTop="@drawable/ic_bottom_rules"
+                        android:text="@string/toolbar_rule_manage" />
+
+                    <TextView
+                        android:id="@+id/btn_text_encoding"
+                        style="@style/ReaderBottomButton"
+                        android:layout_width="62dp"
+                        android:layout_weight="0"
+                        android:drawableTop="@drawable/ic_bottom_encoding"
+                        android:text="@string/toolbar_text_encoding" />
+                </LinearLayout>
+            </HorizontalScrollView>
 
             <TextView
                 android:id="@+id/btn_more"
                 style="@style/ReaderBottomButton"
+                android:layout_width="0dp"
+                android:layout_weight="1"
                 android:drawableTop="@drawable/ic_bottom_more_horiz"
                 android:text="@string/more" />
         </LinearLayout>
