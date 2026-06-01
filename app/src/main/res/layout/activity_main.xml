@@ -136,7 +136,13 @@
                 android:background="?attr/colorSurface"
                 android:clipToPadding="false"
                 android:nestedScrollingEnabled="true"
-                android:overScrollMode="ifContentScrolls" />
+                android:overScrollMode="ifContentScrolls"
+                android:scrollbars="none"
+                app:fastScrollEnabled="true"
+                app:fastScrollHorizontalThumbDrawable="@drawable/fastscroll_thumb"
+                app:fastScrollHorizontalTrackDrawable="@drawable/fastscroll_track"
+                app:fastScrollVerticalThumbDrawable="@drawable/fastscroll_thumb"
+                app:fastScrollVerticalTrackDrawable="@drawable/fastscroll_track" />
 
             <TextView
                 android:id="@+id/recent_empty_text"
@@ -166,7 +172,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="?attr/colorSurface"
-                android:clipToPadding="false" />
+                android:clipToPadding="false"
+                android:scrollbars="none" />
 
             <TextView
                 android:id="@+id/empty_text"
@@ -178,6 +185,26 @@
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="16sp"
                 android:visibility="gone" />
+
+            <FrameLayout
+                android:id="@+id/file_fast_scroll_rail"
+                android:layout_width="32dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="end"
+                android:background="@android:color/transparent"
+                android:clickable="true"
+                android:focusable="false"
+                android:paddingEnd="4dp"
+                android:visibility="gone">
+
+                <View
+                    android:id="@+id/file_fast_scroll_thumb"
+                    android:layout_width="8dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="end"
+                    android:background="@drawable/fastscroll_thumb" />
+
+            </FrameLayout>
 
         </FrameLayout>
 
@@ -325,24 +352,28 @@
                     android:textSize="14sp" />
 
                 <ImageButton
+                    android:id="@+id/file_search_scope_button"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="@string/search_scope_current_folder_only"
+                    android:padding="8dp"
+                    android:scaleType="center"
+                    android:stateListAnimator="@null"
+                    android:src="@drawable/ic_folder" />
+
+                <ImageButton
                     android:id="@+id/file_sort_button"
                     android:layout_width="38dp"
                     android:layout_height="38dp"
                     android:layout_marginStart="6dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@android:color/transparent"
                     android:contentDescription="@string/sort"
                     android:padding="8dp"
                     android:scaleType="center"
+                    android:stateListAnimator="@null"
                     android:src="@drawable/ic_sort" />
-
-                <ProgressBar
-                    android:id="@+id/file_search_progress"
-                    style="?android:attr/progressBarStyleSmall"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:layout_marginStart="4dp"
-                    android:indeterminate="true"
-                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/file_search_clear_button"
@@ -350,7 +381,7 @@
                     android:layout_height="38dp"
                     android:layout_marginStart="2dp"
                     android:gravity="center"
-                    android:text="×"
+                    android:text="&#215;"
                     android:textSize="24sp"
                     android:visibility="gone" />
 
@@ -359,6 +390,15 @@
         </LinearLayout>
 
         </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/file_search_progress"
+            style="?android:attr/progressBarStyleLarge"
+            android:layout_width="54dp"
+            android:layout_height="54dp"
+            android:layout_gravity="center"
+            android:indeterminate="true"
+            android:visibility="gone" />
 
         <View
             android:id="@+id/drawer_edge_grabber"

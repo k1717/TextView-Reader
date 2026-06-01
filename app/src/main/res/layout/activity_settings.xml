@@ -737,6 +737,63 @@
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/settings_section_button_order"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/button_order_main_filters"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="6dp"
+                android:background="@android:color/transparent"
+                android:gravity="center_vertical|start"
+                android:text="@string/button_order_main_filters_title"
+                android:textAllCaps="false"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/button_order_txt_reader"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="6dp"
+                android:background="@android:color/transparent"
+                android:gravity="center_vertical|start"
+                android:text="@string/button_order_txt_reader_title"
+                android:textAllCaps="false"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/button_order_document_viewer"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="6dp"
+                android:background="@android:color/transparent"
+                android:gravity="center_vertical|start"
+                android:text="@string/button_order_document_viewer_title"
+                android:textAllCaps="false"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/button_order_pdf_viewer"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="12dp"
+                android:background="@android:color/transparent"
+                android:gravity="center_vertical|start"
+                android:text="@string/button_order_pdf_viewer_title"
+                android:textAllCaps="false"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="16sp" />
+
             <Switch android:id="@+id/switch_keep_screen_on" android:layout_width="match_parent" android:layout_height="56dp" android:text="@string/keep_screen_on" android:textColor="?attr/colorOnSurface" android:textSize="16sp" />
             <Switch android:id="@+id/switch_auto_save" android:layout_width="match_parent" android:layout_height="56dp" android:text="@string/auto_save_position" android:textColor="?attr/colorOnSurface" android:textSize="16sp" />
             <Switch android:id="@+id/switch_status_bar" android:layout_width="match_parent" android:layout_height="56dp" android:text="@string/show_status_bar" android:textColor="?attr/colorOnSurface" android:textSize="16sp" />
