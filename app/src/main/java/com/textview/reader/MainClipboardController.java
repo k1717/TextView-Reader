@@ -209,7 +209,7 @@ final class MainClipboardController {
         String oldPath = source.getAbsolutePath();
         String newPath = destination.getAbsolutePath();
         boolean sourceWasDirectory = source.isDirectory();
-        activity.folderLoadExecutor.execute(() -> {
+        activity.executeFolderBackgroundTask(() -> {
             boolean done = activity.fileClipboardController.performOperation(destination, overwrite);
             activity.fileSearchHandler.post(() -> {
                 activity.fileClipboardController.setInProgress(false);

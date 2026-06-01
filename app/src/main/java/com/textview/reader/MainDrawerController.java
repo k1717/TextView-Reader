@@ -242,10 +242,7 @@ final class MainDrawerController {
     }
 
     private String getShortcutPlaceholderTitle() {
-        String lang = java.util.Locale.getDefault().getLanguage();
-        return "ko".equalsIgnoreCase(lang)
-                ? "바로가기가 여기에 추가됩니다"
-                : "Shortcut will be added here";
+        return activity.getString(R.string.shortcut_placeholder);
     }
 
     private void addShortcutFolderEntries(@NonNull List<DrawerEntry> entries) {

@@ -318,7 +318,7 @@ final class MainArchiveExtractController {
         activity.archiveExtractInProgress = true;
         activity.updateMainOverflowButtonVisibility();
         ShortToast.show(activity, R.string.archive_extracting);
-        activity.folderLoadExecutor.execute(() -> {
+        activity.executeFolderBackgroundTask(() -> {
             boolean done = ArchiveSupport.extractArchive(archive, destinationDir, overwrite, password);
             activity.fileSearchHandler.post(() -> {
                 activity.archiveExtractInProgress = false;

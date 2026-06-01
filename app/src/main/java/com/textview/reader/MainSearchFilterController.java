@@ -3,7 +3,6 @@ package com.textview.reader;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.os.Environment;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.MotionEvent;
@@ -16,7 +15,6 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.view.GravityCompat;
@@ -26,25 +24,22 @@ import com.textview.reader.util.FileTypeFilter;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Owns the main-screen search box and file-type filter strip so MainActivity can
  * stay focused on navigation, lifecycle, and file operations.
  */
 final class MainSearchFilterController {
-    private static final int FILE_SEARCH_RESULT_LIMIT = Integer.MAX_VALUE;
-    private static final int FILE_SEARCH_VISIT_LIMIT = Integer.MAX_VALUE;
-    private static final int FILE_SEARCH_PROGRESS_BATCH = 96;
-    private static final long FILE_SEARCH_PROGRESS_MIN_INTERVAL_MS = 220L;
-
     private final MainActivity activity;
+    private final MainFileSearchRoots searchRoots;
+    private final MainFileSearchWalker searchWalker;
     private final Runnable fileTypeFilterSnapRunnable = this::snapFileTypeFilterToSlot;
 
     MainSearchFilterController(@NonNull MainActivity activity) {
         this.activity = activity;
+        this.searchRoots = new MainFileSearchRoots(activity);
+        this.searchWalker = new MainFileSearchWalker(activity, this::handleSearchProgress);
     }
 
     void setupFileSearch() {
@@ -604,10 +599,8 @@ final class MainSearchFilterController {
         }
         updateFileSearchClearButtonVisibility();
 
-        List<File> roots = buildSearchRoots(allStorage);
+        List<File> roots = searchRoots.build(allStorage);
         final int filter = activity.activeFileFilter;
-        final int resultLimit = FILE_SEARCH_RESULT_LIMIT;
-        final int visitLimit = FILE_SEARCH_VISIT_LIMIT;
         final int sortMode = activity.prefs != null
                 ? activity.prefs.getSortMode()
                 : com.textview.reader.util.PrefsManager.SORT_NAME_ASC;
@@ -615,20 +608,9 @@ final class MainSearchFilterController {
         activity.fileSearchExecutor.execute(() -> {
             if (activity.activityDestroyed || generation != activity.fileSearchGeneration.get()) return;
             List<File> results = new ArrayList<>();
-            Set<String> seen = new LinkedHashSet<>();
-            String needle = query.toLowerCase(java.util.Locale.ROOT);
             boolean showHidden = activity.prefs == null || activity.prefs.getShowHiddenFiles();
-            int[] visited = new int[]{0};
-            SearchProgress progress = new SearchProgress(query, generation);
-
-            for (File root : roots) {
-                if (root == null || !root.exists() || !root.canRead()) continue;
-                searchFilesRecursive(root, needle, filter, showHidden, seen, results, visited, generation, 0,
-                        resultLimit, visitLimit, progress);
-                if (generation != activity.fileSearchGeneration.get()
-                        || results.size() >= resultLimit
-                        || visited[0] >= visitLimit) break;
-            }
+            searchWalker.search(query, roots, filter, showHidden, generation, results);
+            if (activity.activityDestroyed || generation != activity.fileSearchGeneration.get()) return;
 
             com.textview.reader.util.FileSortUtils.sortMainFiles(activity, results, sortMode);
             activity.runOnUiThread(() -> {
@@ -639,135 +621,14 @@ final class MainSearchFilterController {
         });
     }
 
-    private List<File> buildSearchRoots(boolean allStorage) {
-        LinkedHashSet<String> paths = new LinkedHashSet<>();
-        if (!allStorage && !activity.homeMode && activity.currentDirectory != null && activity.currentDirectory.exists()) {
-            paths.add(activity.currentDirectory.getAbsolutePath());
-        } else if (allStorage
-                && !activity.homeMode
-                && activity.currentDirectory != null
-                && activity.currentDirectory.exists()
-                && activity.currentDirectory.isDirectory()
-                && activity.currentDirectory.canRead()) {
-            paths.add(activity.currentDirectory.getAbsolutePath());
-        } else {
-            File internal = Environment.getExternalStorageDirectory();
-            if (internal != null) paths.add(internal.getAbsolutePath());
-            File downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-            if (downloads != null) paths.add(downloads.getAbsolutePath());
-            for (File sd : activity.detectExternalSdCards()) paths.add(sd.getAbsolutePath());
-            if (activity.prefs != null) paths.addAll(activity.prefs.getRecentFolders(10));
-        }
-
-        List<File> roots = new ArrayList<>();
-        for (String path : paths) {
-            if (path == null || path.trim().isEmpty()) continue;
-            File f = normalizedReadableRoot(new File(path));
-            if (f == null) continue;
-            addRootWithoutNestedDuplicates(roots, f);
-        }
-        return roots;
-    }
-
-    @Nullable
-    private File normalizedReadableRoot(@NonNull File root) {
-        try {
-            File canonical = root.getCanonicalFile();
-            return canonical.exists() && canonical.canRead() ? canonical : null;
-        } catch (Exception ignored) {
-            return root.exists() && root.canRead() ? root : null;
-        }
-    }
-
-    private void addRootWithoutNestedDuplicates(@NonNull List<File> roots, @NonNull File candidate) {
-        String candidatePath = normalizedPath(candidate);
-        for (int i = roots.size() - 1; i >= 0; i--) {
-            String existingPath = normalizedPath(roots.get(i));
-            if (isSameOrChildPath(candidatePath, existingPath)) return;
-            if (isSameOrChildPath(existingPath, candidatePath)) roots.remove(i);
-        }
-        roots.add(candidate);
-    }
-
-    @NonNull
-    private String normalizedPath(@NonNull File file) {
-        try {
-            return file.getCanonicalPath();
-        } catch (Exception ignored) {
-            return file.getAbsolutePath();
-        }
-    }
-
-    private boolean isSameOrChildPath(@NonNull String path, @NonNull String parent) {
-        String p = path.replace('\\', '/');
-        String root = parent.replace('\\', '/');
-        while (p.endsWith("/") && p.length() > 1) p = p.substring(0, p.length() - 1);
-        while (root.endsWith("/") && root.length() > 1) root = root.substring(0, root.length() - 1);
-        return p.equals(root) || p.startsWith(root + "/");
-    }
-
-    private void searchFilesRecursive(@NonNull File dir,
-                                      @NonNull String needle,
-                                      int filter,
-                                      boolean showHidden,
-                                      @NonNull Set<String> seen,
-                                      @NonNull List<File> results,
-                                      @NonNull int[] visited,
+    private void handleSearchProgress(@NonNull String query,
                                       int generation,
-                                      int depth,
-                                      int resultLimit,
-                                      int visitLimit,
-                                      @Nullable SearchProgress progress) {
-        if (generation != activity.fileSearchGeneration.get()
-                || depth > 16
-                || results.size() >= resultLimit
-                || visited[0] >= visitLimit) return;
-        File[] children = dir.listFiles();
-        if (children == null) return;
-
-        for (File child : children) {
-            if (generation != activity.fileSearchGeneration.get()) return;
-            if (child == null) continue;
-            visited[0]++;
-            if (visited[0] >= visitLimit || results.size() >= resultLimit) return;
-            String name = child.getName();
-            if (!showHidden && name.startsWith(".")) continue;
-            String path = child.getAbsolutePath();
-            if (path.contains("/Android/data/") || path.contains("/Android/obb/")) continue;
-
-            boolean nameMatch = needle.isEmpty() || name.toLowerCase(java.util.Locale.ROOT).contains(needle);
-            boolean fileMatch = !child.isDirectory() && FileTypeFilter.matches(name, filter);
-            boolean directoryMatch = child.isDirectory() && !needle.isEmpty()
-                    && filter == MainActivity.FILTER_ALL
-                    && nameMatch;
-            if ((fileMatch || directoryMatch) && nameMatch && seen.add(path)) {
-                results.add(child);
-                maybePublishSearchProgress(progress, results);
-                if (results.size() >= resultLimit) return;
-            }
-            if (child.isDirectory() && child.canRead()) {
-                searchFilesRecursive(child, needle, filter, showHidden, seen, results, visited, generation, depth + 1,
-                        resultLimit, visitLimit, progress);
-            }
-        }
-    }
-
-    private void maybePublishSearchProgress(@Nullable SearchProgress progress, @NonNull List<File> results) {
-        if (progress == null) return;
-        int size = results.size();
-        long now = android.os.SystemClock.uptimeMillis();
-        if (size - progress.lastPublishedCount < FILE_SEARCH_PROGRESS_BATCH
-                && now - progress.lastPublishedAt < FILE_SEARCH_PROGRESS_MIN_INTERVAL_MS) {
-            return;
-        }
-        progress.lastPublishedCount = size;
-        progress.lastPublishedAt = now;
-        ArrayList<File> snapshot = new ArrayList<>(results);
+                                      @NonNull List<File> snapshot) {
         activity.runOnUiThread(() -> {
             if (activity.activityDestroyed
-                    || progress.generation != activity.fileSearchGeneration.get()
+                    || generation != activity.fileSearchGeneration.get()
                     || !activity.searchMode) return;
-            showFileSearchResults(progress.query, snapshot, false);
+            showFileSearchResults(query, snapshot, false);
         });
     }
 
@@ -823,15 +684,4 @@ final class MainSearchFilterController {
         activity.invalidateOptionsMenu();
     }
 
-    private static final class SearchProgress {
-        final String query;
-        final int generation;
-        int lastPublishedCount;
-        long lastPublishedAt;
-
-        SearchProgress(@NonNull String query, int generation) {
-            this.query = query;
-            this.generation = generation;
-        }
-    }
 }

@@ -12,6 +12,7 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.textview.reader.adapter.FileAdapter;
 import com.textview.reader.util.BookmarkManager;
@@ -125,6 +126,8 @@ final class MainActivityStartupController {
         activity.emptyText = activity.findViewById(R.id.empty_text);
         activity.fileFastScrollRail = activity.findViewById(R.id.file_fast_scroll_rail);
         activity.fileFastScrollThumb = activity.findViewById(R.id.file_fast_scroll_thumb);
+        activity.recentFastScrollRail = activity.findViewById(R.id.recent_fast_scroll_rail);
+        activity.recentFastScrollThumb = activity.findViewById(R.id.recent_fast_scroll_thumb);
         activity.recentSection = activity.findViewById(R.id.recent_section);
         activity.browserSection = activity.findViewById(R.id.main_content_container);
         activity.recentRecyclerView = activity.findViewById(R.id.recent_list);
@@ -139,7 +142,11 @@ final class MainActivityStartupController {
         activity.fileRecyclerView.setLayoutManager(new LinearLayoutManager(activity));
         activity.fileRecyclerView.setItemAnimator(null);
         activity.fileRecyclerView.setAdapter(activity.fileAdapter);
-        new MainFileFastScrollController(activity).install();
+        installFastScrollIfReady(
+                activity.fileRecyclerView,
+                activity.fileAdapter,
+                activity.fileFastScrollRail,
+                activity.fileFastScrollThumb);
 
         activity.recentAdapter = new FileAdapter(activity);
         activity.recentAdapter.setListener(activity);
@@ -148,5 +155,18 @@ final class MainActivityStartupController {
         activity.recentRecyclerView.setLayoutManager(new LinearLayoutManager(activity));
         activity.recentRecyclerView.setItemAnimator(null);
         activity.recentRecyclerView.setAdapter(activity.recentAdapter);
+        installFastScrollIfReady(
+                activity.recentRecyclerView,
+                activity.recentAdapter,
+                activity.recentFastScrollRail,
+                activity.recentFastScrollThumb);
+    }
+
+    private void installFastScrollIfReady(RecyclerView recyclerView,
+                                          RecyclerView.Adapter<?> adapter,
+                                          View rail,
+                                          View thumb) {
+        if (recyclerView == null || adapter == null || rail == null || thumb == null) return;
+        new MainFileFastScrollController(recyclerView, adapter, rail, thumb).install();
     }
 }

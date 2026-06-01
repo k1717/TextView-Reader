@@ -206,7 +206,7 @@ final class MainSelectionModeController {
     private void deleteSelectedFiles(@NonNull ArrayList<File> selected) {
         if (selected.isEmpty()) return;
         ArrayList<String> deletedPaths = new ArrayList<>();
-        activity.folderLoadExecutor.execute(() -> {
+        activity.executeFolderBackgroundTask(() -> {
             int deletedCount = 0;
             for (File file : selected) {
                 if (file == null || !file.exists()) continue;
