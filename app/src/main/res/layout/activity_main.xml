@@ -128,32 +128,54 @@
 
             </LinearLayout>
 
-            <com.textview.reader.view.TinyPartialItemClipRecyclerView
-                android:id="@+id/recent_list"
+            <FrameLayout
+                android:id="@+id/recent_content_container"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_weight="1"
-                android:background="?attr/colorSurface"
-                android:clipToPadding="false"
-                android:nestedScrollingEnabled="true"
-                android:overScrollMode="ifContentScrolls"
-                android:scrollbars="none"
-                app:fastScrollEnabled="true"
-                app:fastScrollHorizontalThumbDrawable="@drawable/fastscroll_thumb"
-                app:fastScrollHorizontalTrackDrawable="@drawable/fastscroll_track"
-                app:fastScrollVerticalThumbDrawable="@drawable/fastscroll_thumb"
-                app:fastScrollVerticalTrackDrawable="@drawable/fastscroll_track" />
+                android:layout_weight="1">
 
-            <TextView
-                android:id="@+id/recent_empty_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:padding="32dp"
-                android:text="@string/no_recent_files"
-                android:textColor="?attr/colorOnSurfaceVariant"
-                android:textSize="14sp"
-                android:visibility="gone" />
+                <com.textview.reader.view.TinyPartialItemClipRecyclerView
+                    android:id="@+id/recent_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="?attr/colorSurface"
+                    android:clipToPadding="false"
+                    android:nestedScrollingEnabled="true"
+                    android:overScrollMode="ifContentScrolls"
+                    android:scrollbars="none" />
+
+                <TextView
+                    android:id="@+id/recent_empty_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:padding="32dp"
+                    android:text="@string/no_recent_files"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="14sp"
+                    android:visibility="gone" />
+
+                <FrameLayout
+                    android:id="@+id/recent_fast_scroll_rail"
+                    android:layout_width="32dp"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="end"
+                    android:background="@android:color/transparent"
+                    android:clickable="true"
+                    android:focusable="false"
+                    android:paddingEnd="4dp"
+                    android:visibility="gone">
+
+                    <View
+                        android:id="@+id/recent_fast_scroll_thumb"
+                        android:layout_width="8dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="end"
+                        android:background="@drawable/fastscroll_thumb" />
+
+                </FrameLayout>
+
+            </FrameLayout>
 
         </LinearLayout>
 
