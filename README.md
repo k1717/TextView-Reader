@@ -36,7 +36,6 @@ Current version: **2.2.2**
 - Settings now include Button / icon order controls for the main filter strip plus TXT, EPUB/Word, and PDF viewer toolbars. TXT default-visible toolbar slots are highlighted in the order editor, and the order rows use compact one-line cards.
 - The TXT search dialog uses plain text-style action buttons instead of heavier card buttons, recent-file mode hides the IMG filter chip, current-folder sorting reorders the already loaded list without rescanning the folder, and recent/main fast-scroll track styling avoids the double dragbar look.
 - `MainActivity` is now roughly 1,815 lines after the 2.2.2 cleanup pass, with search walking and folder loading moved to `MainFileSearchRoots`, `MainFileSearchWalker`, and `MainFolderLoadController`.
-- Built on the 2.2.1 GitHub-ready source with archive browsing/extraction, image-sequence viewing, large-TXT continuity hardening, bookmark page-model cleanup, controller-based refactoring, and expanded regression coverage.
 
 ## 2.2.1 release summary
 
