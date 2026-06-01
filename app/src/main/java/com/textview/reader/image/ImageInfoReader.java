@@ -15,6 +15,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.textview.reader.R;
+import com.textview.reader.util.FileSortUtils;
 import com.textview.reader.util.FileUtils;
 
 import java.io.File;
@@ -48,6 +49,9 @@ public final class ImageInfoReader {
             if (file.exists()) {
                 info.size = exactFileSize(context, file.length());
                 info.modified = formatDate(file.lastModified());
+                long downloaded = FileSortUtils.fileDownloadedTimeMillis(context, file);
+                long created = downloaded > 0L ? downloaded : FileSortUtils.fileCreationTimeMillis(file);
+                if (created > 0L) info.created = formatDate(created);
                 info.readable = String.valueOf(file.canRead());
                 info.writable = String.valueOf(allowFileOps && file.canWrite());
             }
@@ -189,10 +193,27 @@ public final class ImageInfoReader {
                     + (!TextUtils.isEmpty(make) && !TextUtils.isEmpty(model) ? " " : "")
                     + (TextUtils.isEmpty(model) ? "" : model);
         }
-        String date = cleanExif(exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL));
-        if (TextUtils.isEmpty(date)) date = cleanExif(exif.getAttribute(ExifInterface.TAG_DATETIME));
+        String date = formatExifDate(exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL));
+        if (TextUtils.isEmpty(date)) date = formatExifDate(exif.getAttribute(ExifInterface.TAG_DATETIME));
         info.taken = date;
         info.software = cleanExif(exif.getAttribute(ExifInterface.TAG_SOFTWARE));
+    }
+
+    @Nullable
+    private static String formatExifDate(@Nullable String value) {
+        String cleaned = cleanExif(value);
+        if (TextUtils.isEmpty(cleaned)) return null;
+        try {
+            SimpleDateFormat parser = new SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US);
+            parser.setLenient(false);
+            Date parsed = parser.parse(cleaned);
+            if (parsed != null && parsed.getTime() > 0L) return formatDate(parsed.getTime());
+        } catch (Exception ignored) {}
+        if (cleaned.length() >= 10 && cleaned.charAt(4) == ':' && cleaned.charAt(7) == ':') {
+            return cleaned.substring(0, 4) + "-" + cleaned.substring(5, 7)
+                    + "-" + cleaned.substring(8);
+        }
+        return cleaned;
     }
 
     @Nullable

@@ -23,6 +23,7 @@ import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
+import java.text.Normalizer;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -162,7 +163,7 @@ public class FileUtils {
         }
 
         if (result == null) result = uri.getLastPathSegment();
-        return result;
+        return normalizeDisplayFileName(result);
     }
 
     /**
@@ -219,6 +220,8 @@ public class FileUtils {
         if (isWordFileName(lower)) return "Word";
         if (isArchiveFile(fileName)) return "Archive";
         if (isImageFile(fileName)) return "Image";
+        if (isApkFile(fileName)) return "APK";
+        if (isVideoFile(fileName)) return "Video";
         if (isTextFile(fileName)) return "Text";
         return "File";
     }
@@ -230,6 +233,14 @@ public class FileUtils {
                 || isWordFile(fileName)
                 || isArchiveFile(fileName)
                 || isImageFile(fileName);
+    }
+
+    public static boolean isVisibleInAllFilesFilter(String fileName) {
+        return isSupportedReadableFile(fileName) || isExternalOpenableFile(fileName);
+    }
+
+    public static boolean isExternalOpenableFile(String fileName) {
+        return isApkFile(fileName) || isVideoFile(fileName);
     }
 
     public static boolean isArchiveFile(String fileName) {
@@ -264,6 +275,30 @@ public class FileUtils {
                 || lower.endsWith(".heic")
                 || lower.endsWith(".heif")
                 || lower.endsWith(".avif");
+    }
+
+    public static boolean isApkFile(String fileName) {
+        return lowerName(fileName).endsWith(".apk");
+    }
+
+    public static boolean isVideoFile(String fileName) {
+        String lower = lowerName(fileName);
+        return lower.endsWith(".mp4")
+                || lower.endsWith(".m4v")
+                || lower.endsWith(".mkv")
+                || lower.endsWith(".webm")
+                || lower.endsWith(".avi")
+                || lower.endsWith(".mov")
+                || lower.endsWith(".3gp")
+                || lower.endsWith(".3gpp")
+                || lower.endsWith(".ts")
+                || lower.endsWith(".m2ts")
+                || lower.endsWith(".mts")
+                || lower.endsWith(".wmv")
+                || lower.endsWith(".flv")
+                || lower.endsWith(".mpg")
+                || lower.endsWith(".mpeg")
+                || lower.endsWith(".ogv");
     }
 
     public static boolean isPdfFile(String fileName) {
@@ -535,7 +570,21 @@ public class FileUtils {
     }
 
     private static String lowerName(String fileName) {
-        return fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
+        return normalizeDisplayFileName(fileName).toLowerCase(Locale.ROOT);
+    }
+
+    public static String normalizeDisplayFileName(String fileName) {
+        if (fileName == null) return "";
+        String result = fileName.trim();
+        try {
+            result = URLDecoder.decode(result, "UTF-8");
+        } catch (Exception ignored) {
+            // Keep the original string when it is not percent-encoded UTF-8.
+        }
+        try {
+            result = Normalizer.normalize(result, Normalizer.Form.NFC);
+        } catch (Exception ignored) {}
+        return result;
     }
 
     /**
@@ -602,7 +651,7 @@ public class FileUtils {
                 || lower.endsWith(".java") || lower.endsWith(".kt") || lower.endsWith(".kts")
                 || lower.endsWith(".gradle") || lower.endsWith(".groovy")
                 || lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")
-                || lower.endsWith(".ts") || lower.endsWith(".tsx") || lower.endsWith(".jsx")
+                || lower.endsWith(".tsx") || lower.endsWith(".jsx")
                 || lower.endsWith(".vue") || lower.endsWith(".svelte")
                 || lower.endsWith(".py") || lower.endsWith(".pyw") || lower.endsWith(".rb")
                 || lower.endsWith(".go") || lower.endsWith(".rs") || lower.endsWith(".swift")

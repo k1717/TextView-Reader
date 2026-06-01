@@ -22,6 +22,7 @@ public class ZoomImageView extends AppCompatImageView {
         void onSingleTap();
         void onSwipeLeft();
         void onSwipeRight();
+        void onZoomRequested();
     }
 
     private final Matrix matrix = new Matrix();
@@ -53,6 +54,7 @@ public class ZoomImageView extends AppCompatImageView {
             @Override
             public boolean onScaleBegin(@NonNull ScaleGestureDetector detector) {
                 stopImageFling();
+                if (callbacks != null) callbacks.onZoomRequested();
                 disallowParentIntercept(true);
                 return true;
             }
@@ -86,6 +88,7 @@ public class ZoomImageView extends AppCompatImageView {
             @Override
             public boolean onDoubleTap(@NonNull MotionEvent e) {
                 stopImageFling();
+                if (!isZoomed() && callbacks != null) callbacks.onZoomRequested();
                 toggleZoom(e.getX(), e.getY());
                 return true;
             }
@@ -111,10 +114,19 @@ public class ZoomImageView extends AppCompatImageView {
     }
 
     public void setImageBitmapReady(@NonNull Bitmap nextBitmap) {
+        setImageBitmapReady(nextBitmap, false);
+    }
+
+    public void setImageBitmapReady(@NonNull Bitmap nextBitmap, boolean preserveViewport) {
+        if (preserveViewport && imageWidth > 0 && imageHeight > 0 && getWidth() > 0 && getHeight() > 0) {
+            setImageBitmapPreserveViewport(nextBitmap);
+            return;
+        }
         stopImageFling();
         imageWidth = nextBitmap.getWidth();
         imageHeight = nextBitmap.getHeight();
         setImageBitmap(nextBitmap);
+        configureBaseMatrix();
         post(this::configureBaseMatrix);
     }
 
@@ -126,6 +138,7 @@ public class ZoomImageView extends AppCompatImageView {
         if (nextDrawable instanceof AnimatedImageDrawable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             ((AnimatedImageDrawable) nextDrawable).start();
         }
+        configureBaseMatrix();
         post(this::configureBaseMatrix);
     }
 
@@ -238,7 +251,15 @@ public class ZoomImageView extends AppCompatImageView {
         if (imageWidth <= 0 || imageHeight <= 0) return;
         float current = getCurrentScale();
         if (current <= 0f) return;
-        float target = current > minScale * 1.2f ? minScale : Math.min(maxScale, minScale * 2.5f);
+        float target;
+        if (current > minScale * 1.2f) {
+            target = minScale;
+        } else {
+            int contentW = getContentWidth();
+            float fitWidthScale = contentW > 0 ? contentW / (float) imageWidth : minScale;
+            target = Math.max(minScale * 2.5f, fitWidthScale);
+            target = Math.min(maxScale, Math.max(minScale, target));
+        }
         float factor = target / current;
         matrix.postScale(factor, factor, focusX, focusY);
         applyBounds();
@@ -282,6 +303,45 @@ public class ZoomImageView extends AppCompatImageView {
                 maxY);
         postInvalidateOnAnimation();
         return true;
+    }
+
+
+    private void setImageBitmapPreserveViewport(@NonNull Bitmap nextBitmap) {
+        stopImageFling();
+        float oldMinScale = minScale <= 0f ? 1f : minScale;
+        float oldZoomFactor = Math.max(1f, getCurrentScale() / oldMinScale);
+        float normX = 0.5f;
+        float normY = 0.5f;
+        Matrix inverse = new Matrix();
+        if (matrix.invert(inverse)) {
+            float[] center = new float[] {
+                    getPaddingLeft() + getContentWidth() * 0.5f,
+                    getPaddingTop() + getContentHeight() * 0.5f
+            };
+            inverse.mapPoints(center);
+            normX = clamp01(center[0] / Math.max(1f, imageWidth));
+            normY = clamp01(center[1] / Math.max(1f, imageHeight));
+        }
+
+        imageWidth = nextBitmap.getWidth();
+        imageHeight = nextBitmap.getHeight();
+        setImageBitmap(nextBitmap);
+        configureBaseMatrix();
+
+        float current = getCurrentScale();
+        float target = Math.max(minScale, Math.min(maxScale, minScale * oldZoomFactor));
+        if (current > 0f && Math.abs(target - current) > 0.001f) {
+            float cx = getPaddingLeft() + getContentWidth() * 0.5f;
+            float cy = getPaddingTop() + getContentHeight() * 0.5f;
+            matrix.postScale(target / current, target / current, cx, cy);
+        }
+        float[] mapped = new float[] { normX * imageWidth, normY * imageHeight };
+        matrix.mapPoints(mapped);
+        float desiredX = getPaddingLeft() + getContentWidth() * 0.5f;
+        float desiredY = getPaddingTop() + getContentHeight() * 0.5f;
+        matrix.postTranslate(desiredX - mapped[0], desiredY - mapped[1]);
+        applyBounds();
+        postInvalidateOnAnimation();
     }
 
     private float getCurrentScale() {
@@ -352,6 +412,12 @@ public class ZoomImageView extends AppCompatImageView {
     private int clamp(int value, int min, int max) {
         if (value < min) return min;
         if (value > max) return max;
+        return value;
+    }
+
+    private float clamp01(float value) {
+        if (value < 0f) return 0f;
+        if (value > 1f) return 1f;
         return value;
     }
 }

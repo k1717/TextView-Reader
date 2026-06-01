@@ -10,6 +10,7 @@ public final class ImageInfo {
     public String extension;
     public String size;
     public String modified;
+    public String created;
     public String dimensions;
     public String aspectRatio;
     public String megapixels;

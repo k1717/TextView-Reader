@@ -37,7 +37,7 @@ public final class FileTypeFilter {
                 return FileUtils.isImageFile(name);
             case ALL:
             default:
-                return FileUtils.isSupportedReadableFile(name);
+                return FileUtils.isVisibleInAllFilesFilter(name);
         }
     }
 

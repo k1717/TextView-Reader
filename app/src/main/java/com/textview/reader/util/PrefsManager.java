@@ -203,6 +203,7 @@ public class PrefsManager {
                 "reader_text_right_inset_px",
                 "sort_mode",
                 "recent_sort_mode",
+                "file_search_all_folders",
                 "show_hidden",
                 "brightness_override",
                 "brightness_value",
@@ -225,7 +226,11 @@ public class PrefsManager {
                 "main_custom_file_type_chip_selected",
                 "main_custom_reading_card",
                 "main_custom_shortcut_box",
-                "main_custom_drawer_action_icon"
+                "main_custom_drawer_action_icon",
+                "button_order_main_filters",
+                "button_order_txt_reader",
+                "button_order_document_viewer",
+                "button_order_pdf_viewer"
         };
         for (String key : keys) editor.remove(key);
         editor.commit();
@@ -604,6 +609,82 @@ public class PrefsManager {
         prefs.edit().putInt("auto_page_turn_interval_seconds", Math.max(2, Math.min(120, seconds))).apply();
     }
 
+    public String getTtsLanguageTag() {
+        return normalizeTtsLanguageTag(prefs.getString("tts_language_tag", "system"));
+    }
+
+    public void setTtsLanguageTag(String tag) {
+        prefs.edit().putString("tts_language_tag", normalizeTtsLanguageTag(tag)).apply();
+    }
+
+    public String getTtsVoiceName() {
+        String value = prefs.getString("tts_voice_name", "");
+        return value != null ? value : "";
+    }
+
+    public void setTtsVoiceName(String voiceName) {
+        prefs.edit().putString("tts_voice_name", voiceName == null ? "" : voiceName).apply();
+    }
+
+    public int getTtsSpeechRatePercent() {
+        return Math.max(50, Math.min(200, prefs.getInt("tts_speech_rate_percent", 100)));
+    }
+
+    public void setTtsSpeechRatePercent(int percent) {
+        prefs.edit().putInt("tts_speech_rate_percent", Math.max(50, Math.min(200, percent))).apply();
+    }
+
+    public int getTtsPitchPercent() {
+        return Math.max(50, Math.min(200, prefs.getInt("tts_pitch_percent", 100)));
+    }
+
+    public void setTtsPitchPercent(int percent) {
+        prefs.edit().putInt("tts_pitch_percent", Math.max(50, Math.min(200, percent))).apply();
+    }
+
+    public void setTtsLastPlaybackState(String filePath, int charPosition, int pageNumber, boolean continuous) {
+        prefs.edit()
+                .putString("tts_last_file_path", filePath == null ? "" : filePath)
+                .putInt("tts_last_char_position", Math.max(0, charPosition))
+                .putInt("tts_last_page_number", Math.max(1, pageNumber))
+                .putBoolean("tts_last_continuous", continuous)
+                .putLong("tts_last_timestamp", System.currentTimeMillis())
+                .apply();
+    }
+
+    public String getTtsLastFilePath() {
+        String value = prefs.getString("tts_last_file_path", "");
+        return value != null ? value : "";
+    }
+
+    public int getTtsLastCharPosition() {
+        return Math.max(0, prefs.getInt("tts_last_char_position", 0));
+    }
+
+    public int getTtsLastPageNumber() {
+        return Math.max(1, prefs.getInt("tts_last_page_number", 1));
+    }
+
+    public boolean getTtsLastContinuous() {
+        return prefs.getBoolean("tts_last_continuous", false);
+    }
+
+    public long getTtsLastTimestamp() {
+        return Math.max(0L, prefs.getLong("tts_last_timestamp", 0L));
+    }
+
+    private String normalizeTtsLanguageTag(String tag) {
+        if ("ko".equals(tag) || "en".equals(tag) || "ja".equals(tag)
+                || "zh-CN".equals(tag) || "zh-TW".equals(tag)
+                || "es".equals(tag) || "fr".equals(tag) || "de".equals(tag)
+                || "it".equals(tag) || "pt".equals(tag) || "ru".equals(tag)
+                || "ar".equals(tag) || "hi".equals(tag) || "id".equals(tag)
+                || "vi".equals(tag) || "th".equals(tag)) {
+            return tag;
+        }
+        return "system";
+    }
+
     public int getLargeTextPartitionMode() {
         return normalizeLargeTextPartitionMode(
                 prefs.getInt("large_text_partition_mode", LARGE_TEXT_PARTITION_MODE_STANDARD));
@@ -636,6 +717,14 @@ public class PrefsManager {
     public String getLastReaderSearchQuery() { return prefs.getString("last_reader_search_query", ""); }
     public void setLastReaderSearchQuery(String query) {
         prefs.edit().putString("last_reader_search_query", query == null ? "" : query.trim()).apply();
+    }
+
+    public boolean getFileSearchAllFolders() {
+        return prefs.getBoolean("file_search_all_folders", false);
+    }
+
+    public void setFileSearchAllFolders(boolean enabled) {
+        prefs.edit().putBoolean("file_search_all_folders", enabled).apply();
     }
     public void setLastDirectory(String p) { prefs.edit().putString("last_directory", p).apply(); }
 

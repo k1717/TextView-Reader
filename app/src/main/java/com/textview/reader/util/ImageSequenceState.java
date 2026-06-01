@@ -63,7 +63,7 @@ public final class ImageSequenceState {
     @NonNull
     private static String defaultDisplayName(@Nullable String path) {
         if (path == null || path.trim().isEmpty()) return "";
-        return new File(path).getName();
+        return FileUtils.normalizeDisplayFileName(new File(path).getName());
     }
 
     public static final class RemoveResult {

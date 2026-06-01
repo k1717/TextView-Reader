@@ -29,7 +29,7 @@ public class Theme {
     public static final Theme SEPIA = new Theme("sepia", "Sepia",
             0xFF5B4636, 0xFFF4ECD8, 0xFF8B5E3C, true);
     public static final Theme DARK_BLUE = new Theme("dark_blue", "Deep Navy",
-            0xFFC3D2EA, 0xFF050D23, 0xFF82B1FF, 0xFF041630, true);
+            0xFFD7E4FA, 0xFF050D23, 0xFF82B1FF, 0xFF041630, true);
     public static final Theme GREEN_EYE = new Theme("green_eye", "Eye Care",
             0xFF2E4A2E, 0xFFC8E6C9, 0xFF1B5E20, true);
     public static final Theme CREAM = new Theme("cream", "Cream",

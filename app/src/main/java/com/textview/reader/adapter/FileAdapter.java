@@ -1,5 +1,6 @@
 package com.textview.reader.adapter;
 
+import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -22,6 +23,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 import com.textview.reader.R;
 import com.textview.reader.model.ReaderState;
+import com.textview.reader.util.FileSortUtils;
 import com.textview.reader.util.FileUtils;
 import com.textview.reader.util.PrefsManager;
 import java.io.File;
@@ -47,9 +49,11 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
     }
 
     private final List<File> files = new ArrayList<>();
+    private final Context context;
     private OnFileClickListener listener;
     private int sortMode = PrefsManager.SORT_NAME_ASC;
     private boolean sortEnabled = true;
+    private boolean showFilePath = false;
     private int touchCancelGeneration = 0;
     private boolean showReadingProgress = false;
     private boolean selectionMode = false;
@@ -57,12 +61,26 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
     private final Map<String, Integer> readingProgressByPath = new HashMap<>();
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault());
 
+    public FileAdapter() {
+        this.context = null;
+    }
+
+    public FileAdapter(@NonNull Context context) {
+        this.context = context.getApplicationContext();
+    }
+
     public void setListener(OnFileClickListener listener) { this.listener = listener; }
 
     public void setShowReadingProgress(boolean enabled) {
         if (this.showReadingProgress == enabled) return;
         this.showReadingProgress = enabled;
         if (!enabled) readingProgressByPath.clear();
+        if (getItemCount() > 0) notifyItemRangeChanged(0, getItemCount());
+    }
+
+    public void setShowFilePath(boolean enabled) {
+        if (this.showFilePath == enabled) return;
+        this.showFilePath = enabled;
         if (getItemCount() > 0) notifyItemRangeChanged(0, getItemCount());
     }
 
@@ -186,40 +204,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
     }
 
     private void sortFiles(@NonNull List<File> target) {
-        target.sort((a, b) -> {
-            // Directories always first
-            if (a.isDirectory() && !b.isDirectory()) return -1;
-            if (!a.isDirectory() && b.isDirectory()) return 1;
-
-            switch (sortMode) {
-                case PrefsManager.SORT_NAME_DESC:
-                    return compareNames(b, a);
-                case PrefsManager.SORT_DATE_NEW:
-                    return Long.compare(b.lastModified(), a.lastModified());
-                case PrefsManager.SORT_DATE_OLD:
-                    return Long.compare(a.lastModified(), b.lastModified());
-                case PrefsManager.SORT_SIZE_LARGE:
-                    return Long.compare(b.length(), a.length());
-                case PrefsManager.SORT_SIZE_SMALL:
-                    return Long.compare(a.length(), b.length());
-                case PrefsManager.SORT_TYPE:
-                    String extA = getExtension(a.getName());
-                    String extB = getExtension(b.getName());
-                    int cmp = extA.compareToIgnoreCase(extB);
-                    return cmp != 0 ? cmp : compareNames(a, b);
-                default: // SORT_NAME_ASC
-                    return compareNames(a, b);
-            }
-        });
-    }
-
-    private int compareNames(@NonNull File a, @NonNull File b) {
-        return a.getName().compareToIgnoreCase(b.getName());
-    }
-
-    private String getExtension(String name) {
-        int dot = name.lastIndexOf('.');
-        return dot > 0 ? name.substring(dot + 1) : "";
+        FileSortUtils.sortMainFiles(context, target, sortMode);
     }
 
     @NonNull
@@ -286,7 +271,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
     public class ViewHolder extends RecyclerView.ViewHolder {
         ImageView icon;
         LinearLayout textContainer;
-        TextView name, info, progress, selectionMarker;
+        TextView name, info, path, progress, selectionMarker;
 
         private final Handler touchHandler = new Handler(Looper.getMainLooper());
         private float downX;
@@ -305,6 +290,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
             textContainer = v.findViewById(R.id.file_text_container);
             name = v.findViewById(R.id.file_name);
             info = v.findViewById(R.id.file_info);
+            path = v.findViewById(R.id.file_path);
             progress = v.findViewById(R.id.file_progress);
             selectionMarker = v.findViewById(R.id.file_selection_marker);
             tapSlop = Math.max(10, ViewConfiguration.get(v.getContext()).getScaledTouchSlop());
@@ -429,6 +415,13 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
             info.setSingleLine(true);
             info.setEllipsize(TextUtils.TruncateAt.END);
             info.setTextColor(secondaryText);
+            if (path != null) {
+                path.setSingleLine(true);
+                path.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+                path.setTextColor(secondaryText);
+                path.setVisibility(showFilePath ? View.VISIBLE : View.GONE);
+                path.setText(showFilePath ? folderPathFor(file) : "");
+            }
             if (progress != null) {
                 progress.setTextColor(secondaryText);
                 progress.setGravity(android.view.Gravity.END | android.view.Gravity.CENTER_VERTICAL);
@@ -444,7 +437,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
             } else {
                 icon.setImageResource(R.drawable.ic_text_file);
                 String size = FileUtils.formatFileSize(file.length());
-                String date = dateFormat.format(new Date(file.lastModified()));
+                String date = dateFormat.format(new Date(FileSortUtils.fileSortDate(itemView.getContext(), file)));
                 String type = FileUtils.getReadableFileType(file.getName());
                 info.setText(String.format(Locale.getDefault(), "%s  •  %s  •  %s", type, size, date));
             }
@@ -516,11 +509,18 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
             }
             name.setPadding(name.getPaddingLeft(), name.getPaddingTop(), 0, name.getPaddingBottom());
             info.setPadding(info.getPaddingLeft(), info.getPaddingTop(), 0, info.getPaddingBottom());
+            if (path != null) path.setPadding(path.getPaddingLeft(), path.getPaddingTop(), 0, path.getPaddingBottom());
         }
 
         private int getMaxProgressBadgeWidth() {
             int textWidth = (int) Math.ceil(progress.getPaint().measureText("100%"));
             return textWidth + progress.getPaddingLeft() + progress.getPaddingRight();
+        }
+
+        @NonNull
+        private String folderPathFor(@NonNull File file) {
+            File parent = file.getParentFile();
+            return parent != null ? parent.getAbsolutePath() : file.getAbsolutePath();
         }
 
         private int dpToPx(int dp) {

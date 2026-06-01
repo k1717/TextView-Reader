@@ -200,7 +200,9 @@ public class CustomReaderView extends View {
     private final TextPaint paint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG | TextPaint.SUBPIXEL_TEXT_FLAG);
     private final Paint searchHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint activeSearchHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint ttsHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path searchHighlightPath = new Path();
+    private final Path ttsHighlightPath = new Path();
     private final OverScroller scroller;
     private final int touchSlop;
     private final int minFlingVelocity;
@@ -226,6 +228,8 @@ public class CustomReaderView extends View {
     private Typeface typeface = Typeface.DEFAULT;
     private String searchQuery = "";
     private int activeSearchIndex = -1;
+    private int ttsHighlightStart = -1;
+    private int ttsHighlightEnd = -1;
 
     private int readerScrollY = 0;
     private int maxScrollY = 0;
@@ -255,7 +259,9 @@ public class CustomReaderView extends View {
         paint.setTypeface(typeface);
         searchHighlightPaint.setStyle(Paint.Style.FILL);
         activeSearchHighlightPaint.setStyle(Paint.Style.FILL);
+        ttsHighlightPaint.setStyle(Paint.Style.FILL);
         updateSearchHighlightColors();
+        updateTtsHighlightColor();
     }
 
     public void setReaderListener(ReaderListener listener) {
@@ -274,8 +280,11 @@ public class CustomReaderView extends View {
         layout = null;
         pageAnchors.clear();
         searchHighlightPath.reset();
+        ttsHighlightPath.reset();
         searchQuery = "";
         activeSearchIndex = -1;
+        ttsHighlightStart = -1;
+        ttsHighlightEnd = -1;
         readerScrollY = 0;
         maxScrollY = 0;
         invalidate();
@@ -283,6 +292,7 @@ public class CustomReaderView extends View {
 
     public void setTextContent(String value) {
         text = value != null ? value : "";
+        clearTtsHighlight();
         readerScrollY = 0;
         rebuildLayout();
         invalidate();
@@ -291,6 +301,7 @@ public class CustomReaderView extends View {
 
     public void setTextContentAtVisualEnd(String value) {
         text = value != null ? value : "";
+        clearTtsHighlight();
         readerScrollY = 0;
         rebuildLayout();
         ensurePageAnchors();
@@ -335,6 +346,7 @@ public class CustomReaderView extends View {
         paint.setTextSize(spToPx(fontSizeSp));
         paint.setTypeface(this.typeface);
         updateSearchHighlightColors();
+        updateTtsHighlightColor();
 
         if (layoutAffectingChange) {
             rebuildLayout();
@@ -402,15 +414,67 @@ public class CustomReaderView extends View {
         invalidate();
     }
 
+    public void setTtsHighlightRange(int startChar, int endChar) {
+        int safeStart = Math.max(0, Math.min(text.length(), startChar));
+        int safeEnd = Math.max(safeStart, Math.min(text.length(), endChar));
+        if (safeEnd <= safeStart) {
+            clearTtsHighlight();
+            return;
+        }
+        ttsHighlightStart = safeStart;
+        ttsHighlightEnd = safeEnd;
+        invalidate();
+    }
+
+    public void clearTtsHighlight() {
+        if (ttsHighlightStart < 0 && ttsHighlightEnd < 0) return;
+        ttsHighlightStart = -1;
+        ttsHighlightEnd = -1;
+        ttsHighlightPath.reset();
+        invalidate();
+    }
+
     private void updateSearchHighlightColors() {
         boolean light = isLightColor(backgroundColor);
-        if (light) {
-            searchHighlightPaint.setColor(Color.argb(88, 255, 216, 96));
-            activeSearchHighlightPaint.setColor(Color.argb(150, 255, 184, 56));
+        int passive = themeSearchColor(light ? 0.32f : 0.38f, light ? 0.82f : 1.20f);
+        int active = themeSearchColor(light ? 0.48f : 0.56f, light ? 0.66f : 1.34f);
+        searchHighlightPaint.setColor(translucentColor(passive, light ? 72 : 88));
+        activeSearchHighlightPaint.setColor(translucentColor(active, light ? 118 : 138));
+    }
+
+    private void updateTtsHighlightColor() {
+        if (isLightColor(backgroundColor)) {
+            ttsHighlightPaint.setColor(Color.argb(92, 72, 142, 255));
         } else {
-            searchHighlightPaint.setColor(Color.argb(108, 255, 221, 105));
-            activeSearchHighlightPaint.setColor(Color.argb(170, 255, 195, 75));
+            ttsHighlightPaint.setColor(Color.argb(105, 110, 172, 255));
         }
+    }
+
+    private int translucentColor(int color, int alpha) {
+        return Color.argb(Math.max(0, Math.min(255, alpha)),
+                Color.red(color),
+                Color.green(color),
+                Color.blue(color));
+    }
+
+    private int themeSearchColor(float textMix, float contrastFactor) {
+        int blended = UiColorUtils.blendColors(backgroundColor, textColor, textMix);
+        return scaleColorAroundBackground(blended, contrastFactor);
+    }
+
+    private int scaleColorAroundBackground(int color, float factor) {
+        int r = scaleChannelAroundBackground(Color.red(color), Color.red(backgroundColor), factor);
+        int g = scaleChannelAroundBackground(Color.green(color), Color.green(backgroundColor), factor);
+        int b = scaleChannelAroundBackground(Color.blue(color), Color.blue(backgroundColor), factor);
+        return Color.rgb(r, g, b);
+    }
+
+    private int scaleChannelAroundBackground(int channel, int bgChannel, float factor) {
+        return clampColor(Math.round(bgChannel + (channel - bgChannel) * factor));
+    }
+
+    private int clampColor(int value) {
+        return Math.max(0, Math.min(255, value));
     }
 
     private boolean isLightColor(int color) {
@@ -487,9 +551,32 @@ public class CustomReaderView extends View {
                 getFullLineClipBottom());
         canvas.translate(getPaddingLeft() + marginHorizontalPx + leftTextInsetPx,
                 viewportTop + marginVerticalPx - visualScrollY);
+        drawTtsHighlight(canvas);
         drawSearchHighlights(canvas);
         layout.draw(canvas);
         canvas.restore();
+    }
+
+    private void drawTtsHighlight(Canvas canvas) {
+        if (layout == null || ttsHighlightStart < 0 || ttsHighlightEnd <= ttsHighlightStart) return;
+
+        int start = Math.max(0, Math.min(text.length(), ttsHighlightStart));
+        int end = Math.max(start, Math.min(text.length(), ttsHighlightEnd));
+        if (end <= start) return;
+
+        int lineCount = layout.getLineCount();
+        if (lineCount <= 0) return;
+        int startLine = layout.getLineForOffset(start);
+        int endLine = layout.getLineForOffset(Math.max(start, end - 1));
+        int layoutTopY = Math.max(0, readerScrollY - marginVerticalPx);
+        int layoutBottomY = Math.min(layout.getHeight(), layoutTopY + getViewportHeight());
+        if (layout.getLineBottom(startLine) < layoutTopY || layout.getLineTop(endLine) > layoutBottomY) {
+            return;
+        }
+
+        ttsHighlightPath.reset();
+        layout.getSelectionPath(start, end, ttsHighlightPath);
+        canvas.drawPath(ttsHighlightPath, ttsHighlightPaint);
     }
 
     private void drawSearchHighlights(Canvas canvas) {
