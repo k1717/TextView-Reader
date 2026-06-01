@@ -362,6 +362,7 @@ Open a text, PDF, EPUB, or Word file to get started.</string>
     <string name="shortcut_added">Shortcut added</string>
     <string name="shortcut_removed">Shortcut removed</string>
     <string name="folder_shortcuts">Shortcuts</string>
+    <string name="shortcut_placeholder">Shortcut will be added here</string>
     <string name="drawer_folders">Folders</string>
     <string name="page_status_align_hidden">Do not show</string>
     <string name="clear_all">Clear</string>

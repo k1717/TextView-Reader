@@ -362,6 +362,7 @@
     <string name="shortcut_added">바로가기를 추가했습니다</string>
     <string name="shortcut_removed">바로가기를 제거했습니다</string>
     <string name="folder_shortcuts">바로가기</string>
+    <string name="shortcut_placeholder">바로가기가 여기에 추가됩니다</string>
     <string name="drawer_folders">폴더</string>
     <string name="page_status_align_hidden">표시 안 함</string>
     <string name="clear_all">지우기</string>
