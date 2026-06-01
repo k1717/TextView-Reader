@@ -90,6 +90,11 @@ final class ImageReaderSliderController {
         updateLabel(safeIndex, itemCount);
     }
 
+    int reservedViewportBottomInset(int itemCount) {
+        if (itemCount <= 1) return bottomInset;
+        return activity.dpToPx(82) + bottomInset;
+    }
+
     private void updateLabel(int index, int itemCount) {
         if (imageSliderLabel == null) return;
         if (itemCount <= 1) {

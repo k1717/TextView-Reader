@@ -18,7 +18,7 @@ final class MainDrawerGestureController {
     }
 
     boolean handleProportionalDrawerEdgeDrag(@NonNull MotionEvent event) {
-        if (activity.drawerLayout == null || activity.drawerLayout.isDrawerOpen(GravityCompat.START)) {
+        if (activity.drawerLayout == null) {
             resetDrawerSwipeState();
             return false;
         }
@@ -26,6 +26,12 @@ final class MainDrawerGestureController {
         View drawerView = activity.findViewById(R.id.nav_drawer);
         if (drawerView == null || drawerView.getWidth() <= 0) {
             return false;
+        }
+
+        if (!activity.drawerSwipeTracking
+                && !activity.drawerManualDragging
+                && activity.drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            return handleOpenDrawerDismissGesture(drawerView, event);
         }
 
         switch (event.getActionMasked()) {
@@ -36,9 +42,7 @@ final class MainDrawerGestureController {
                 activity.drawerManualDragging = false;
                 // No edge-only border: drawer gestures may start anywhere on the main screen,
                 // except controls that need horizontal/typing gestures themselves.
-                activity.drawerSwipeTracking = !isTouchInsideView(activity.fileSearchInput, event)
-                        && !isTouchInsideView(activity.fileSearchBar, event)
-                        && !isTouchInsideView(activity.fileTypeFilterScroll, event);
+                activity.drawerSwipeTracking = !isTouchInsideMainBottomControls(event);
                 return false;
 
             case MotionEvent.ACTION_MOVE:
@@ -103,6 +107,69 @@ final class MainDrawerGestureController {
         }
     }
 
+    private boolean isTouchInsideMainBottomControls(@NonNull MotionEvent event) {
+        return isTouchInsideView(activity.fileSearchBar, event)
+                || isTouchInsideView(activity.fileTypeFilterScroll, event)
+                || isTouchInsideView(activity.filterAllChip, event)
+                || isTouchInsideView(activity.filterGeneralChip, event)
+                || isTouchInsideView(activity.filterTxtChip, event)
+                || isTouchInsideView(activity.filterArchiveChip, event)
+                || isTouchInsideView(activity.filterPdfChip, event)
+                || isTouchInsideView(activity.filterEpubChip, event)
+                || isTouchInsideView(activity.filterWordChip, event)
+                || isTouchInsideView(activity.filterImageChip, event)
+                || isTouchInsideView(activity.fileSearchInput, event)
+                || isTouchInsideView(activity.fileSearchScopeButton, event)
+                || isTouchInsideView(activity.fileSearchClearButton, event)
+                || isTouchInsideView(activity.fileSortButton, event);
+    }
+
+    private boolean handleOpenDrawerDismissGesture(@NonNull View drawerView, @NonNull MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                if (isTouchInsideView(drawerView, event)) {
+                    resetDrawerSwipeState();
+                    return false;
+                }
+                activity.drawerSwipeStartX = event.getX();
+                activity.drawerSwipeStartY = event.getY();
+                activity.drawerSwipeTracking = true;
+                activity.drawerManualDragging = false;
+                activity.drawerSwipeOpened = false;
+                return true;
+
+            case MotionEvent.ACTION_MOVE:
+                if (!activity.drawerSwipeTracking) return false;
+
+                float dx = event.getX() - activity.drawerSwipeStartX;
+                float dy = event.getY() - activity.drawerSwipeStartY;
+                float absDx = Math.abs(dx);
+                float absDy = Math.abs(dy);
+                if (absDx > activity.drawerSwipeTouchSlop && absDx > absDy * 1.10f) {
+                    activity.drawerManualDragging = true;
+                }
+                if (dx < -Math.max(activity.dpToPx(24), activity.drawerSwipeTouchSlop * 1.5f)
+                        && absDx > absDy * 1.10f) {
+                    closeDrawerReliably(drawerView);
+                    resetDrawerSwipeState();
+                }
+                return true;
+
+            case MotionEvent.ACTION_UP:
+                if (!activity.drawerSwipeTracking) return false;
+                closeDrawerReliably(drawerView);
+                resetDrawerSwipeState();
+                return true;
+
+            case MotionEvent.ACTION_CANCEL:
+                resetDrawerSwipeState();
+                return false;
+
+            default:
+                return activity.drawerSwipeTracking;
+        }
+    }
+
     private void applyDrawerManualOffset(@NonNull View drawerView, float offset) {
         activity.drawerSlideOffset = offset;
 
@@ -160,6 +227,15 @@ final class MainDrawerGestureController {
         }
 
         View drawerView = activity.findViewById(R.id.nav_drawer);
+        closeDrawerReliably(drawerView);
+    }
+
+    private void closeDrawerReliably(View drawerView) {
+        if (activity.drawerLayout == null) {
+            resetDrawerSwipeState();
+            return;
+        }
+
         activity.drawerClosePartialOnRelease = false;
         activity.drawerForceSettling = false;
         resetDrawerSwipeState();

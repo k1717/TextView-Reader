@@ -16,7 +16,9 @@ final class ReaderLargeTextPagingController {
     }
 
     void pageBy(int direction, boolean fromAutoPageTurn) {
-        if (!fromAutoPageTurn) activity.stopAutoPageTurnForManualNavigation();
+        if (!fromAutoPageTurn) {
+            activity.stopAutoPageTurnForManualNavigation();
+        }
         if (activity.readerView == null || direction == 0) return;
 
         if (activity.largeTextEstimateActive && activity.largeTextPartitionSwitchState.isInProgress()) {

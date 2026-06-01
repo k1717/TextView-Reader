@@ -123,6 +123,8 @@ final class MainActivityStartupController {
         activity.parentFolderButton = activity.findViewById(R.id.parent_folder_button);
         activity.setupParentFolderButton();
         activity.emptyText = activity.findViewById(R.id.empty_text);
+        activity.fileFastScrollRail = activity.findViewById(R.id.file_fast_scroll_rail);
+        activity.fileFastScrollThumb = activity.findViewById(R.id.file_fast_scroll_thumb);
         activity.recentSection = activity.findViewById(R.id.recent_section);
         activity.browserSection = activity.findViewById(R.id.main_content_container);
         activity.recentRecyclerView = activity.findViewById(R.id.recent_list);
@@ -131,14 +133,15 @@ final class MainActivityStartupController {
     }
 
     private void bindFileLists() {
-        activity.fileAdapter = new FileAdapter();
+        activity.fileAdapter = new FileAdapter(activity);
         activity.fileAdapter.setListener(activity);
         activity.fileAdapter.setSortMode(activity.prefs.getSortMode());
         activity.fileRecyclerView.setLayoutManager(new LinearLayoutManager(activity));
         activity.fileRecyclerView.setItemAnimator(null);
         activity.fileRecyclerView.setAdapter(activity.fileAdapter);
+        new MainFileFastScrollController(activity).install();
 
-        activity.recentAdapter = new FileAdapter();
+        activity.recentAdapter = new FileAdapter(activity);
         activity.recentAdapter.setListener(activity);
         activity.recentAdapter.setSortEnabled(false);
         activity.recentAdapter.setShowReadingProgress(true);

@@ -1,6 +1,7 @@
 package com.textview.reader;
 
 import android.app.Dialog;
+import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
@@ -13,12 +14,15 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import com.textview.reader.util.FileSortUtils;
 import com.textview.reader.util.FileUtils;
+import com.textview.reader.util.PrefsManager;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 final class MainImageOpenController {
@@ -29,9 +33,72 @@ final class MainImageOpenController {
         this.activity = activity;
     }
 
+    void attachDeferredImageViewerSequence(@NonNull Intent intent, @NonNull File selected) {
+        final String selectedPath = selected.getAbsolutePath();
+        final ArrayList<File> visibleSnapshot = activity.fileAdapter != null
+                ? activity.fileAdapter.getFilesSnapshot()
+                : null;
+        final ArrayList<String> visiblePaths = buildVisibleImageResultPaths(selectedPath, visibleSnapshot);
+        if (!visiblePaths.isEmpty()) {
+            String token = ImageSequenceHandoffStore.put(() ->
+                    new ImageSequenceHandoffStore.Sequence(visiblePaths, displayNamesFor(visiblePaths), null));
+            intent.putExtra(ImageReaderActivity.EXTRA_SEQUENCE_HANDOFF_TOKEN, token);
+            return;
+        }
+
+        final int sortMode = activity.prefs != null ? activity.prefs.getSortMode() : PrefsManager.SORT_NAME_ASC;
+        final Context appContext = activity.getApplicationContext();
+
+        String token = ImageSequenceHandoffStore.put(() -> {
+            ArrayList<String> paths = buildImageSiblingPaths(appContext, selectedPath, sortMode);
+            if (paths.isEmpty()) paths.add(selectedPath);
+            return new ImageSequenceHandoffStore.Sequence(paths, displayNamesFor(paths), null);
+        });
+        intent.putExtra(ImageReaderActivity.EXTRA_SEQUENCE_HANDOFF_TOKEN, token);
+    }
+
+    @NonNull
+    ArrayList<String> buildImageViewerPaths(@NonNull File selected) {
+        ArrayList<String> visible = buildVisibleImageResultPaths(selected);
+        return visible.isEmpty() ? buildImageSiblingPaths(selected) : visible;
+    }
+
+    @NonNull
+    private ArrayList<String> buildVisibleImageResultPaths(@NonNull File selected) {
+        ArrayList<File> snapshot = activity.fileAdapter != null ? activity.fileAdapter.getFilesSnapshot() : null;
+        return buildVisibleImageResultPaths(selected.getAbsolutePath(), snapshot);
+    }
+
+    @NonNull
+    private static ArrayList<String> buildVisibleImageResultPaths(@NonNull String selectedPath,
+                                                                  @Nullable ArrayList<File> snapshot) {
+        if (snapshot == null) return new ArrayList<>();
+        LinkedHashSet<String> ordered = new LinkedHashSet<>();
+
+        boolean containsSelected = false;
+        for (File file : snapshot) {
+            if (file == null || !file.isFile() || !FileUtils.isImageFile(file.getName())) continue;
+            String path = file.getAbsolutePath();
+            if (selectedPath.equals(path)) containsSelected = true;
+            ordered.add(path);
+        }
+
+        if (!containsSelected) return new ArrayList<>();
+        return new ArrayList<>(ordered);
+    }
+
     @NonNull
     ArrayList<String> buildImageSiblingPaths(@NonNull File selected) {
+        int sortMode = activity.prefs != null ? activity.prefs.getSortMode() : PrefsManager.SORT_NAME_ASC;
+        return buildImageSiblingPaths(activity, selected.getAbsolutePath(), sortMode);
+    }
+
+    @NonNull
+    private static ArrayList<String> buildImageSiblingPaths(@NonNull Context context,
+                                                            @NonNull String selectedPath,
+                                                            int sortMode) {
         ArrayList<String> paths = new ArrayList<>();
+        File selected = new File(selectedPath);
         File parent = selected.getParentFile();
         if (parent == null || !parent.exists() || !parent.isDirectory() || !parent.canRead()) {
             paths.add(selected.getAbsolutePath());
@@ -48,10 +115,17 @@ final class MainImageOpenController {
                 images.add(child);
             }
         }
-        Collections.sort(images, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+        FileSortUtils.sortMainFiles(context, images, sortMode);
         for (File image : images) paths.add(image.getAbsolutePath());
         if (!paths.contains(selected.getAbsolutePath())) paths.add(selected.getAbsolutePath());
         return paths;
+    }
+
+    @NonNull
+    private static ArrayList<String> displayNamesFor(@NonNull ArrayList<String> paths) {
+        ArrayList<String> names = new ArrayList<>(paths.size());
+        for (String path : paths) names.add(FileUtils.normalizeDisplayFileName(new File(path).getName()));
+        return names;
     }
 
     void startWithLoading(@NonNull Intent intent) {

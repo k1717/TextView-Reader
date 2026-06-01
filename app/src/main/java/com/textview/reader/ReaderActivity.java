@@ -294,6 +294,15 @@ public class ReaderActivity extends AppCompatActivity {
         return readerActionController;
     }
 
+    private ReaderTtsController readerTtsController;
+
+    private ReaderTtsController readerTts() {
+        if (readerTtsController == null) {
+            readerTtsController = new ReaderTtsController(this);
+        }
+        return readerTtsController;
+    }
+
     private ReaderPageJumpController readerPageJumpController;
 
     private ReaderPageJumpController pageJumps() {
@@ -751,6 +760,17 @@ public class ReaderActivity extends AppCompatActivity {
         new ReaderToolsDialogController(this).showAutoPageTurnDialog();
     }
 
+    void showTtsDialog() {
+        readerTts().showDialog();
+    }
+
+    void handleTtsPlaybackCommand(@NonNull String action) {
+        readerTts().handlePlaybackCommand(action);
+    }
+
+    boolean isTtsActive() {
+        return readerTtsController != null && readerTtsController.isActive();
+    }
 
     void startAutoPageTurn() {
         readerActions().startAutoPageTurn();
@@ -762,8 +782,23 @@ public class ReaderActivity extends AppCompatActivity {
 
     void stopAutoPageTurnForManualNavigation() {
         readerActions().stopAutoPageTurnForManualNavigation();
+        stopTtsForManualNavigation();
     }
 
+    void stopTts(boolean showToast) {
+        if (readerTtsController != null) readerTtsController.stop(showToast);
+    }
+
+    void stopTtsForManualNavigation() {
+        if (readerTtsController != null) readerTtsController.stopForManualNavigation();
+    }
+
+    void releaseTts() {
+        if (readerTtsController != null) {
+            readerTtsController.release();
+            readerTtsController = null;
+        }
+    }
 
     void loadFileFromIntent(@NonNull Intent sourceIntent) {
         fileLoader().loadFileFromIntent(sourceIntent);

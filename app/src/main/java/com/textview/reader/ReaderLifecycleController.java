@@ -23,6 +23,9 @@ final class ReaderLifecycleController {
 
     void onPause() {
         activity.stopAutoPageTurn(false);
+        if (!activity.isTtsActive()) {
+            activity.stopTts(false);
+        }
         activity.saveReadingState();
         if (!activity.backgroundTextMemoryReleased) {
             activity.cacheLoadedTextSnapshot();
@@ -30,10 +33,15 @@ final class ReaderLifecycleController {
     }
 
     void onStop() {
-        activity.scheduleBackgroundMemoryTrim();
+        if (!activity.isTtsActive()) {
+            activity.scheduleBackgroundMemoryTrim();
+        }
     }
 
     void onTrimMemory(int level) {
+        if (activity.isTtsActive()) {
+            return;
+        }
         if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
             activity.scheduleBackgroundMemoryTrim();
         } else if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
@@ -53,6 +61,7 @@ final class ReaderLifecycleController {
             activity.autoPageTurnController.release();
             activity.autoPageTurnController = null;
         }
+        activity.releaseTts();
         activity.handler.removeCallbacksAndMessages(null);
         if (activity.readerShellController != null) activity.readerShellController.cancelViewerBackToast();
         activity.saveReadingState();
@@ -67,6 +76,7 @@ final class ReaderLifecycleController {
         if (activity.isFinishing()) {
             activity.clearLoadedTextSnapshot();
         }
+        TtsPlaybackBridge.unregister(activity);
         ViewerRegistry.unregister(activity);
     }
 }

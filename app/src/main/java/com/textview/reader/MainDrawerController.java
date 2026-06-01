@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -381,22 +382,54 @@ final class MainDrawerController {
 
         if (openFile != null) {
             openFile.setOnClickListener(v -> {
-                activity.drawerLayout.closeDrawer(GravityCompat.START);
-                activity.openFileLauncher.launch(getSupportedOpenMimeTypes());
+                closeDrawerThenRun(() ->
+                        activity.openFileLauncher.launch(getSupportedOpenMimeTypes()));
             });
         }
         if (bookmarks != null) {
             bookmarks.setOnClickListener(v -> {
-                activity.drawerLayout.closeDrawer(GravityCompat.START);
-                activity.startActivity(new Intent(activity, BookmarkListActivity.class));
+                closeDrawerThenRun(() ->
+                        activity.startActivity(new Intent(activity, BookmarkListActivity.class)));
             });
         }
         if (settings != null) {
             settings.setOnClickListener(v -> {
-                activity.drawerLayout.closeDrawer(GravityCompat.START);
-                activity.startActivity(new Intent(activity, SettingsActivity.class));
+                closeDrawerThenRun(() ->
+                        activity.startActivity(new Intent(activity, SettingsActivity.class)));
             });
         }
+    }
+
+    private void closeDrawerThenRun(@NonNull Runnable action) {
+        if (activity.drawerLayout == null
+                || !activity.drawerLayout.isDrawerVisible(GravityCompat.START)) {
+            action.run();
+            return;
+        }
+
+        final boolean[] ran = {false};
+        DrawerLayout.SimpleDrawerListener listener = new DrawerLayout.SimpleDrawerListener() {
+            @Override
+            public void onDrawerClosed(@NonNull View drawerView) {
+                runOnce();
+            }
+
+            private void runOnce() {
+                if (ran[0]) return;
+                ran[0] = true;
+                activity.drawerLayout.removeDrawerListener(this);
+                action.run();
+            }
+        };
+
+        activity.drawerLayout.addDrawerListener(listener);
+        activity.closeDrawerAfterSelection();
+        activity.drawerLayout.postDelayed(() -> {
+            if (ran[0] || activity.drawerLayout == null) return;
+            ran[0] = true;
+            activity.drawerLayout.removeDrawerListener(listener);
+            action.run();
+        }, 260L);
     }
 
     private String[] getSupportedOpenMimeTypes() {

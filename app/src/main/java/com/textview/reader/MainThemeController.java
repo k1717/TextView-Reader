@@ -126,6 +126,7 @@ final class MainThemeController {
             }
         }
         if (activity.fileSearchClearButton != null) activity.fileSearchClearButton.setTextColor(fg);
+        if (activity.fileSearchScopeButton != null) activity.updateSearchScopeButton();
         if (activity.fileSortButton != null) {
             Drawable sortIcon = ContextCompat.getDrawable(activity, R.drawable.ic_sort);
             if (sortIcon != null) {
