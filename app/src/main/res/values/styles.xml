@@ -42,4 +42,15 @@
         <item name="android:textSelectHandleRight">@drawable/text_select_handle_right_white</item>
     </style>
 
+
+    <style name="TextAppearance.TextView.ImageViewer.Title" parent="TextAppearance.Widget.AppCompat.Toolbar.Title">
+        <item name="android:textSize">17sp</item>
+        <item name="android:textColor">#FFFFFFFF</item>
+    </style>
+
+    <style name="TextAppearance.TextView.ImageViewer.Subtitle" parent="TextAppearance.Widget.AppCompat.Toolbar.Subtitle">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">#FFD2D2D2</item>
+    </style>
+
 </resources>
