@@ -1,16 +1,46 @@
-# TextView Reader 2.2.1 GitHub Upload Notes
+# TextView Reader 2.2.2 GitHub Upload Notes
 
-Use this package as the GitHub submission source for **TextView Reader 2.2.1**.
+Use this package as the GitHub submission source for **TextView Reader 2.2.2**.
 
 This source package uses Android metadata:
 
-- `versionCode 2210`
-- `versionName "2.2.1"`
+- `versionCode 2220`
+- `versionName "2.2.2"`
 - package ID `com.textview.reader`
 
-## 2.2.1 release summary
+## 2.2.2 release summary
 
-- Android metadata remains `versionCode 2210` and `versionName "2.2.1"`.
+- Android metadata is `versionCode 2220` and `versionName "2.2.2"`.
+- TXT reader includes text-to-speech controls for reading the current page or continuously reading forward with Android's built-in TTS engine, plus saved language, voice, speed, pitch, voice-install shortcuts, active segment highlighting, saved TTS playback position state, foreground notification controls, and media-button routing.
+- Image viewer swipe/slider order follows the active file/archive sort mode, image fit bounds avoid the visible top toolbar and bottom image slider, placement during image changes is stabilized, and the orientation icon follows the current mode.
+- Images opened from main search/filter results use the visible image result set as the viewer sequence, keeping slider counts aligned with the IMG/search result list.
+- Image viewer startup now avoids large path-list Intent payloads by opening the selected image first and attaching the full slider/swipe sequence afterward through an in-memory handoff, while reserving slider space so image placement stays stable.
+- Archive image viewing opens the selected ZIP/CBZ image first, lazily extracts later entries on demand, prefetches nearby entries, and avoids oversized Intent payloads that could crash large archive image sequences.
+- Image preview/detail decode policy is set to roughly 12MP preview and 48MP detail caps, with original decode for images below those thresholds and OOM fallback for large images.
+- Large images show a fast preview first and request higher-detail decode on zoom, while normal-sized images still load directly at original quality.
+- Image viewer no longer builds a temporary previous/current/next sequence; adjacent movement stays disabled until the full deferred sequence is ready, and toolbar title text is slightly smaller.
+- Main and recent file lists include a right-edge drag fast scroller for large folders and unbounded search results.
+- Current-folder type filters keep folders above matching files for navigable IMG/PDF/TXT/etc. filtering.
+- Filtered folder browsing now remembers where the type filter was enabled, preserving it when backing out of subfolders entered under the filter and clearing it when backing out from the activation folder.
+- Wider folder search now scans downward from the current folder instead of jumping up to parent storage roots.
+- Current-folder typed searches also publish partial results progressively while scanning continues.
+- Empty-query `All` scans also publish partial results progressively when wider folder scope is enabled.
+- Large folder navigation now progressively displays discovered entries before the final sorted list is ready. Newly tapped folders take priority over stale queued folder-load work during progressive loading.
+- The All file filter includes APK and common video files, including MPEG transport stream `.ts`, with short taps routed to Android package install or external video playback apps.
+- Main file search includes an icon scope toggle beside the search field, shows parent-folder paths in search results, and uses a centered loading spinner while scanning. The All-folders scope icon has been redrawn to remove darker vector-overlap seams.
+- Current-folder and All-folders file search no longer apply a result cap, so large folders are not cut off at 300 items.
+- Date sorting and file-row dates prefer Android MediaStore download/added time when available, falling back to filesystem created time and then modified time; image info separates modified, created/downloaded, and EXIF taken dates.
+- TXT search highlights use theme-blended translucent colors to better match custom reading themes.
+- TXT search highlighting preserves a visible theme-derived secondary tone for other matches and a stronger related tone for the active match.
+- The built-in Deep Navy reading-theme body text is slightly brighter (`#D7E4FA`) for cleaner long-form readability.
+- Short feedback toasts are centralized through `ShortToast` and use an app-wide roughly 700ms display window.
+- Settings include configurable button/icon order for main filters and TXT / EPUB-Word / PDF viewer controls. The editor uses compact one-line rows and highlights TXT default-visible slots.
+- Sorting the current folder no longer triggers a full folder reload, recent-file mode hides the IMG chip, TXT search action buttons are text-only, and fast-scroll track styling avoids doubled dragbars.
+- Tablet and large-screen drawer dismissal is improved so outside taps and left swipes from the outside scrim close the open drawer reliably, while bottom file-type sliding chips remain excluded from drawer-open gestures and drawer bottom actions transition more smoothly.
+- This source is based on the 2.2.1 GitHub-ready cleanup package.
+
+## 2.2.1 baseline summary
+
 - Main file operations now include containing-folder jump, cut/copy queueing, archive extraction queueing, conflict handling, pending-action dropdown cleanup, and tablet drawer close fixes.
 - Archive support covers ZIP/CBZ browsing, encrypted ZIP/7z prompts, standard split ZIP, supported numeric `.001` split archive families, TAR-family formats, and single-file compressor streams. RAR/CBR and lzip `.lz` remain unsupported.
 - TXT large-file navigation, final page movement, bookmark page metadata, partition switching, and exact page-model logic are split into dedicated controllers and utility tests.
@@ -57,14 +87,8 @@ Highlights:
 ## Suggested commit message
 
 ```text
-Update TextView Reader 2.2.1 source and docs
+Update TextView Reader 2.2.2 source and docs
 ```
-
-## License / notice files
-
-Keep the root `LICENSE` and `THIRD_PARTY_NOTICES.md` files in the repository. `THIRD_PARTY_NOTICES.md` lists runtime dependencies, test dependencies, Android/Gradle build tooling, and the Foojay toolchain resolver plugin used by `settings.gradle`.
-
-If publishing an APK/AAB as a GitHub Release asset, include `LICENSE` and `THIRD_PARTY_NOTICES.md` with the release assets or link them clearly from the release description. The release build may exclude duplicate dependency `META-INF/LICENSE*` / `META-INF/NOTICE*` resources from the packaged app, so the public release page should carry the notice files separately.
 
 ## Safe upload contents
 
@@ -79,7 +103,6 @@ gradle/
 README.md
 CHANGELOG.md
 LICENSE
-THIRD_PARTY_NOTICES.md
 PRIVACY.md
 CONTRIBUTING.md
 ANDROID_STUDIO_SETUP_FOR_BEGINNERS.md
@@ -145,7 +168,7 @@ captures/
 6. Click **Add file > Upload files**.
 7. Drag the selected contents into GitHub.
 8. Wait until GitHub finishes processing the files.
-9. Commit with the suggested message above, or a similarly concise 2.2.1 update message.
+9. Commit with the suggested message above, or a similarly concise 2.2.2 update message.
 
 ## Important limitation
 

@@ -18,3 +18,8 @@ Open the repository root folder in Android Studio, not the `app/` folder, then c
 ## Current Gradle warnings
 
 Android Gradle Plugin 9.x may print deprecation or sync-performance warnings for some legacy compatibility flags in `gradle.properties`, such as Jetifier or build-feature defaults. Those warnings are not the same as a Java compile error. For release work, fix the first red compile/test failure first, then clean Gradle warnings separately.
+
+
+## Java toolchain resolver
+
+`settings.gradle` applies `org.gradle.toolchains.foojay-resolver-convention` version `1.0.0` so Gradle can resolve Java toolchains during local builds. This is a build-time plugin and is recorded in `THIRD_PARTY_NOTICES.md`.

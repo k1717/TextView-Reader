@@ -1,11 +1,11 @@
 # Public release build checklist
 
-This source package is prepared for public GitHub distribution of TextView Reader 2.2.1.
+This source package is prepared for public GitHub distribution of TextView Reader 2.2.2.
 The app version metadata remains:
 
 ```text
-versionCode 2210
-versionName "2.2.1"
+versionCode 2220
+versionName "2.2.2"
 ```
 
 ## Keystore policy
@@ -78,18 +78,7 @@ Expected results:
 - R8/minify and resource shrinking are enabled for release builds.
 - JUniversalChardet remains active for TXT encoding detection.
 - Network cleartext is disabled, and WebView resource interception explicitly blocks non-local requests.
-- Keep `LICENSE` and `THIRD_PARTY_NOTICES.md` in the public source tree.
-
-## Binary-release notice files
-
-If an APK/AAB is attached to a GitHub Release, attach or link the following files with the release materials:
-
-```text
-LICENSE
-THIRD_PARTY_NOTICES.md
-```
-
-The Android packaging configuration excludes duplicate `META-INF/LICENSE*` and `META-INF/NOTICE*` resources from the packaged app to avoid merge conflicts. Therefore, do not rely on the APK/AAB alone as the only third-party notice carrier. Keep the root license and notice files available beside the binary release or in the release description.
+- Short feedback toasts are centralized in `ShortToast` with a roughly 700ms display window; longer user-facing warnings remain explicit long toasts where needed.
 
 ## Pre-upload source check
 
@@ -117,3 +106,11 @@ captures/
 *.hprof
 *.log
 ```
+
+## 2.2.2 focused QA
+
+
+Before publishing this 2.2.2 source, verify image preview/detail policy on a large ZIP/CBZ: the selected image should open quickly, preview decode should remain bounded near the 12MP preview policy, zoom should request higher detail up to the 48MP detail policy, and paging should lazy-extract or prefetch adjacent images without viewer crashes.
+
+
+Also verify Settings > Button / icon order for the main filter strip and TXT / EPUB-Word / PDF viewer controls, including reset-to-default and Settings return/apply behavior.

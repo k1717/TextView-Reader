@@ -1,4 +1,71 @@
 
+## 2.2.2 - 2026-05-31
+This package uses Android metadata `versionCode 2220` and `versionName "2.2.2"`.
+
+### TXT reader TTS
+
+- Added TXT text-to-speech controls from the bottom toolbar and More dialog.
+- Added current-page reading and continuous page-by-page reading through Android's built-in TTS engine.
+- Added saved TTS language presets for system default and mainstream languages including English, Korean, Japanese, Simplified/Traditional Chinese, Spanish, French, German, Italian, Portuguese, Russian, Arabic, Hindi, Indonesian, Vietnamese, and Thai.
+- Added saved TTS voice model selection from installed Android voices, 50-200% speed and pitch sliders, and a shortcut into Android's TTS settings.
+- Added an Add/download voice models shortcut that opens Android's TTS voice-data installation flow when available, so newly installed voice packs can be selected from the app's voice list afterward.
+- Continuous TTS uses the existing TXT page movement path, so large-TXT partition handoff and displayed page status stay aligned with normal reader navigation.
+- TTS stops on manual page movement, manual scroll, pause, and reader destruction, and it releases the Android TTS engine with the reader lifecycle.
+- Adjusted the TXT bottom-toolbar TTS position and compacted the TTS dialog action labels for cleaner Korean UI.
+- Reworked TXT TTS playback around sentence-like speech segments, added active segment highlighting in the TXT view, and stores the latest TTS file/page/character state for resume and notification playback control.
+- Added a foreground TTS playback service with notification controls, media-button handling for play/pause/stop/next/previous, one-time Android 13+ notification permission request, and resume-from-saved-page action in the TTS dialog.
+- Changed TXT search highlights from a fixed yellow accent to theme-blended translucent colors that better match the active reading theme.
+- Restored a clearly visible secondary TXT search highlight for other visible matches, using a theme-derived tone with a stronger related active-match tone.
+- Brightened the built-in Deep Navy reading-theme body text from `#C3D2EA` to `#D7E4FA` for cleaner long-form readability.
+
+### Image viewer
+
+- Image viewer swipe/slider sequence order now follows the active main-folder sort mode for local images and the active archive sort mode for archive image sequences, instead of falling back to plain filename order.
+- Opening an image from main search/filter results now uses the visible image result set as the viewer sequence, so the slider count matches the IMG/search result list.
+- Image viewer startup now opens the selected image first, then attaches the full swipe/slider sequence through an in-memory handoff instead of sending huge path lists through the launch Intent; the viewer reserves the slider viewport while the sequence is pending so image placement stays fixed.
+- Archive image sequences now open the selected entry first, keep the rest of the sequence as archive metadata, lazily extract images on demand, and prefetch nearby images in the background.
+- Fixed the archive image viewer launch path to avoid oversized Intent payloads and to preserve lazy archive placeholder entries, reducing viewer-only crashes when opening or paging through large ZIP/CBZ image sets.
+- Tuned progressive image decoding so preview decode uses original quality up to roughly 12MP, caps larger previews near 12MP, and zoom/detail decode uses an approximately 48MP original/detail cap with OOM-safe fallback.
+- Large images now decode a quick preview first and request a higher-detail bitmap when the user zooms; reasonably sized images still load directly at original quality.
+- Adjacent-image movement is disabled until the full image sequence is ready, avoiding inconsistent temporary ordering while keeping the initial image open path light.
+- Reserved the image viewer's default fit bounds below the top toolbar and above the bottom image slider while controls are visible, reducing late bottom-up repositioning during image changes.
+- Applied each new image's base matrix immediately so image changes do not briefly show the next image with the previous image's bottom-biased placement.
+- Date sorting and file-row dates now use Android MediaStore download/added time first, falling back to filesystem created time and then modified time.
+- Image info now separates filesystem modified time, created/downloaded time, and EXIF taken time, and normalizes EXIF date formatting.
+- Replaced the rotate-arrow toolbar icon with a simple rectangular screen icon for the portrait/landscape toggle.
+- The portrait/landscape toggle icon now switches between portrait and landscape screen shapes to match the current orientation.
+- Removed the image viewer portrait/landscape toast so orientation changes do not interrupt viewing.
+- Slightly reduced the image viewer toolbar title/subtitle text size for better fit.
+
+### File browser
+
+- The All file filter now includes APK and common video files, including MPEG transport stream `.ts` files, in addition to TextView-readable files.
+- Short-tapping an APK opens it through Android's package installer path, and short-tapping a video opens it through an external video-capable app.
+- Main file search now includes an icon scope toggle beside the search field so searches can stay within the current folder or expand across available storage roots.
+- Redrew the All-folders search-scope icon to avoid darker edge seams from overlapping vector layers, and added a short scope-change toast.
+- Current-folder type filters now keep folders above matching files, preserving normal folder navigation while filtering IMG/PDF/TXT/etc. files.
+- Filtered folder navigation now remembers the activation folder: Back keeps the type filter while unwinding subfolders entered under that filter, but clears the filter and returns to the parent when pressed where the filter was originally enabled.
+- Switching from current-folder search to the wider folder scope now searches only downward from the current folder instead of scanning parent storage roots and sibling folders.
+- Current-folder typed searches now progressively update visible results while recursive scanning is still running, instead of waiting for the full scan to finish.
+- Empty-query `All` scans also use progressive result publishing when the wider folder scope is enabled from a folder.
+- Folder navigation now progressively shows discovered entries for large folders instead of holding the loading placeholder until listing and sorting are fully complete.
+- New folder-open requests now interrupt stale queued folder-load work by clearing pending tasks, replacing the folder-load executor, and relying on generation checks so older work cannot overwrite the current folder.
+- Search result rows now show the parent-folder path beneath the normal file metadata.
+- Current-folder and All-folders file search no longer apply a result cap, so large folders are not cut off at the old 300-result limit.
+- File-search loading now appears as a centered spinner over the main screen instead of a small progress indicator beside the sort button.
+- Added right-edge drag fast scrolling to the main file list and recent-file list for large folders and unbounded search results.
+- Centralized short feedback toasts through `ShortToast`, using an app-wide roughly 700ms display window and canceling stale short toasts before showing the next one.
+- Added settings for main filter and viewer toolbar button/icon order. The main filter default order is now All / General / Archive / TXT / PDF / EPUB / Word / IMG, TXT default-visible toolbar slots are highlighted, and the order editor uses compact one-line rows with an internal scroll area.
+- Simplified TXT search dialog bottom actions to plain text-style buttons and hid the IMG filter chip on the recent-files home list.
+- Sort changes now reorder the currently loaded visible folder list instead of forcing a disk rescan, while active progressive folder loads read the latest sort mode before publishing final results.
+- Cleaned recent/main fast-scroll track styling so the fast-scroll thumb remains available without a doubled scrollbar/dragbar track.
+
+### Main screen drawer
+
+- Improved tablet and large-screen drawer dismissal so tapping outside the open drawer or swiping left from the outside scrim closes the drawer reliably.
+- Kept the bottom file-type sliding chips/search controls explicitly excluded from the full-screen drawer-open gesture so horizontal chip scrolling remains independent.
+- Smoothed drawer bottom actions by letting File Open, Bookmarks, and Settings run after the drawer close transition starts instead of competing with the close animation.
+
 ## 2.2.1 - 2026-05-30
 This package uses Android metadata `versionCode 2210` and `versionName "2.2.1"`.
 

@@ -1,6 +1,6 @@
 # TextView Reader - Android Studio Beginner Setup
 
-TextView Reader is a Java Android reader for TXT, PDF, EPUB, and Word documents. It includes local file browsing, bookmarks, reader themes, custom fonts, and viewer-specific layout controls.
+TextView Reader is a Java Android reader for TXT, PDF, EPUB, Word, image, and archive workflows. It includes local file browsing, bookmarks, reader themes, custom fonts, image sequence viewing, and viewer-specific layout controls.
 
 ## 1. Open the project
 
@@ -59,7 +59,7 @@ After the app installs:
 7. In Settings opened from that TXT viewer, check **TXT Display Rules** and confirm the rule appears with its enabled/scope/case/regex options.
 8. Only with a disposable TXT file, test **Edit Actual TXT File** once in copy mode and confirm it creates or overwrites the same `*_edited.txt` copy.
 9. Open a PDF and verify horizontal/vertical reading mode behavior.
-10. Open a ZIP/CBZ archive and verify archive browsing or image opening if you changed archive code.
+10. Open a ZIP/CBZ archive and verify archive browsing, selected-image-first viewing, next/previous lazy image loading, and zoom-to-detail behavior if you changed archive/image code.
 11. Open an EPUB and verify Settings > EPUB layout changes apply after returning to the viewer.
 12. Change the reader theme from Settings while an EPUB is open and confirm the page refreshes to the new theme.
 13. Export and import a backup if you need to verify bookmarks/settings backup behavior.
@@ -84,3 +84,12 @@ Copy the exact first red error line and send it back. Common first failures are:
 - Resource compile error from an edited XML file.
 
 Do not randomly change files before capturing the first error.
+
+
+## 2.2.2 quick manual QA
+
+- Open a large ZIP/CBZ image archive: the selected image should appear before the whole archive is extracted, nearby pages should load lazily/prefetch, and zoom should request higher detail using the 12MP preview / 48MP detail policy.
+- Change folder sort order in a large folder: the currently loaded list should reorder without a long full reload.
+- Open Settings > Button / icon order: main filter and TXT / EPUB-Word / PDF orders should save, reset, and apply after returning.
+- On the recent-files home screen, the IMG filter chip should be hidden; in normal browse/search mode it should reappear.
+- Short feedback toasts should be readable but brief, using the app-wide roughly 700ms window.

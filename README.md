@@ -1,9 +1,39 @@
 # TextView Reader
 
-TextView Reader is a local Android reader for TXT, PDF, EPUB, and Word documents. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow.
+TextView Reader is a local Android reader for TXT, PDF, EPUB, Word, image, and archive workflows. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow.
 
-Current version: **2.2.1**
+Current version: **2.2.2**
 
+
+## 2.2.2 release summary
+
+- Updated Android version metadata to `versionCode 2220` and `versionName "2.2.2"`.
+- Added TXT text-to-speech controls for reading the current page or continuously reading forward with Android's built-in TTS engine, including expanded mainstream language presets, saved voice model, speed, and pitch settings plus shortcuts to Android TTS settings and voice-model installation.
+- Added active TTS segment highlighting, saved TTS playback-position state, foreground playback notification controls, media-button command routing, theme-blended TXT search highlights, and brighter Deep Navy body text.
+- Updated image-sequence navigation so local-folder and archive image slider/swipe order follows the active file/archive sort mode, reserved image fit bounds outside the image viewer's top and bottom controls, stabilized image placement during image changes, and made the portrait/landscape icon follow the current orientation.
+- Opening an image from main search/filter results now passes that visible image result set into the image viewer, so the slider count matches the IMG/search result list instead of falling back to only the clicked image's parent folder.
+- Image viewer startup now prioritizes the selected image first and attaches the full swipe/slider sequence afterward through an in-memory handoff, avoiding large path-list Intent payloads for huge folders/search results while reserving the slider viewport so the image does not jump when the sequence count arrives.
+- Archive image viewing now opens the selected ZIP/CBZ image first, lazily extracts later entries on demand, prefetches nearby entries, and avoids large Intent payloads that could crash the image viewer on large archives.
+- Large images now show a fast preview first and request a higher-detail decode when the user zooms; reasonably sized images still open directly at original quality.
+- Image decode thresholds are tuned to keep preview memory bounded: images up to roughly 12MP open at original preview quality, larger previews are capped near 12MP, and zoom/detail decode uses an approximately 48MP original/detail cap with OOM fallback.
+- Adjacent-image movement is disabled until the full image sequence is ready, avoiding inconsistent temporary ordering while keeping the initial image open path light.
+- The image viewer title/subtitle text is slightly smaller for better toolbar fit on narrow screens.
+- The All file filter now also shows APK and common video files, including MPEG transport stream `.ts`; tapping them opens the Android package installer or an external video app instead of trying to load them in TextView.
+- Main file search now has a compact icon scope toggle beside the search field, shows parent-folder paths in search results, uses a centered spinner instead of occupying the sort-button row, and the main/recent lists have right-edge drag fast scrolling for large result sets. The All-folders search icon was redrawn to avoid darker edge seams caused by overlapping vector layers.
+- Current-folder type filters keep folders visible above matching files, so IMG/PDF/etc. filtering still allows folder navigation while showing matching files below.
+- Filtered folder navigation now remembers where the filter was turned on: Back keeps the filter while returning from subfolders entered under that filter, but clears the filter and returns to the parent when pressed at the activation folder.
+- Switching from current-folder search to the wider folder scope now searches downward from the current folder instead of jumping up to storage roots, avoiding unexpectedly huge parent/sibling scans.
+- Current-folder typed searches also publish partial results progressively during recursive scanning, matching the wider folder search feedback.
+- With the wider folder scope enabled, empty-query `All` scans also publish results progressively instead of waiting for the full subtree scan to finish.
+- Opening large folders now progressively shows discovered entries while the folder is still loading, then replaces them with the final sorted list.
+- New folder-open requests now take priority over stale queued folder loads, so tapping into another folder during progressive loading starts that folder's load immediately while older work is discarded or ignored.
+- Current-folder and All-folders file search no longer apply a result cap.
+- Date sorting and file-row dates now use Android MediaStore download/added time first, falling back to filesystem created time and then modified time; image info separates modified, created/downloaded, and EXIF taken dates.
+- TXT search highlighting now keeps a visible theme-derived secondary highlight for other visible matches, with a stronger related tone for the active match.
+- App-wide short feedback toasts now use a centralized helper with a roughly 700ms display window, reducing queued stale toast messages while staying readable.
+- Settings now include Button / icon order controls for the main filter strip plus TXT, EPUB/Word, and PDF viewer toolbars. TXT default-visible toolbar slots are highlighted in the order editor, and the order rows use compact one-line cards.
+- The TXT search dialog uses plain text-style action buttons instead of heavier card buttons, recent-file mode hides the IMG filter chip, current-folder sorting reorders the already loaded list without rescanning the folder, and recent/main fast-scroll track styling avoids the double dragbar look.
+- Built on the 2.2.1 GitHub-ready source with archive browsing/extraction, image-sequence viewing, large-TXT continuity hardening, bookmark page-model cleanup, controller-based refactoring, and expanded regression coverage.
 
 ## 2.2.1 release summary
 
