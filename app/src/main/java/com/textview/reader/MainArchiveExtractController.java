@@ -45,7 +45,7 @@ final class MainArchiveExtractController {
             }
         }
         if (ready.isEmpty()) {
-            Toast.makeText(activity, R.string.archive_extract_failed, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.archive_extract_failed);
             return;
         }
         for (int i = ready.size() - 1; i >= 0; i--) {
@@ -95,7 +95,7 @@ final class MainArchiveExtractController {
         removePendingArchiveExtraction(archive);
         activity.archiveExtractInProgress = false;
         activity.updateMainOverflowButtonVisibility();
-        Toast.makeText(activity, R.string.archive_extract_cancelled, Toast.LENGTH_SHORT).show();
+        ShortToast.show(activity, R.string.archive_extract_cancelled);
     }
 
     void confirmPendingArchiveExtractionToCurrentDirectory() {
@@ -104,12 +104,12 @@ final class MainArchiveExtractController {
         if (!archive.exists() || !archive.canRead() || !isSupportedArchive(archive)) {
             removePendingArchiveExtraction(archive);
             activity.updateMainOverflowButtonVisibility();
-            Toast.makeText(activity, R.string.archive_extract_failed, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.archive_extract_failed);
             return;
         }
         File destinationDir = activity.currentDirectory;
         if (destinationDir == null || !destinationDir.exists() || !destinationDir.isDirectory() || !destinationDir.canWrite()) {
-            Toast.makeText(activity, R.string.file_move_destination_unavailable, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.file_move_destination_unavailable);
             return;
         }
         File destination = new File(destinationDir, getArchiveOutputBaseName(archive));
@@ -190,7 +190,7 @@ final class MainArchiveExtractController {
             if (ref[0] != null) ref[0].dismiss();
             File copyDestination = buildNumberedDirectoryDestination(parentDir, existingTarget.getName());
             if (copyDestination == null) {
-                Toast.makeText(activity, R.string.archive_extract_failed, Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, R.string.archive_extract_failed);
                 return;
             }
             continueArchiveExtractionWithPasswordIfNeeded(archive, parentDir, copyDestination, false);
@@ -317,7 +317,7 @@ final class MainArchiveExtractController {
                                            char[] password) {
         activity.archiveExtractInProgress = true;
         activity.updateMainOverflowButtonVisibility();
-        Toast.makeText(activity, R.string.archive_extracting, Toast.LENGTH_SHORT).show();
+        ShortToast.show(activity, R.string.archive_extracting);
         activity.folderLoadExecutor.execute(() -> {
             boolean done = ArchiveSupport.extractArchive(archive, destinationDir, overwrite, password);
             activity.fileSearchHandler.post(() -> {
@@ -328,7 +328,7 @@ final class MainArchiveExtractController {
                     if ((password == null || password.length == 0) && ArchiveSupport.canUsePassword(archive)) {
                         showArchivePasswordDialog(nextPassword -> continueArchiveExtraction(archive, parentDir, destinationDir, overwrite, nextPassword.toCharArray()));
                     } else {
-                        Toast.makeText(activity, R.string.archive_extract_failed, Toast.LENGTH_SHORT).show();
+                        ShortToast.show(activity, R.string.archive_extract_failed);
                     }
                     return;
                 }
@@ -337,7 +337,7 @@ final class MainArchiveExtractController {
                 if (activity.prefs != null) activity.prefs.addRecentFolder(parentDir.getAbsolutePath());
                 activity.resetMainBrowseFiltersAndShow(parentDir, destinationDir.getAbsolutePath());
                 activity.rebuildDrawerStorageEntries();
-                Toast.makeText(activity, R.string.archive_extracted, Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, R.string.archive_extracted);
             });
         });
     }

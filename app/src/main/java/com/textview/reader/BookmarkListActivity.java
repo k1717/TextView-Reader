@@ -652,13 +652,13 @@ public class BookmarkListActivity extends AppCompatActivity
     private void openBookmarkTarget(@NonNull Bookmark bookmark) {
         String path = bookmark.getFilePath();
         if (path == null || path.trim().isEmpty()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + "(missing path)", Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, getString(R.string.file_not_found_prefix) + "(missing path)");
             return;
         }
 
         File target = new File(path.trim());
         if (!target.exists()) {
-            Toast.makeText(this, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, getString(R.string.file_not_found_prefix) + path);
             return;
         }
 

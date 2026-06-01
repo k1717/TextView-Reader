@@ -254,16 +254,10 @@ final class MainHomeDialogController {
                         activity.scrollListToTop(activity.recentRecyclerView);
                     } else {
                         if (activity.prefs != null) activity.prefs.setSortMode(i);
-                        if (activity.fileAdapter != null) activity.fileAdapter.setSortMode(i);
 
-                        if (!activity.searchMode && activity.currentDirectory != null) {
-                            // Folder sort is scoped to the currently opened directory.
-                            // Reload that directory instead of touching all-storage/search roots.
-                            activity.loadDirectory(activity.currentDirectory);
-                        } else {
-                            // Search results stay as the current result set; only their order changes.
-                            activity.scrollListToTop(activity.fileRecyclerView);
-                        }
+                        // Sorting changes should not re-enumerate the current folder.
+                        // Keep the visible/current result set and only reorder it in memory.
+                        activity.resortVisibleFileListAsync(i);
                     }
                     dialog.dismiss();
                     break;

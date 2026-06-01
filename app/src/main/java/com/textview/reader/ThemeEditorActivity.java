@@ -63,7 +63,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
                     getContentResolver().takePersistableUriPermission(uri,
                             Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     backgroundImagePath = uri.toString();
-                    Toast.makeText(this, "Background image set", Toast.LENGTH_SHORT).show();
+                    ShortToast.show(this, "Background image set");
                 }
             });
 
@@ -178,7 +178,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
 
         findViewById(R.id.btn_clear_bg_image).setOnClickListener(v -> {
             backgroundImagePath = null;
-            Toast.makeText(this, "Background image cleared", Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, "Background image cleared");
         });
 
         findViewById(R.id.btn_save_theme).setOnClickListener(v -> saveTheme());
@@ -428,7 +428,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
             return;
         }
         if (!validateHexInputs()) {
-            Toast.makeText(this, "Invalid HEX color", Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, "Invalid HEX color");
             return;
         }
 
@@ -451,7 +451,7 @@ public class ThemeEditorActivity extends AppCompatActivity {
             tm.addCustomTheme(newTheme);
         }
 
-        Toast.makeText(this, "Theme saved", Toast.LENGTH_SHORT).show();
+        ShortToast.show(this, "Theme saved");
         finish();
     }
 

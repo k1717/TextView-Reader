@@ -1176,13 +1176,13 @@ public class PdfReaderActivity extends AppCompatActivity {
             try {
                 int target = Integer.parseInt(input.getText().toString().trim());
                 if (target < 1 || target > pageCount) {
-                    Toast.makeText(this, getString(R.string.page_range_error, pageCount), Toast.LENGTH_SHORT).show();
+                    ShortToast.show(this, getString(R.string.page_range_error, pageCount));
                     return;
                 }
                 goToPage(target - 1, Integer.compare(target - 1, currentPage));
                 if (dialogRef[0] != null) dialogRef[0].dismiss();
             } catch (Exception ignored) {
-                Toast.makeText(this, getString(R.string.invalid_page_number), Toast.LENGTH_SHORT).show();
+                ShortToast.show(this, getString(R.string.invalid_page_number));
             }
         });
         dialogRef[0] = createStablePositionedDialog(box, PDF_TOOLBAR_POPUP_Y_DP, true, false);
@@ -1473,7 +1473,7 @@ public class PdfReaderActivity extends AppCompatActivity {
         progressBar.setVisibility(View.GONE);
         String message = getString(R.string.error_prefix) + (e.getMessage() != null ? e.getMessage() : e.toString());
         pageStatus.setText(message);
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        ShortToast.show(this, message);
     }
 
     private int clampPage(int page) {

@@ -26,7 +26,7 @@ final class MainClipboardController {
         activity.archiveExtractInProgress = false;
         FileClipboardController.StartResult result = activity.fileClipboardController.start(source, copy);
         if (result != FileClipboardController.StartResult.STARTED) {
-            Toast.makeText(activity, R.string.file_operation_source_unavailable, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.file_operation_source_unavailable);
             return;
         }
 
@@ -54,7 +54,7 @@ final class MainClipboardController {
     void cancelPendingClipboardOperation(long pendingId) {
         activity.fileClipboardController.cancel(pendingId);
         activity.updateMainOverflowButtonVisibility();
-        Toast.makeText(activity, R.string.file_operation_cancelled, Toast.LENGTH_SHORT).show();
+        ShortToast.show(activity, R.string.file_operation_cancelled);
     }
 
     void pastePendingClipboardItemToCurrentDirectory() {
@@ -66,21 +66,17 @@ final class MainClipboardController {
             case SOURCE_UNAVAILABLE:
                 activity.fileClipboardController.clearAfterSuccess();
                 activity.updateMainOverflowButtonVisibility();
-                Toast.makeText(activity, R.string.file_operation_source_unavailable, Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, R.string.file_operation_source_unavailable);
                 refreshVisibleFileListAfterClipboardOperation(null);
                 return;
             case DESTINATION_UNAVAILABLE:
-                Toast.makeText(activity, R.string.file_move_destination_unavailable, Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, R.string.file_move_destination_unavailable);
                 return;
             case CUT_SAME_FOLDER:
-                Toast.makeText(activity,
-                        source != null && source.isDirectory() ? R.string.folder_move_same_folder : R.string.file_move_same_folder,
-                        Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, source != null && source.isDirectory() ? R.string.folder_move_same_folder : R.string.file_move_same_folder);
                 return;
             case DIRECTORY_INTO_SELF:
-                Toast.makeText(activity,
-                        activity.fileClipboardController.isCopy() ? R.string.folder_copy_into_self : R.string.folder_move_into_self,
-                        Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, activity.fileClipboardController.isCopy() ? R.string.folder_copy_into_self : R.string.folder_move_into_self);
                 return;
             case CONFLICT:
                 if (source != null && plan.getDestinationDir() != null && plan.getDestination() != null) {
@@ -172,7 +168,7 @@ final class MainClipboardController {
             if (ref[0] != null) ref[0].dismiss();
             File copyDestination = activity.fileClipboardController.buildCopyDestination(destinationDir, source);
             if (copyDestination == null) {
-                Toast.makeText(activity, R.string.file_operation_failed, Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, R.string.file_operation_failed);
                 return;
             }
             continuePendingClipboardOperation(source, destinationDir, copyDestination, false);
@@ -208,9 +204,7 @@ final class MainClipboardController {
         final boolean copy = activity.fileClipboardController.isCopy();
         activity.fileClipboardController.setInProgress(true);
         activity.updateMainOverflowButtonVisibility();
-        Toast.makeText(activity,
-                copy ? R.string.file_copying : R.string.file_moving,
-                Toast.LENGTH_SHORT).show();
+        ShortToast.show(activity, copy ? R.string.file_copying : R.string.file_moving);
 
         String oldPath = source.getAbsolutePath();
         String newPath = destination.getAbsolutePath();
@@ -222,9 +216,7 @@ final class MainClipboardController {
                 if (activity.activityDestroyed) return;
                 if (!done) {
                     activity.updateMainOverflowButtonVisibility();
-                    Toast.makeText(activity,
-                            copy ? R.string.file_copy_failed : R.string.file_move_failed,
-                            Toast.LENGTH_SHORT).show();
+                    ShortToast.show(activity, copy ? R.string.file_copy_failed : R.string.file_move_failed);
                     return;
                 }
 
@@ -238,9 +230,7 @@ final class MainClipboardController {
                 }
                 refreshVisibleFileListAfterClipboardOperation(destinationDir);
                 activity.updateMainOverflowButtonVisibility();
-                Toast.makeText(activity,
-                        copy ? R.string.file_copied : R.string.file_moved,
-                        Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, copy ? R.string.file_copied : R.string.file_moved);
             });
         });
     }

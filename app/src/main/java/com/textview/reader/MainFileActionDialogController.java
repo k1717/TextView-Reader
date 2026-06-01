@@ -83,7 +83,7 @@ final class MainFileActionDialogController {
                     activity.bookmarkManager.deleteReadingState(file.getAbsolutePath());
                     activity.loadRecentFiles();
                     activity.rebuildDrawerStorageEntries();
-                    Toast.makeText(activity, activity.getString(R.string.recent_file_cleared), Toast.LENGTH_SHORT).show();
+                    ShortToast.show(activity, activity.getString(R.string.recent_file_cleared));
                 }));
             }
         } else if (!isBuiltInFolder) {
@@ -198,9 +198,9 @@ final class MainFileActionDialogController {
             if (file.renameTo(newFile)) {
                 if (ref[0] != null) ref[0].dismiss();
                 activity.loadDirectory(activity.currentDirectory);
-                Toast.makeText(activity, activity.getString(R.string.renamed), Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, activity.getString(R.string.renamed));
             } else {
-                Toast.makeText(activity, activity.getString(R.string.rename_failed), Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, activity.getString(R.string.rename_failed));
             }
         });
 
@@ -341,9 +341,9 @@ final class MainFileActionDialogController {
                 }
                 activity.cleanupNavigationStateAfterDelete(deletedPath, deletedDirectory);
                 activity.refreshVisibleFileListAfterDelete();
-                Toast.makeText(activity, activity.getString(R.string.deleted), Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, activity.getString(R.string.deleted));
             } else {
-                Toast.makeText(activity, activity.getString(R.string.delete_failed), Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, activity.getString(R.string.delete_failed));
             }
         });
         dialog.show();
@@ -501,9 +501,9 @@ final class MainFileActionDialogController {
             if (newDir.mkdirs()) {
                 if (ref[0] != null) ref[0].dismiss();
                 activity.loadDirectory(activity.currentDirectory);
-                Toast.makeText(activity, activity.getString(R.string.folder_created), Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, activity.getString(R.string.folder_created));
             } else {
-                Toast.makeText(activity, activity.getString(R.string.folder_create_failed), Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, activity.getString(R.string.folder_create_failed));
             }
         });
 

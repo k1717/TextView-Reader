@@ -52,7 +52,7 @@ final class ReaderEncodingController {
     void applyTextEncodingSelection(@NonNull File file, @NonNull String option) {
         String normalized = "Auto".equalsIgnoreCase(option) ? null : FileUtils.normalizeManualEncodingName(option);
         if (!"Auto".equalsIgnoreCase(option) && normalized == null) {
-            Toast.makeText(activity, R.string.invalid_text_encoding, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.invalid_text_encoding);
             return;
         }
 
@@ -84,9 +84,7 @@ final class ReaderEncodingController {
         reloadIntent.putExtra(ReaderActivity.EXTRA_JUMP_DISPLAY_PAGE, 0);
         reloadIntent.putExtra(ReaderActivity.EXTRA_JUMP_TOTAL_PAGES, 0);
 
-        Toast.makeText(activity,
-                normalized == null ? R.string.text_encoding_auto_restored : R.string.text_encoding_manual_applied,
-                Toast.LENGTH_SHORT).show();
+        ShortToast.show(activity, normalized == null ? R.string.text_encoding_auto_restored : R.string.text_encoding_manual_applied);
         activity.loadFileFromIntent(reloadIntent);
     }
 }

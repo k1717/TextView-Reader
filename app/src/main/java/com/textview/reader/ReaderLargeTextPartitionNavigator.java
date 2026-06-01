@@ -90,9 +90,7 @@ final class ReaderLargeTextPartitionNavigator {
                     if (!activity.activityDestroyed
                             && generation == activity.loadGeneration.get()
                             && switchGeneration == activity.largeTextPartitionSwitchGeneration.get()) {
-                        Toast.makeText(activity,
-                                activity.getString(R.string.error_prefix) + t.getMessage(),
-                                Toast.LENGTH_SHORT).show();
+                        ShortToast.show(activity, activity.getString(R.string.error_prefix) + t.getMessage());
                     }
                 });
             }

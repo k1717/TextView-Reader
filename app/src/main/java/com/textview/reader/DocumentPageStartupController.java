@@ -31,6 +31,7 @@ final class DocumentPageStartupController {
         activity.applyDocumentSystemBarColors();
 
         bindViews();
+        ButtonOrderManager.applyOrder(activity, activity.prefs, ButtonOrderManager.GROUP_DOCUMENT_VIEWER);
         activity.bookmarkManager = BookmarkManager.getInstance(activity);
         activity.applyDocumentThemeToViews();
         activity.setupWebView();
@@ -54,6 +55,7 @@ final class DocumentPageStartupController {
             activity.webView.resumeTimers();
         }
         activity.applyDocumentSystemBarColors();
+        ButtonOrderManager.applyOrder(activity, activity.prefs, ButtonOrderManager.GROUP_DOCUMENT_VIEWER);
         activity.applyDocumentThemeToViews();
         activity.refreshEpubSpacingIfNeeded();
         activity.refreshDocumentPageThemeIfNeeded(currentThemeSignature, pageThemeChanged);

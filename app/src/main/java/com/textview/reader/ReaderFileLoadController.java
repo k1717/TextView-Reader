@@ -223,9 +223,7 @@ final class ReaderFileLoadController {
             if (activity.activityDestroyed || generation != activity.loadGeneration.get()) return;
             activity.progressText.setText(String.format(Locale.getDefault(), "%s%s",
                     activity.getString(R.string.error_prefix), e.getMessage()));
-            Toast.makeText(activity,
-                    activity.getString(R.string.error_prefix) + e.getMessage(),
-                    Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, activity.getString(R.string.error_prefix) + e.getMessage());
         });
     }
 

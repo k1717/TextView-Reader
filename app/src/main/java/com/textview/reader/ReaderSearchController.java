@@ -254,7 +254,7 @@ final class ReaderSearchController {
 
                 if (finalError != null) {
                     if (matchStatus != null) matchStatus.setText("0 / 0");
-                    Toast.makeText(activity, activity.getString(R.string.error_prefix) + finalError, Toast.LENGTH_SHORT).show();
+                    ShortToast.show(activity, activity.getString(R.string.error_prefix) + finalError);
                     return;
                 }
 
@@ -268,9 +268,7 @@ final class ReaderSearchController {
                             : getCachedLargeTextSearchTotal(query);
                     if (targetOccurrence > 0 && knownTotal > 0) {
                         updateLargeTextSearchStatus(matchStatus, 0, knownTotal);
-                        Toast.makeText(activity,
-                                activity.getString(R.string.search_occurrence_out_of_range, knownTotal),
-                                Toast.LENGTH_SHORT).show();
+                        ShortToast.show(activity, activity.getString(R.string.search_occurrence_out_of_range, knownTotal));
                         return;
                     }
                     activity.activeSearchIndex = -1;
@@ -281,7 +279,7 @@ final class ReaderSearchController {
                     } else if (matchStatus != null) {
                         matchStatus.setText("0 / 0");
                     }
-                    Toast.makeText(activity, activity.getString(R.string.not_found), Toast.LENGTH_SHORT).show();
+                    ShortToast.show(activity, activity.getString(R.string.not_found));
                     return;
                 }
 
@@ -335,7 +333,7 @@ final class ReaderSearchController {
             if (activity.prefs != null) activity.prefs.setLastReaderSearchQuery("");
             resetActiveSearchState();
             if (matchStatus != null) matchStatus.setText("0 / 0");
-            Toast.makeText(activity, activity.getString(R.string.enter_search_text), Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, activity.getString(R.string.enter_search_text));
             return;
         }
 
@@ -354,7 +352,7 @@ final class ReaderSearchController {
             activity.activeSearchOrdinal = 0;
             activity.applySearchHighlight();
             if (matchStatus != null) matchStatus.setText("0 / 0");
-            Toast.makeText(activity, activity.getString(R.string.not_found), Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, activity.getString(R.string.not_found));
             return;
         }
 
@@ -372,9 +370,7 @@ final class ReaderSearchController {
                 if (matchStatus != null) {
                     matchStatus.setText(String.format(Locale.getDefault(), "0 / %d", total));
                 }
-                Toast.makeText(activity,
-                        activity.getString(R.string.search_occurrence_out_of_range, total),
-                        Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, activity.getString(R.string.search_occurrence_out_of_range, total));
                 return;
             }
             idx = activity.findNthText(query, targetOccurrence);
@@ -414,7 +410,7 @@ final class ReaderSearchController {
             activity.activeSearchOrdinal = 0;
             activity.applySearchHighlight();
             if (matchStatus != null) matchStatus.setText(String.format(Locale.getDefault(), "0 / %d", total));
-            Toast.makeText(activity, activity.getString(R.string.not_found), Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, activity.getString(R.string.not_found));
         }
     }
 

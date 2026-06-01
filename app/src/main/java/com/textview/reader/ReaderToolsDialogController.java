@@ -71,6 +71,7 @@ final class ReaderToolsDialogController {
         addMoreActionRow(list, activity.getString(R.string.increase_font), fg, panel, () -> activity.changeFontSize(2f), ref);
         addMoreActionRow(list, activity.getString(R.string.decrease_font), fg, panel, () -> activity.changeFontSize(-2f), ref);
         addMoreActionRow(list, activity.getString(R.string.reset_font_size), fg, panel, activity::resetFontSize, ref);
+        addMoreActionRow(list, activity.getString(R.string.tts_title), fg, panel, activity::showTtsDialog, ref);
         addMoreActionRow(list, activity.getString(R.string.txt_display_rule_quick_add), fg, panel, () -> activity.showQuickTextDisplayRuleDialog("", true), ref);
         addMoreActionRow(list, activity.getString(R.string.txt_display_rule_manage), fg, panel, activity::showReaderTextDisplayRulesManagerDialog, ref);
         addMoreActionRow(list, activity.getString(R.string.text_encoding), fg, panel, this::showTextEncodingDialog, ref);
@@ -127,13 +128,13 @@ final class ReaderToolsDialogController {
 
     void showTextEncodingDialog() {
         if (activity.filePath == null || activity.filePath.isEmpty()) {
-            Toast.makeText(activity, R.string.no_file_selected, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.no_file_selected);
             return;
         }
 
         File file = new File(activity.filePath);
         if (!FileUtils.isTextFile(file.getName())) {
-            Toast.makeText(activity, R.string.text_encoding_txt_only, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.text_encoding_txt_only);
             return;
         }
 
@@ -637,7 +638,7 @@ final class ReaderToolsDialogController {
             int occurrence = Integer.parseInt(raw);
             return occurrence > 0 ? occurrence : -1;
         } catch (NumberFormatException ignored) {
-            Toast.makeText(activity, activity.getString(R.string.search_occurrence_invalid), Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, activity.getString(R.string.search_occurrence_invalid));
             return -1;
         }
     }
@@ -652,11 +653,7 @@ final class ReaderToolsDialogController {
         button.setTypeface(Typeface.DEFAULT_BOLD);
         button.setIncludeFontPadding(false);
         button.setPadding(activity.dpToPx(4), 0, activity.dpToPx(4), 0);
-        GradientDrawable buttonBg = new GradientDrawable();
-        buttonBg.setColor(activity.dialogStyler().dialogActionPanelFillColor(bg));
-        buttonBg.setCornerRadius(activity.dpToPx(10));
-        buttonBg.setStroke(Math.max(1, activity.dpToPx(1)), activity.dialogStyler().dialogActionPanelLineColor(bg));
-        button.setBackground(buttonBg);
+        button.setBackgroundColor(Color.TRANSPARENT);
         return button;
     }
 }

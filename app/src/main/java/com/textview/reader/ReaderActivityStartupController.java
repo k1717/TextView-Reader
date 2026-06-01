@@ -28,6 +28,7 @@ final class ReaderActivityStartupController {
 
     void onCreateAfterSuper(Bundle savedInstanceState) {
         ViewerRegistry.activate(activity);
+        TtsPlaybackBridge.register(activity);
         configureWindow();
         bindViews();
         bindServicesAndControllers();
@@ -57,12 +58,14 @@ final class ReaderActivityStartupController {
     }
 
     void onResume() {
+        TtsPlaybackBridge.register(activity);
         activity.cancelBackgroundMemoryTrim();
         if (activity.themeManager != null) {
             activity.themeManager.reloadFromStorage();
         }
         if (activity.readerView != null && activity.prefs != null && activity.themeManager != null) {
             activity.applyTheme();
+            ButtonOrderManager.applyOrder(activity, activity.prefs, ButtonOrderManager.GROUP_TXT_READER);
             if (activity.restoreReaderAfterBackgroundMemoryTrimIfNeeded()) return;
             if (activity.maybeReloadForPhysicallyEditedOriginalTxtFile()) return;
             if (activity.maybeReloadForLargeTextPartitionModeChange()) return;
@@ -153,13 +156,13 @@ final class ReaderActivityStartupController {
                         activity.pageBy(+1, true);
                     }
                     @Override public void onAutoPageTurnStarted() {
-                        Toast.makeText(activity, R.string.auto_page_turn_started, Toast.LENGTH_SHORT).show();
+                        ShortToast.show(activity, R.string.auto_page_turn_started);
                     }
                     @Override public void onAutoPageTurnStopped() {
-                        Toast.makeText(activity, R.string.auto_page_turn_stopped, Toast.LENGTH_SHORT).show();
+                        ShortToast.show(activity, R.string.auto_page_turn_stopped);
                     }
                     @Override public void onAutoPageTurnEndReached() {
-                        Toast.makeText(activity, R.string.auto_page_turn_end_reached, Toast.LENGTH_SHORT).show();
+                        ShortToast.show(activity, R.string.auto_page_turn_end_reached);
                     }
                 });
     }

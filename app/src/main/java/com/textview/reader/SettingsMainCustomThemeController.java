@@ -95,7 +95,7 @@ final class SettingsMainCustomThemeController {
                     || textColor == null || subColor == null || outlineColor == null || selectedColor == null
                     || fileTypeChipColor == null || selectedFileTypeChipColor == null
                     || readingCardColor == null || shortcutBoxColor == null || drawerActionIconColor == null) {
-                Toast.makeText(activity, R.string.invalid_hex_color, Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, R.string.invalid_hex_color);
                 return;
             }
 
@@ -106,7 +106,7 @@ final class SettingsMainCustomThemeController {
             } else {
                 activity.prefs.applyDarkMode(PrefsManager.DARK_MODE_CUSTOM);
             }
-            Toast.makeText(activity, R.string.custom_main_theme_applied, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.custom_main_theme_applied);
             activity.recreate();
         });
 

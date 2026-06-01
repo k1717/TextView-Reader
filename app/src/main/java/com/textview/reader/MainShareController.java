@@ -22,7 +22,7 @@ final class MainShareController {
     void shareSelectedFiles() {
         ArrayList<File> files = activity.getSelectedShareableFilesSnapshot();
         if (files.isEmpty()) {
-            Toast.makeText(activity, R.string.share_failed, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.share_failed);
             activity.exitFileSelectionMode(true);
             return;
         }
@@ -43,13 +43,13 @@ final class MainShareController {
             activity.startActivity(Intent.createChooser(share, activity.getString(R.string.share)));
             activity.exitFileSelectionMode(true);
         } catch (Exception e) {
-            Toast.makeText(activity, R.string.share_failed, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.share_failed);
         }
     }
 
     void shareFile(@NonNull File file) {
         if (!file.exists() || !file.isFile() || !file.canRead()) {
-            Toast.makeText(activity, R.string.share_failed, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.share_failed);
             return;
         }
         try {
@@ -59,7 +59,7 @@ final class MainShareController {
             share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             activity.startActivity(Intent.createChooser(share, activity.getString(R.string.share)));
         } catch (Exception e) {
-            Toast.makeText(activity, R.string.share_failed, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.share_failed);
         }
     }
 

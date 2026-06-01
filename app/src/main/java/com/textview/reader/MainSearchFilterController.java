@@ -1,6 +1,7 @@
 package com.textview.reader;
 
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Environment;
 import android.text.Editable;
@@ -10,9 +11,14 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageButton;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 
@@ -29,6 +35,11 @@ import java.util.Set;
  * stay focused on navigation, lifecycle, and file operations.
  */
 final class MainSearchFilterController {
+    private static final int FILE_SEARCH_RESULT_LIMIT = Integer.MAX_VALUE;
+    private static final int FILE_SEARCH_VISIT_LIMIT = Integer.MAX_VALUE;
+    private static final int FILE_SEARCH_PROGRESS_BATCH = 96;
+    private static final long FILE_SEARCH_PROGRESS_MIN_INTERVAL_MS = 220L;
+
     private final MainActivity activity;
     private final Runnable fileTypeFilterSnapRunnable = this::snapFileTypeFilterToSlot;
 
@@ -41,6 +52,7 @@ final class MainSearchFilterController {
         activity.fileSearchInput = activity.findViewById(R.id.file_search_input);
         activity.fileSearchClearButton = activity.findViewById(R.id.file_search_clear_button);
         activity.fileSearchProgress = activity.findViewById(R.id.file_search_progress);
+        activity.fileSearchScopeButton = activity.findViewById(R.id.file_search_scope_button);
         activity.fileSortButton = activity.findViewById(R.id.file_sort_button);
         activity.fileTypeFilterScroll = activity.findViewById(R.id.file_type_filter_scroll);
         activity.filterAllChip = activity.findViewById(R.id.filter_all);
@@ -60,6 +72,7 @@ final class MainSearchFilterController {
         setupFileTypeChip(activity.filterEpubChip, MainActivity.FILTER_EPUB);
         setupFileTypeChip(activity.filterWordChip, MainActivity.FILTER_WORD);
         setupFileTypeChip(activity.filterImageChip, MainActivity.FILTER_IMAGE);
+        applySavedFileTypeOrder();
         updateFileTypeChips();
         setupFileTypeFilterScrollBehavior();
 
@@ -91,9 +104,47 @@ final class MainSearchFilterController {
             activity.fileSearchClearButton.setVisibility(View.GONE);
         }
 
+        setupSearchScopeButton();
+
         if (activity.fileSortButton != null) {
             activity.fileSortButton.setOnClickListener(v -> activity.showSortDialog());
         }
+    }
+
+
+    void applySavedFileTypeOrder() {
+        ButtonOrderManager.applyOrder(activity, activity.prefs, ButtonOrderManager.GROUP_MAIN_FILTERS);
+        applyFileTypeFilterSlotWidths();
+    }
+
+    private void setupSearchScopeButton() {
+        if (activity.prefs != null) {
+            activity.fileSearchAllFolders = activity.prefs.getFileSearchAllFolders();
+        }
+        updateSearchScopeButton();
+        if (activity.fileSearchScopeButton == null) return;
+        activity.fileSearchScopeButton.setOnClickListener(v -> {
+            activity.fileSearchAllFolders = !activity.fileSearchAllFolders;
+            if (activity.prefs != null) {
+                activity.prefs.setFileSearchAllFolders(activity.fileSearchAllFolders);
+            }
+            updateSearchScopeButton();
+            showBriefSearchScopeToast();
+            String query = activity.fileSearchInput != null
+                    ? activity.fileSearchInput.getText().toString().trim()
+                    : "";
+            if (activity.searchMode || !query.isEmpty() || activity.activeFileFilter != MainActivity.FILTER_ALL) {
+                runLiveFileSearchNow();
+            }
+        });
+    }
+
+
+    private void showBriefSearchScopeToast() {
+        int messageRes = activity.fileSearchAllFolders
+                ? R.string.search_scope_all_folders
+                : R.string.search_scope_current_folder_only;
+        ShortToast.show(activity, messageRes);
     }
 
     private void setupFileTypeFilterScrollBehavior() {
@@ -145,24 +196,25 @@ final class MainSearchFilterController {
         final int slotWidth = Math.max(activity.dpToPx(50),
                 (viewport - (gap * (visibleSlots - 1))) / visibleSlots);
         activity.fileTypeFilterStepPx = slotWidth + gap;
-        View[] chips = new View[] {
-                activity.filterAllChip, activity.filterGeneralChip, activity.filterTxtChip, activity.filterArchiveChip,
-                activity.filterPdfChip, activity.filterEpubChip, activity.filterWordChip, activity.filterImageChip
-        };
-        for (int i = 0; i < chips.length; i++) {
-            View chip = chips[i];
-            if (chip == null) continue;
-            ViewGroup.LayoutParams rawLp = chip.getLayoutParams();
-            if (rawLp == null) continue;
-            rawLp.width = slotWidth;
-            if (rawLp instanceof ViewGroup.MarginLayoutParams) {
-                ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) rawLp;
-                mlp.setMargins(i == 0 ? 0 : gap, mlp.topMargin, 0, mlp.bottomMargin);
-            }
-            chip.setLayoutParams(rawLp);
-        }
         View row = activity.findViewById(R.id.file_type_filter_row);
-        if (row != null) row.setPadding(0, 0, gap, 0);
+        if (row instanceof android.widget.LinearLayout) {
+            android.widget.LinearLayout chipRow = (android.widget.LinearLayout) row;
+            int visibleIndex = 0;
+            for (int i = 0; i < chipRow.getChildCount(); i++) {
+                View chip = chipRow.getChildAt(i);
+                if (chip == null) continue;
+                ViewGroup.LayoutParams rawLp = chip.getLayoutParams();
+                if (rawLp == null) continue;
+                rawLp.width = slotWidth;
+                if (rawLp instanceof ViewGroup.MarginLayoutParams) {
+                    ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) rawLp;
+                    mlp.setMargins(visibleIndex == 0 ? 0 : gap, mlp.topMargin, 0, mlp.bottomMargin);
+                }
+                chip.setLayoutParams(rawLp);
+                if (chip.getVisibility() != View.GONE) visibleIndex++;
+            }
+            chipRow.setPadding(0, 0, gap, 0);
+        }
         trimFileTypeFilterEdge();
     }
 
@@ -225,7 +277,7 @@ final class MainSearchFilterController {
                 activity.homeMode = true;
                 activity.searchReturnToHome = true;
                 activity.searchReturnDirectory = null;
-                if (activity.fileSearchProgress != null) activity.fileSearchProgress.setVisibility(View.GONE);
+                setFileSearchLoading(false);
                 updateFileSearchClearButtonVisibility();
                 if (activity.recentSection != null) activity.recentSection.setVisibility(View.VISIBLE);
                 if (activity.browserSection != null) activity.browserSection.setVisibility(View.GONE);
@@ -242,12 +294,18 @@ final class MainSearchFilterController {
 
             if (filter == MainActivity.FILTER_ALL && query.isEmpty()) {
                 activity.activeFileFilter = MainActivity.FILTER_ALL;
+                activity.fileTypeFilterActivatedDirectory = null;
                 updateFileTypeChips();
                 restoreAllFilterLocation();
                 return;
             }
 
             captureFilterReturnLocationIfNeeded();
+            if (activity.activeFileFilter == MainActivity.FILTER_ALL && filter != MainActivity.FILTER_ALL) {
+                activity.fileTypeFilterActivatedDirectory = !activity.homeMode && activity.currentDirectory != null
+                        ? activity.currentDirectory
+                        : null;
+            }
             activity.activeFileFilter = filter;
             updateFileTypeChips();
             runLiveFileSearchNow();
@@ -256,7 +314,7 @@ final class MainSearchFilterController {
 
     private void captureFilterReturnLocationIfNeeded() {
         if (activity.searchMode) return;
-        boolean allStorage = activity.homeMode || activity.currentDirectory == null;
+        boolean allStorage = shouldSearchAllStorage();
         activity.searchReturnToHome = allStorage;
         activity.searchReturnDirectory = allStorage ? null : activity.currentDirectory;
     }
@@ -264,7 +322,7 @@ final class MainSearchFilterController {
     void restoreAllFilterLocation() {
         clearSearchDebounce();
         activity.fileSearchGeneration.incrementAndGet();
-        if (activity.fileSearchProgress != null) activity.fileSearchProgress.setVisibility(View.GONE);
+        setFileSearchLoading(false);
         updateFileSearchClearButtonVisibility();
 
         File visibleFolder = activity.currentDirectory;
@@ -289,6 +347,11 @@ final class MainSearchFilterController {
     }
 
     void updateFileTypeChips() {
+        boolean hideImageChipInRecent = shouldHideImageChipInRecentList();
+        if (hideImageChipInRecent && activity.activeFileFilter == MainActivity.FILTER_IMAGE) {
+            activity.activeFileFilter = MainActivity.FILTER_ALL;
+        }
+
         styleFileTypeChip(activity.filterAllChip, activity.activeFileFilter == MainActivity.FILTER_ALL);
         styleFileTypeChip(activity.filterGeneralChip, activity.activeFileFilter == MainActivity.FILTER_GENERAL);
         styleFileTypeChip(activity.filterTxtChip, activity.activeFileFilter == MainActivity.FILTER_TXT);
@@ -296,11 +359,20 @@ final class MainSearchFilterController {
         styleFileTypeChip(activity.filterPdfChip, activity.activeFileFilter == MainActivity.FILTER_PDF);
         styleFileTypeChip(activity.filterEpubChip, activity.activeFileFilter == MainActivity.FILTER_EPUB);
         styleFileTypeChip(activity.filterWordChip, activity.activeFileFilter == MainActivity.FILTER_WORD);
+        if (activity.filterImageChip != null) {
+            activity.filterImageChip.setVisibility(hideImageChipInRecent ? View.GONE : View.VISIBLE);
+        }
         styleFileTypeChip(activity.filterImageChip, activity.activeFileFilter == MainActivity.FILTER_IMAGE);
+        applyFileTypeFilterSlotWidths();
+    }
+
+    private boolean shouldHideImageChipInRecentList() {
+        return activity.homeMode && !activity.searchMode;
     }
 
     void resetFileFilterForNavigation() {
         activity.activeFileFilter = MainActivity.FILTER_ALL;
+        activity.fileTypeFilterActivatedDirectory = null;
 
         if (activity.fileSearchInput != null && activity.fileSearchInput.length() > 0) {
             activity.fileSearchInput.setText("");
@@ -309,9 +381,7 @@ final class MainSearchFilterController {
         clearSearchDebounce();
         activity.fileSearchGeneration.incrementAndGet();
 
-        if (activity.fileSearchProgress != null) {
-            activity.fileSearchProgress.setVisibility(View.GONE);
-        }
+        setFileSearchLoading(false);
         if (activity.fileSearchClearButton != null) {
             activity.fileSearchClearButton.setVisibility(View.GONE);
         }
@@ -341,6 +411,43 @@ final class MainSearchFilterController {
         chip.setTextColor(fg);
     }
 
+    void updateSearchScopeButton() {
+        ImageButton button = activity.fileSearchScopeButton;
+        if (button == null) return;
+
+        boolean allFolders = activity.fileSearchAllFolders;
+        button.setContentDescription(activity.getString(allFolders
+                ? R.string.search_scope_all_folders
+                : R.string.search_scope_current_folder_only));
+        int iconRes = allFolders ? R.drawable.ic_search_scope_all : R.drawable.ic_folder;
+        Drawable icon = ContextCompat.getDrawable(activity, iconRes);
+        if (icon != null) {
+            Drawable wrapped = DrawableCompat.wrap(icon.mutate());
+            DrawableCompat.setTint(wrapped, searchScopeIconColor());
+            button.setImageDrawable(wrapped);
+        } else {
+            button.setImageResource(iconRes);
+        }
+        button.setSelected(false);
+    }
+
+    private int searchScopeIconColor() {
+        boolean dark = activity.prefs == null || activity.prefs.shouldUseDarkColors(activity);
+        return activity.prefs != null
+                ? activity.prefs.getMainSubTextColor(activity)
+                : (dark ? Color.rgb(176, 176, 176) : Color.rgb(95, 99, 104));
+    }
+
+    private boolean shouldSearchAllStorage() {
+        return activity.fileSearchAllFolders || activity.homeMode || activity.currentDirectory == null;
+    }
+
+    private void setFileSearchLoading(boolean loading) {
+        if (activity.fileSearchProgress != null) {
+            activity.fileSearchProgress.setVisibility(loading ? View.VISIBLE : View.GONE);
+        }
+    }
+
     void clearSearchDebounce() {
         if (activity.pendingFileSearchRunnable != null) {
             activity.fileSearchHandler.removeCallbacks(activity.pendingFileSearchRunnable);
@@ -362,7 +469,7 @@ final class MainSearchFilterController {
 
         if (query.isEmpty() && activity.homeMode) {
             activity.fileSearchGeneration.incrementAndGet();
-            if (activity.fileSearchProgress != null) activity.fileSearchProgress.setVisibility(View.GONE);
+            setFileSearchLoading(false);
             updateFileSearchClearButtonVisibility();
             if (activity.activeFileFilter == MainActivity.FILTER_ALL) {
                 if (activity.searchMode) restorePreSearchLocation();
@@ -373,15 +480,28 @@ final class MainSearchFilterController {
             return;
         }
 
-        if (query.isEmpty() && activity.activeFileFilter == MainActivity.FILTER_ALL) {
+        boolean allStorage = shouldSearchAllStorage();
+        if (query.isEmpty()
+                && activity.activeFileFilter == MainActivity.FILTER_ALL
+                && (!allStorage || activity.homeMode)) {
             activity.fileSearchGeneration.incrementAndGet();
-            if (activity.fileSearchProgress != null) activity.fileSearchProgress.setVisibility(View.GONE);
             updateFileSearchClearButtonVisibility();
-            if (activity.searchMode) restorePreSearchLocation();
+            if (activity.searchMode && !allStorage && activity.currentDirectory != null) {
+                setFileSearchLoading(true);
+                activity.showBrowseMode(activity.currentDirectory);
+            } else {
+                setFileSearchLoading(false);
+                if (activity.searchMode) restorePreSearchLocation();
+            }
             return;
         }
 
-        boolean allStorage = activity.homeMode || activity.currentDirectory == null;
+        if (query.isEmpty()
+                && !allStorage
+                && activity.activeFileFilter != MainActivity.FILTER_ALL) {
+            showCurrentFolderFilterResults();
+            return;
+        }
         if (!activity.searchMode) {
             activity.searchReturnToHome = allStorage;
             activity.searchReturnDirectory = allStorage ? null : activity.currentDirectory;
@@ -389,10 +509,78 @@ final class MainSearchFilterController {
         startFileSearch(query, allStorage);
     }
 
+    void showCurrentFolderFilterResults() {
+        showCurrentFolderFilterResults(activity.currentDirectory);
+    }
+
+    void showCurrentFolderFilterResults(@Nullable File dir) {
+        if (dir == null || !dir.exists() || !dir.isDirectory() || !dir.canRead()) {
+            startFileSearch("", false);
+            return;
+        }
+
+        activity.cancelPendingFolderLoad();
+        final int generation = activity.fileSearchGeneration.incrementAndGet();
+        final int filter = activity.activeFileFilter;
+        final boolean showHidden = activity.prefs == null || activity.prefs.getShowHiddenFiles();
+        final int sortMode = activity.prefs != null
+                ? activity.prefs.getSortMode()
+                : com.textview.reader.util.PrefsManager.SORT_NAME_ASC;
+        setFileSearchLoading(true);
+        updateFileSearchClearButtonVisibility();
+
+        activity.fileSearchExecutor.execute(() -> {
+            List<File> results = new ArrayList<>();
+            File[] children = dir.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    if (activity.activityDestroyed || generation != activity.fileSearchGeneration.get()) return;
+                    if (child == null) continue;
+                    String name = child.getName();
+                    if (!showHidden && name.startsWith(".")) continue;
+                    if (child.isDirectory() || (child.isFile() && FileTypeFilter.matches(name, filter))) {
+                        results.add(child);
+                    }
+                }
+            }
+            com.textview.reader.util.FileSortUtils.sortMainFiles(activity, results, sortMode);
+
+            activity.runOnUiThread(() -> {
+                if (activity.activityDestroyed || generation != activity.fileSearchGeneration.get()) return;
+                activity.exitFileSelectionMode(false);
+                activity.searchMode = true;
+                activity.homeMode = false;
+                updateFileTypeChips();
+                activity.currentDirectory = dir;
+                activity.searchReturnToHome = false;
+                activity.searchReturnDirectory = dir;
+                activity.recentSection.setVisibility(View.GONE);
+                activity.browserSection.setVisibility(View.VISIBLE);
+                activity.setPathBarVisible(true);
+                if (activity.pathText != null) activity.pathText.setText(dir.getAbsolutePath());
+                if (activity.getSupportActionBar() != null) {
+                    activity.getSupportActionBar().setTitle(filterLabelFor(filter));
+                }
+                activity.fileAdapter.setShowFilePath(false);
+                activity.fileAdapter.setSortModeSilently(sortMode);
+                activity.fileAdapter.setFilesFastPresorted(results);
+                activity.scrollListToTop(activity.fileRecyclerView);
+                activity.emptyText.setVisibility(results.isEmpty() ? View.VISIBLE : View.GONE);
+                if (results.isEmpty()) activity.emptyText.setText(activity.getString(R.string.no_file_search_results));
+                activity.updateParentFolderButtonState();
+                activity.updateMainOverflowButtonVisibility();
+                activity.invalidateOptionsMenu();
+                setFileSearchLoading(false);
+            });
+        });
+    }
+
     void restorePreSearchLocation() {
         activity.fileSearchGeneration.incrementAndGet();
+        setFileSearchLoading(false);
         activity.searchMode = false;
         activity.activeFileFilter = MainActivity.FILTER_ALL;
+        activity.fileTypeFilterActivatedDirectory = null;
         updateFileTypeChips();
 
         File target = activity.searchReturnDirectory;
@@ -410,7 +598,7 @@ final class MainSearchFilterController {
     private void startFileSearch(@NonNull String query, boolean allStorage) {
         activity.cancelPendingFolderLoad();
         final int generation = activity.fileSearchGeneration.incrementAndGet();
-        if (activity.fileSearchProgress != null) activity.fileSearchProgress.setVisibility(View.VISIBLE);
+        setFileSearchLoading(true);
         if (activity.fileSearchClearButton != null) {
             activity.fileSearchClearButton.setEnabled(true);
         }
@@ -418,6 +606,12 @@ final class MainSearchFilterController {
 
         List<File> roots = buildSearchRoots(allStorage);
         final int filter = activity.activeFileFilter;
+        final int resultLimit = FILE_SEARCH_RESULT_LIMIT;
+        final int visitLimit = FILE_SEARCH_VISIT_LIMIT;
+        final int sortMode = activity.prefs != null
+                ? activity.prefs.getSortMode()
+                : com.textview.reader.util.PrefsManager.SORT_NAME_ASC;
+        prepareFileSearchResultsView(query);
         activity.fileSearchExecutor.execute(() -> {
             if (activity.activityDestroyed || generation != activity.fileSearchGeneration.get()) return;
             List<File> results = new ArrayList<>();
@@ -425,17 +619,22 @@ final class MainSearchFilterController {
             String needle = query.toLowerCase(java.util.Locale.ROOT);
             boolean showHidden = activity.prefs == null || activity.prefs.getShowHiddenFiles();
             int[] visited = new int[]{0};
+            SearchProgress progress = new SearchProgress(query, generation);
 
             for (File root : roots) {
                 if (root == null || !root.exists() || !root.canRead()) continue;
-                searchFilesRecursive(root, needle, filter, showHidden, seen, results, visited, generation, 0);
-                if (generation != activity.fileSearchGeneration.get() || results.size() >= 300 || visited[0] >= 12000) break;
+                searchFilesRecursive(root, needle, filter, showHidden, seen, results, visited, generation, 0,
+                        resultLimit, visitLimit, progress);
+                if (generation != activity.fileSearchGeneration.get()
+                        || results.size() >= resultLimit
+                        || visited[0] >= visitLimit) break;
             }
 
+            com.textview.reader.util.FileSortUtils.sortMainFiles(activity, results, sortMode);
             activity.runOnUiThread(() -> {
                 if (activity.activityDestroyed || generation != activity.fileSearchGeneration.get()) return;
-                if (activity.fileSearchProgress != null) activity.fileSearchProgress.setVisibility(View.GONE);
-                showFileSearchResults(query, results);
+                setFileSearchLoading(false);
+                showFileSearchResults(query, results, true);
             });
         });
     }
@@ -443,6 +642,13 @@ final class MainSearchFilterController {
     private List<File> buildSearchRoots(boolean allStorage) {
         LinkedHashSet<String> paths = new LinkedHashSet<>();
         if (!allStorage && !activity.homeMode && activity.currentDirectory != null && activity.currentDirectory.exists()) {
+            paths.add(activity.currentDirectory.getAbsolutePath());
+        } else if (allStorage
+                && !activity.homeMode
+                && activity.currentDirectory != null
+                && activity.currentDirectory.exists()
+                && activity.currentDirectory.isDirectory()
+                && activity.currentDirectory.canRead()) {
             paths.add(activity.currentDirectory.getAbsolutePath());
         } else {
             File internal = Environment.getExternalStorageDirectory();
@@ -456,10 +662,48 @@ final class MainSearchFilterController {
         List<File> roots = new ArrayList<>();
         for (String path : paths) {
             if (path == null || path.trim().isEmpty()) continue;
-            File f = new File(path);
-            if (f.exists() && f.canRead()) roots.add(f);
+            File f = normalizedReadableRoot(new File(path));
+            if (f == null) continue;
+            addRootWithoutNestedDuplicates(roots, f);
         }
         return roots;
+    }
+
+    @Nullable
+    private File normalizedReadableRoot(@NonNull File root) {
+        try {
+            File canonical = root.getCanonicalFile();
+            return canonical.exists() && canonical.canRead() ? canonical : null;
+        } catch (Exception ignored) {
+            return root.exists() && root.canRead() ? root : null;
+        }
+    }
+
+    private void addRootWithoutNestedDuplicates(@NonNull List<File> roots, @NonNull File candidate) {
+        String candidatePath = normalizedPath(candidate);
+        for (int i = roots.size() - 1; i >= 0; i--) {
+            String existingPath = normalizedPath(roots.get(i));
+            if (isSameOrChildPath(candidatePath, existingPath)) return;
+            if (isSameOrChildPath(existingPath, candidatePath)) roots.remove(i);
+        }
+        roots.add(candidate);
+    }
+
+    @NonNull
+    private String normalizedPath(@NonNull File file) {
+        try {
+            return file.getCanonicalPath();
+        } catch (Exception ignored) {
+            return file.getAbsolutePath();
+        }
+    }
+
+    private boolean isSameOrChildPath(@NonNull String path, @NonNull String parent) {
+        String p = path.replace('\\', '/');
+        String root = parent.replace('\\', '/');
+        while (p.endsWith("/") && p.length() > 1) p = p.substring(0, p.length() - 1);
+        while (root.endsWith("/") && root.length() > 1) root = root.substring(0, root.length() - 1);
+        return p.equals(root) || p.startsWith(root + "/");
     }
 
     private void searchFilesRecursive(@NonNull File dir,
@@ -470,8 +714,14 @@ final class MainSearchFilterController {
                                       @NonNull List<File> results,
                                       @NonNull int[] visited,
                                       int generation,
-                                      int depth) {
-        if (generation != activity.fileSearchGeneration.get() || depth > 16 || results.size() >= 300 || visited[0] >= 12000) return;
+                                      int depth,
+                                      int resultLimit,
+                                      int visitLimit,
+                                      @Nullable SearchProgress progress) {
+        if (generation != activity.fileSearchGeneration.get()
+                || depth > 16
+                || results.size() >= resultLimit
+                || visited[0] >= visitLimit) return;
         File[] children = dir.listFiles();
         if (children == null) return;
 
@@ -479,7 +729,7 @@ final class MainSearchFilterController {
             if (generation != activity.fileSearchGeneration.get()) return;
             if (child == null) continue;
             visited[0]++;
-            if (visited[0] >= 12000 || results.size() >= 300) return;
+            if (visited[0] >= visitLimit || results.size() >= resultLimit) return;
             String name = child.getName();
             if (!showHidden && name.startsWith(".")) continue;
             String path = child.getAbsolutePath();
@@ -492,37 +742,96 @@ final class MainSearchFilterController {
                     && nameMatch;
             if ((fileMatch || directoryMatch) && nameMatch && seen.add(path)) {
                 results.add(child);
-                if (results.size() >= 300) return;
+                maybePublishSearchProgress(progress, results);
+                if (results.size() >= resultLimit) return;
             }
             if (child.isDirectory() && child.canRead()) {
-                searchFilesRecursive(child, needle, filter, showHidden, seen, results, visited, generation, depth + 1);
+                searchFilesRecursive(child, needle, filter, showHidden, seen, results, visited, generation, depth + 1,
+                        resultLimit, visitLimit, progress);
             }
         }
+    }
+
+    private void maybePublishSearchProgress(@Nullable SearchProgress progress, @NonNull List<File> results) {
+        if (progress == null) return;
+        int size = results.size();
+        long now = android.os.SystemClock.uptimeMillis();
+        if (size - progress.lastPublishedCount < FILE_SEARCH_PROGRESS_BATCH
+                && now - progress.lastPublishedAt < FILE_SEARCH_PROGRESS_MIN_INTERVAL_MS) {
+            return;
+        }
+        progress.lastPublishedCount = size;
+        progress.lastPublishedAt = now;
+        ArrayList<File> snapshot = new ArrayList<>(results);
+        activity.runOnUiThread(() -> {
+            if (activity.activityDestroyed
+                    || progress.generation != activity.fileSearchGeneration.get()
+                    || !activity.searchMode) return;
+            showFileSearchResults(progress.query, snapshot, false);
+        });
     }
 
     private String filterLabelFor(int filter) {
         return activity.getString(FileTypeFilter.labelResId(filter));
     }
 
-    private void showFileSearchResults(@NonNull String query, @NonNull List<File> results) {
+    private void prepareFileSearchResultsView(@NonNull String query) {
         activity.exitFileSelectionMode(false);
         activity.searchMode = true;
         activity.homeMode = false;
+        updateFileTypeChips();
         activity.recentSection.setVisibility(View.GONE);
         activity.browserSection.setVisibility(View.VISIBLE);
         activity.setPathBarVisible(true);
         activity.pathText.setText(activity.getString(R.string.file_search_results_for,
                 query.isEmpty() ? filterLabelFor(activity.activeFileFilter) : query,
-                results.size()));
+                0));
         if (activity.getSupportActionBar() != null) activity.getSupportActionBar().setTitle(R.string.file_search);
         updateFileSearchClearButtonVisibility();
 
-        activity.fileAdapter.setFiles(results);
-        activity.scrollListToTop(activity.fileRecyclerView);
+        activity.fileAdapter.setShowFilePath(true);
+        activity.fileAdapter.setSortModeSilently(activity.prefs != null
+                ? activity.prefs.getSortMode()
+                : com.textview.reader.util.PrefsManager.SORT_NAME_ASC);
+        activity.fileAdapter.setFilesFastPresorted(new ArrayList<>());
+        if (activity.emptyText != null) {
+            activity.emptyText.setVisibility(View.VISIBLE);
+            activity.emptyText.setText(activity.getString(R.string.loading));
+        }
+        activity.updateMainOverflowButtonVisibility();
+        activity.invalidateOptionsMenu();
+    }
+
+    private void showFileSearchResults(@NonNull String query,
+                                       @NonNull List<File> results,
+                                       boolean finalResult) {
+        if (!activity.searchMode) prepareFileSearchResultsView(query);
+        activity.pathText.setText(activity.getString(R.string.file_search_results_for,
+                query.isEmpty() ? filterLabelFor(activity.activeFileFilter) : query,
+                results.size()));
+        activity.fileAdapter.setShowFilePath(true);
+        activity.fileAdapter.setFilesFastPresorted(results);
+        if (finalResult) activity.scrollListToTop(activity.fileRecyclerView);
         activity.emptyText.setVisibility(results.isEmpty() ? View.VISIBLE : View.GONE);
-        if (results.isEmpty()) activity.emptyText.setText(activity.getString(R.string.no_file_search_results));
+        if (results.isEmpty()) {
+            activity.emptyText.setText(activity.getString(finalResult
+                    ? R.string.no_file_search_results
+                    : R.string.loading));
+        }
         updateFileSearchClearButtonVisibility();
         activity.updateMainOverflowButtonVisibility();
         activity.invalidateOptionsMenu();
+    }
+
+    private static final class SearchProgress {
+        final String query;
+        final int generation;
+        int lastPublishedCount;
+        long lastPublishedAt;
+
+        SearchProgress(@NonNull String query, int generation) {
+            this.query = query;
+            this.generation = generation;
+        }
     }
 }

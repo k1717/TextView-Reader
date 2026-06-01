@@ -2,6 +2,7 @@ package com.textview.reader;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.ActivityNotFoundException;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.Typeface;
@@ -18,6 +19,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Environment;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.Editable;
 import android.text.Layout;
@@ -30,6 +32,7 @@ import android.view.ViewGroup;
 import android.view.ViewConfiguration;
 import android.view.Gravity;
 import android.view.inputmethod.EditorInfo;
+import android.webkit.MimeTypeMap;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -54,6 +57,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
@@ -84,6 +88,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Locale;
 
@@ -102,6 +109,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     public static final String EXTRA_RETURN_TO_VIEWER = "return_to_viewer";
     public static final String EXTRA_START_DIRECTORY = "start_directory";
     private static final int PERMISSION_REQUEST_CODE = 100;
+    private static final int FOLDER_LOAD_PROGRESS_BATCH = 192;
+    private static final long FOLDER_LOAD_PROGRESS_MIN_INTERVAL_MS = 280L;
 
     DrawerLayout drawerLayout;
     ActionBarDrawerToggle drawerToggle;
@@ -111,6 +120,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     TextView pathText;
     TextView parentFolderButton;
     TextView emptyText;
+    View fileFastScrollRail;
+    View fileFastScrollThumb;
     View recentSection;
     View browserSection;
     RecyclerView recentRecyclerView;
@@ -131,6 +142,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     EditText fileSearchInput;
     TextView fileSearchClearButton;
     ProgressBar fileSearchProgress;
+    ImageButton fileSearchScopeButton;
     ImageButton fileSortButton;
     View fileSearchBar;
     View fileTypeFilterScroll;
@@ -153,7 +165,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     static final int FILTER_IMAGE = FileTypeFilter.IMAGE;
     int activeFileFilter = FILTER_ALL;
     final ExecutorService fileSearchExecutor = Executors.newSingleThreadExecutor();
-    final ExecutorService folderLoadExecutor = Executors.newSingleThreadExecutor();
+    private final Object folderLoadExecutorLock = new Object();
+    ThreadPoolExecutor folderLoadExecutor = createFolderLoadExecutor();
     final Handler fileSearchHandler = new Handler(Looper.getMainLooper());
     Runnable pendingFileSearchRunnable;
     volatile boolean activityDestroyed = false;
@@ -162,6 +175,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     boolean searchMode = false;
     boolean searchReturnToHome = true;
     File searchReturnDirectory = null;
+    File fileTypeFilterActivatedDirectory = null;
+    boolean fileSearchAllFolders = false;
 
     float drawerSwipeStartX;
     float drawerSwipeStartY;
@@ -386,6 +401,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         }
 
         if (mainToolbar != null) applyMainReadableTheme(mainToolbar);
+        if (mainSearchFilterController != null) {
+            mainSearchFilterController.applySavedFileTypeOrder();
+            mainSearchFilterController.updateFileTypeChips();
+        }
 
         loadRecentFiles();
         rebuildDrawerStorageEntries();
@@ -420,7 +439,9 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
         folderLoadGeneration.incrementAndGet();
         fileSearchExecutor.shutdownNow();
-        folderLoadExecutor.shutdownNow();
+        synchronized (folderLoadExecutorLock) {
+            folderLoadExecutor.shutdownNow();
+        }
         super.onDestroy();
     }
 
@@ -441,7 +462,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         updateParentFolderButtonState();
     }
 
-    private void updateParentFolderButtonState() {
+    void updateParentFolderButtonState() {
         if (parentFolderButton == null) return;
 
         boolean show = !homeMode
@@ -512,6 +533,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     void updateFileSearchClearButtonVisibility() { mainSearch().updateFileSearchClearButtonVisibility(); }
 
+    void updateSearchScopeButton() { mainSearch().updateSearchScopeButton(); }
+
     void restoreAllFilterLocation() { mainSearch().restoreAllFilterLocation(); }
 
     void resetFileFilterForNavigation() { mainSearch().resetFileFilterForNavigation(); }
@@ -521,6 +544,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     void runLiveFileSearchNow() { mainSearch().runLiveFileSearchNow(); }
 
     void restorePreSearchLocation() { mainSearch().restorePreSearchLocation(); }
+
+    void showFilteredCurrentFolder(File dir) { mainSearch().showCurrentFolderFilterResults(dir); }
 
     boolean matchesActiveFileFilter(@NonNull String name, int filter) {
         return FileTypeFilter.matches(name, filter);
@@ -844,7 +869,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                         resetFileFilterForNavigation();
                         showBrowseMode(target);
                     } else {
-                        Toast.makeText(this, R.string.containing_folder_unavailable, Toast.LENGTH_SHORT).show();
+                        ShortToast.show(this, R.string.containing_folder_unavailable);
                     }
                 }
                 break;
@@ -867,14 +892,14 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (prefs == null || !folder.isDirectory()) return;
         prefs.addFolderShortcut(folder.getAbsolutePath());
         rebuildDrawerStorageEntries();
-        Toast.makeText(this, getString(R.string.shortcut_added), Toast.LENGTH_SHORT).show();
+        ShortToast.show(this, getString(R.string.shortcut_added));
     }
 
     void removeFolderShortcut(@NonNull File folder) {
         if (prefs == null) return;
         prefs.removeFolderShortcut(folder.getAbsolutePath());
         rebuildDrawerStorageEntries();
-        Toast.makeText(this, getString(R.string.shortcut_removed), Toast.LENGTH_SHORT).show();
+        ShortToast.show(this, getString(R.string.shortcut_removed));
     }
 
     private void showShortcutRemoveDialog(@NonNull File folder) {
@@ -944,7 +969,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     private void showClearAllRecentFilesDialog() {
         if (bookmarkManager == null || !bookmarkManager.hasRecentFiles()) {
-            Toast.makeText(this, getString(R.string.no_recent_files_to_clear), Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, getString(R.string.no_recent_files_to_clear));
             return;
         }
         showSimpleDangerDialog(
@@ -955,14 +980,14 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                     if (bookmarkManager != null) bookmarkManager.clearReadingStates();
                     loadRecentFiles();
                     rebuildDrawerStorageEntries();
-                    Toast.makeText(this, getString(R.string.recent_files_cleared), Toast.LENGTH_SHORT).show();
+                    ShortToast.show(this, getString(R.string.recent_files_cleared));
                 });
     }
 
     void showClearAllRecentFoldersDialog() {
         List<String> visibleRecentFolders = collectVisibleRecentFolderPaths();
         if (visibleRecentFolders.isEmpty()) {
-            Toast.makeText(this, getString(R.string.no_recent_folders_to_clear), Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, getString(R.string.no_recent_folders_to_clear));
             return;
         }
         showSimpleDangerDialog(
@@ -972,7 +997,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                 () -> {
                     if (prefs != null) prefs.clearRecentFolders(visibleRecentFolders);
                     rebuildDrawerStorageEntries();
-                    Toast.makeText(this, getString(R.string.recent_folders_cleared), Toast.LENGTH_SHORT).show();
+                    ShortToast.show(this, getString(R.string.recent_folders_cleared));
                 });
     }
 
@@ -984,7 +1009,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                 () -> {
                     if (prefs != null) prefs.removeRecentFolder(folder.getAbsolutePath());
                     rebuildDrawerStorageEntries();
-                    Toast.makeText(this, getString(R.string.recent_folder_cleared), Toast.LENGTH_SHORT).show();
+                    ShortToast.show(this, getString(R.string.recent_folder_cleared));
                 });
     }
 
@@ -1093,10 +1118,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     void showHomeMode() {
         exitFileSelectionMode(false);
         cancelPendingFolderLoad();
+        if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.GONE);
         searchMode = false;
         searchReturnToHome = true;
         searchReturnDirectory = null;
         homeMode = true;
+        updateFileTypeChips();
         recentSection.setVisibility(View.VISIBLE);
         browserSection.setVisibility(View.GONE);
         setPathBarVisible(false);
@@ -1115,6 +1142,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         searchReturnToHome = false;
         searchReturnDirectory = dir;
         homeMode = false;
+        updateFileTypeChips();
         recentSection.setVisibility(View.GONE);
         browserSection.setVisibility(View.VISIBLE);
         setPathBarVisible(true);
@@ -1215,6 +1243,9 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     void cancelPendingFolderLoad() {
         folderLoadGeneration.incrementAndGet();
+        synchronized (folderLoadExecutorLock) {
+            folderLoadExecutor.getQueue().clear();
+        }
     }
 
     void loadDirectory(File dir) {
@@ -1237,54 +1268,157 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             getSupportActionBar().setTitle(targetDir.getName().isEmpty() ? "/" : targetDir.getName());
         }
 
+        if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.VISIBLE);
         if (fileAdapter != null) {
+            fileAdapter.setShowFilePath(false);
             fileAdapter.setSortModeSilently(sortMode);
             fileAdapter.setFilesFastPresorted(new ArrayList<>());
         }
         if (emptyText != null) {
-            emptyText.setText(getString(R.string.loading));
-            emptyText.setVisibility(View.VISIBLE);
+            emptyText.setVisibility(View.GONE);
         }
         scrollListToTop(fileRecyclerView);
 
-        folderLoadExecutor.execute(() -> {
-            List<File> fileList = new ArrayList<>();
+        submitPriorityFolderLoad(() -> {
+            List<File> folderList = new ArrayList<>();
+            List<File> visibleFiles = new ArrayList<>();
+            FolderLoadProgress progress = new FolderLoadProgress(targetDir, generation, sortMode, true);
             try {
                 File[] fileArray = targetDir.listFiles();
                 if (fileArray != null) {
                     for (File f : fileArray) {
                         if (activityDestroyed || generation != folderLoadGeneration.get()) return;
                         if (!showHidden && f.getName().startsWith(".")) continue;
-                        if (f.isDirectory() || FileUtils.isSupportedReadableFile(f.getName())) {
-                            fileList.add(f);
+                        if (f.isDirectory() || FileUtils.isVisibleInAllFilesFilter(f.getName())) {
+                            if (f.isDirectory()) {
+                                folderList.add(f);
+                            } else {
+                                visibleFiles.add(f);
+                            }
+                            maybePublishFolderLoadProgress(progress, folderList, visibleFiles);
                         }
                     }
                 }
-                sortFilesForMainList(fileList, sortMode);
-            } catch (SecurityException ignored) {
-                fileList.clear();
-            }
+                List<File> fileList = new ArrayList<>(folderList.size() + visibleFiles.size());
+                fileList.addAll(folderList);
+                fileList.addAll(visibleFiles);
+                final int finalSortMode = getCurrentMainSortMode();
+                sortFilesForMainList(fileList, finalSortMode);
 
-            fileSearchHandler.post(() -> {
-                if (activityDestroyed || generation != folderLoadGeneration.get()) return;
-                if (!targetDir.equals(currentDirectory)) return;
+                fileSearchHandler.post(() -> {
+                    if (activityDestroyed || generation != folderLoadGeneration.get()) return;
+                    if (!targetDir.equals(currentDirectory)) return;
 
-                if (fileAdapter != null) {
-                    fileAdapter.setSortModeSilently(sortMode);
-                    fileAdapter.setFilesFastPresorted(fileList);
-                }
-                if (!scrollToPendingRevealFile(targetDir, fileList)) {
-                    scrollListToTop(fileRecyclerView);
-                }
-                if (emptyText != null) {
-                    emptyText.setVisibility(fileList.isEmpty() ? View.VISIBLE : View.GONE);
-                    if (fileList.isEmpty()) {
-                        emptyText.setText(getString(R.string.no_text_files_in_directory));
+                    if (fileAdapter != null) {
+                        fileAdapter.setShowFilePath(false);
+                        fileAdapter.setSortModeSilently(finalSortMode);
+                        fileAdapter.setFilesFastPresorted(fileList);
                     }
-                }
-                rebuildDrawerStorageEntries();
-            });
+                    if (!scrollToPendingRevealFile(targetDir, fileList)) {
+                        scrollListToTop(fileRecyclerView);
+                    }
+                    if (emptyText != null) {
+                        emptyText.setVisibility(fileList.isEmpty() ? View.VISIBLE : View.GONE);
+                        if (fileList.isEmpty()) {
+                            emptyText.setText(getString(R.string.no_text_files_in_directory));
+                        }
+                    }
+                    if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.GONE);
+                    rebuildDrawerStorageEntries();
+                });
+            } catch (SecurityException ignored) {
+                fileSearchHandler.post(() -> {
+                    if (activityDestroyed || generation != folderLoadGeneration.get()) return;
+                    if (!targetDir.equals(currentDirectory)) return;
+                    if (fileAdapter != null) {
+                        fileAdapter.setShowFilePath(false);
+                        fileAdapter.setSortModeSilently(sortMode);
+                        fileAdapter.setFilesFastPresorted(new ArrayList<>());
+                    }
+                    if (emptyText != null) {
+                        emptyText.setText(getString(R.string.no_text_files_in_directory));
+                        emptyText.setVisibility(View.VISIBLE);
+                    }
+                    if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.GONE);
+                });
+            }
         });
+    }
+
+
+    private ThreadPoolExecutor createFolderLoadExecutor() {
+        return new ThreadPoolExecutor(
+                1,
+                1,
+                0L,
+                TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<>());
+    }
+
+    private void submitPriorityFolderLoad(@NonNull Runnable task) {
+        // Directory navigation is user-facing and should outrank stale progressive
+        // folder loads. Queue clearing alone is not enough when the old task is
+        // already inside File.listFiles(), so replace the executor after interrupting
+        // the stale worker. The generation checks in each load path keep any late
+        // result from the old executor from touching the UI.
+        synchronized (folderLoadExecutorLock) {
+            folderLoadExecutor.getQueue().clear();
+            if (folderLoadExecutor.getActiveCount() > 0) {
+                folderLoadExecutor.shutdownNow();
+                folderLoadExecutor = createFolderLoadExecutor();
+            }
+            folderLoadExecutor.execute(task);
+        }
+    }
+
+    private void maybePublishFolderLoadProgress(@NonNull FolderLoadProgress progress,
+                                                @NonNull List<File> folders,
+                                                @NonNull List<File> files) {
+        int size = folders.size() + files.size();
+        long now = SystemClock.uptimeMillis();
+        if (size - progress.lastPublishedCount < FOLDER_LOAD_PROGRESS_BATCH
+                && now - progress.lastPublishedAt < FOLDER_LOAD_PROGRESS_MIN_INTERVAL_MS) {
+            return;
+        }
+        progress.lastPublishedCount = size;
+        progress.lastPublishedAt = now;
+        ArrayList<File> snapshot = new ArrayList<>(size);
+        snapshot.addAll(folders);
+        snapshot.addAll(files);
+        fileSearchHandler.post(() -> publishFolderLoadSnapshot(progress, snapshot));
+    }
+
+    private void publishFolderLoadSnapshot(@NonNull FolderLoadProgress progress, @NonNull List<File> snapshot) {
+        if (activityDestroyed || progress.generation != folderLoadGeneration.get()) return;
+        if (!progress.targetDir.equals(currentDirectory)) return;
+        if (fileAdapter != null) {
+            fileAdapter.setShowFilePath(false);
+            fileAdapter.setSortModeSilently(progress.sortMode);
+            fileAdapter.setFilesFastPresorted(snapshot);
+        }
+        if (progress.scrollTop) {
+            progress.scrollTop = false;
+            scrollListToTop(fileRecyclerView);
+        }
+        if (emptyText != null) {
+            emptyText.setVisibility(View.GONE);
+        }
+    }
+
+    private static final class FolderLoadProgress {
+        final File targetDir;
+        final int generation;
+        final int sortMode;
+        boolean scrollTop;
+        int lastPublishedCount;
+        long lastPublishedAt;
+
+        FolderLoadProgress(@NonNull File targetDir, int generation, int sortMode, boolean scrollTop) {
+            this.targetDir = targetDir;
+            this.generation = generation;
+            this.sortMode = sortMode;
+            this.scrollTop = scrollTop;
+        }
     }
 
     private boolean scrollToPendingRevealFile(@NonNull File targetDir, @NonNull List<File> fileList) {
@@ -1339,33 +1473,39 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             getSupportActionBar().setTitle(targetDir.getName().isEmpty() ? "/" : targetDir.getName());
         }
         if (fileAdapter != null) {
+            fileAdapter.setShowFilePath(false);
             fileAdapter.setSortModeSilently(sortMode);
         }
 
-        folderLoadExecutor.execute(() -> {
+        submitPriorityFolderLoad(() -> {
             List<File> fileList = new ArrayList<>();
+            int appliedSortMode = getCurrentMainSortMode();
             try {
                 File[] fileArray = targetDir.listFiles();
                 if (fileArray != null) {
                     for (File f : fileArray) {
                         if (activityDestroyed || generation != folderLoadGeneration.get()) return;
                         if (!showHidden && f.getName().startsWith(".")) continue;
-                        if (f.isDirectory() || FileUtils.isSupportedReadableFile(f.getName())) {
+                        if (f.isDirectory() || FileUtils.isVisibleInAllFilesFilter(f.getName())) {
                             fileList.add(f);
                         }
                     }
                 }
-                sortFilesForMainList(fileList, sortMode);
+                appliedSortMode = getCurrentMainSortMode();
+                sortFilesForMainList(fileList, appliedSortMode);
             } catch (SecurityException ignored) {
                 fileList.clear();
+                appliedSortMode = getCurrentMainSortMode();
             }
 
+            final int finalSortMode = appliedSortMode;
             fileSearchHandler.post(() -> {
                 if (activityDestroyed || generation != folderLoadGeneration.get()) return;
                 if (!targetDir.equals(currentDirectory)) return;
 
                 if (fileAdapter != null) {
-                    fileAdapter.setSortModeSilently(sortMode);
+                    fileAdapter.setShowFilePath(false);
+                    fileAdapter.setSortModeSilently(finalSortMode);
                     fileAdapter.setFiles(fileList);
                 }
                 if (emptyText != null) {
@@ -1378,8 +1518,36 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         });
     }
 
+    void resortVisibleFileListAsync(int sortMode) {
+        if (fileAdapter == null) return;
+        final int generation = fileSearchGeneration.incrementAndGet();
+        final boolean showPath = searchMode;
+        final ArrayList<File> snapshot = fileAdapter.getFilesSnapshot();
+        if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.VISIBLE);
+        fileAdapter.setSortModeSilently(sortMode);
+
+        fileSearchExecutor.execute(() -> {
+            ArrayList<File> sorted = new ArrayList<>(snapshot);
+            sortFilesForMainList(sorted, sortMode);
+            fileSearchHandler.post(() -> {
+                if (activityDestroyed || generation != fileSearchGeneration.get()) return;
+                if (fileAdapter != null) {
+                    fileAdapter.setShowFilePath(showPath);
+                    fileAdapter.setSortModeSilently(sortMode);
+                    fileAdapter.setFilesFastPresorted(sorted);
+                }
+                if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.GONE);
+                scrollListToTop(fileRecyclerView);
+            });
+        });
+    }
+
     private void sortFilesForMainList(@NonNull List<File> target, int sortMode) {
-        FileSortUtils.sortMainFiles(target, sortMode);
+        FileSortUtils.sortMainFiles(this, target, sortMode);
+    }
+
+    private int getCurrentMainSortMode() {
+        return prefs != null ? prefs.getSortMode() : PrefsManager.SORT_NAME_ASC;
     }
 
     private boolean isRootStorage(File dir) {
@@ -1459,10 +1627,42 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         }
         if (file.isDirectory()) {
             // Stepping into a subfolder from home or search results promotes the view to browse mode.
-            if (homeMode || searchMode) showBrowseMode(file);
+            if (shouldKeepFileTypeFilterForFolderNavigation()) showFilteredCurrentFolder(file);
+            else if (homeMode || searchMode) showBrowseMode(file);
             else loadDirectory(file);
         } else {
             openFile(file);
+        }
+    }
+
+    private boolean shouldKeepFileTypeFilterForFolderNavigation() {
+        return activeFileFilter != FILTER_ALL
+                && !homeMode
+                && fileSearchInput != null
+                && fileSearchInput.getText() != null
+                && fileSearchInput.getText().toString().trim().isEmpty();
+    }
+
+    private boolean isAtFileTypeFilterActivationDirectory() {
+        if (currentDirectory == null || fileTypeFilterActivatedDirectory == null) return false;
+        try {
+            return currentDirectory.getCanonicalFile().equals(fileTypeFilterActivatedDirectory.getCanonicalFile());
+        } catch (IOException ignored) {
+            return currentDirectory.getAbsolutePath().equals(fileTypeFilterActivatedDirectory.getAbsolutePath());
+        }
+    }
+
+    private void clearFileTypeFilterAndMoveToParent() {
+        File parent = currentDirectory != null ? currentDirectory.getParentFile() : null;
+        activeFileFilter = FILTER_ALL;
+        fileTypeFilterActivatedDirectory = null;
+        updateFileTypeChips();
+        if (parent != null && parent.canRead()) {
+            searchMode = false;
+            homeMode = false;
+            loadDirectory(parent);
+        } else {
+            restoreAllFilterLocation();
         }
     }
 
@@ -1508,7 +1708,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     void navigateToContainingFolder(@NonNull File file) {
         File parent = file.getParentFile();
         if (parent == null || !parent.exists() || !parent.isDirectory() || !parent.canRead()) {
-            Toast.makeText(this, R.string.containing_folder_unavailable, Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, R.string.containing_folder_unavailable);
             return;
         }
 
@@ -1577,8 +1777,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             image = true;
             intent = new Intent(this, ImageReaderActivity.class);
             intent.putExtra(ImageReaderActivity.EXTRA_FILE_PATH, file.getAbsolutePath());
-            intent.putStringArrayListExtra(ImageReaderActivity.EXTRA_FILE_PATHS, mainImageOpen().buildImageSiblingPaths(file));
+            mainImageOpen().attachDeferredImageViewerSequence(intent, file);
             intent.putExtra(ImageReaderActivity.EXTRA_ALLOW_FILE_OPS, true);
+        } else if (FileUtils.isExternalOpenableFile(file.getName())) {
+            openExternalFile(file);
+            if (returnToViewerMode) finish();
+            return;
         } else {
             intent = new Intent(this, ReaderActivity.class);
             intent.putExtra(ReaderActivity.EXTRA_FILE_PATH, file.getAbsolutePath());
@@ -1591,6 +1795,47 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         startActivity(intent);
 
         if (returnToViewerMode) finish();
+    }
+
+    private void openExternalFile(@NonNull File file) {
+        if (!file.exists() || !file.isFile() || !file.canRead()) {
+            ShortToast.show(this, R.string.external_open_failed);
+            return;
+        }
+        try {
+            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", file);
+            Intent view = new Intent(Intent.ACTION_VIEW);
+            view.setDataAndType(uri, externalMimeTypeFor(file));
+            view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if (FileUtils.isApkFile(file.getName())) {
+                startActivity(view);
+            } else {
+                startActivity(Intent.createChooser(view, getString(R.string.open)));
+            }
+        } catch (ActivityNotFoundException e) {
+            ShortToast.show(this, R.string.external_open_failed);
+        } catch (Exception e) {
+            ShortToast.show(this, R.string.external_open_failed);
+        }
+    }
+
+    @NonNull
+    private String externalMimeTypeFor(@NonNull File file) {
+        if (FileUtils.isApkFile(file.getName())) return "application/vnd.android.package-archive";
+        if (FileUtils.isVideoFile(file.getName())) return mimeTypeFromExtension(file, "video/*");
+        return mimeTypeFromExtension(file, "application/octet-stream");
+    }
+
+    @NonNull
+    private String mimeTypeFromExtension(@NonNull File file, @NonNull String fallback) {
+        String name = file.getName();
+        int dot = name.lastIndexOf('.');
+        if (dot >= 0 && dot < name.length() - 1) {
+            String ext = name.substring(dot + 1).toLowerCase(Locale.ROOT);
+            String mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
+            if (mime != null && mime.trim().length() > 0) return mime;
+        }
+        return fallback;
     }
 
     void openFileFromUri(Uri uri) {
@@ -1845,10 +2090,25 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             return;
         }
 
-        // 3. If only a file-type filter is active, Back should return the chips and
-        // content to All instead of showing the exit toast from the home/recent page.
+        // 3. In filtered folder browsing, Back keeps the filter only for folders
+        // entered after the filter was already active. At the folder where the
+        // filter was turned on, Back clears it and returns to the parent.
         if (activeFileFilter != FILTER_ALL) {
+            if (shouldKeepFileTypeFilterForFolderNavigation()
+                    && currentDirectory != null
+                    && !isRootStorage(currentDirectory)) {
+                File parent = currentDirectory.getParentFile();
+                if (parent != null && parent.canRead()) {
+                    if (isAtFileTypeFilterActivationDirectory()) {
+                        clearFileTypeFilterAndMoveToParent();
+                        return;
+                    }
+                    showFilteredCurrentFolder(parent);
+                    return;
+                }
+            }
             activeFileFilter = FILTER_ALL;
+            fileTypeFilterActivatedDirectory = null;
             updateFileTypeChips();
             if (searchMode) {
                 restorePreSearchLocation();
@@ -1893,7 +2153,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             finish();
         } else {
             lastBackPressedTime = now;
-            Toast.makeText(this, getString(R.string.press_back_again_exit), Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, getString(R.string.press_back_again_exit));
         }
     }
 

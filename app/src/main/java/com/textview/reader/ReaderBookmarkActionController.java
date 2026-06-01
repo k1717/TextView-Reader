@@ -21,7 +21,7 @@ final class ReaderBookmarkActionController {
 
     void saveCurrentBookmarkTekStyle(Runnable afterSave) {
         if (activity.filePath == null || activity.fileContent == null || activity.fileContent.isEmpty()) {
-            Toast.makeText(activity, activity.getString(R.string.file_not_loaded), Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, activity.getString(R.string.file_not_loaded));
             return;
         }
 
@@ -46,7 +46,7 @@ final class ReaderBookmarkActionController {
                 b.setEndPosition(bookmarkEndPosition);
                 activity.bookmarkPageModel().applyCurrentSavePageModel(b);
                 activity.bookmarkManager.updateBookmark(b);
-                Toast.makeText(activity, activity.getString(R.string.bookmark_updated), Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, activity.getString(R.string.bookmark_updated));
                 if (afterSave != null) afterSave.run();
                 return;
             }
@@ -60,7 +60,7 @@ final class ReaderBookmarkActionController {
         // No label prompt here. Original behavior is excerpt/position based.
         // Optional memo editing remains available by long-pressing a bookmark.
         activity.bookmarkManager.addBookmark(bookmark);
-        Toast.makeText(activity, activity.getString(R.string.bookmark_saved), Toast.LENGTH_SHORT).show();
+        ShortToast.show(activity, activity.getString(R.string.bookmark_saved));
 
         if (afterSave != null) afterSave.run();
     }

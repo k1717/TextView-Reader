@@ -11,7 +11,7 @@ import com.textview.reader.util.ReaderKeyMap;
 
 final class ReaderShellController {
     private static final long VIEWER_DOUBLE_BACK_TIMEOUT_MS = 1000L;
-    private static final long VIEWER_BACK_TOAST_DURATION_MS = 650L;
+    private static final long VIEWER_BACK_TOAST_DURATION_MS = ShortToast.DURATION_MS;
 
     private final ReaderActivity activity;
     private long lastViewerBackPressedTime = 0L;
@@ -83,11 +83,9 @@ final class ReaderShellController {
     private void showShortViewerBackToast() {
         cancelViewerBackToast();
 
-        viewerBackToast = Toast.makeText(
+        viewerBackToast = ShortToast.showTracked(
                 activity,
-                activity.getString(R.string.press_back_again_exit),
-                Toast.LENGTH_SHORT);
-        viewerBackToast.show();
+                activity.getString(R.string.press_back_again_exit));
 
         activity.handler.postDelayed(() -> {
             if (viewerBackToast != null) {

@@ -199,7 +199,7 @@ final class ReaderTextDisplayRuleDialogController {
         saveButton.setOnClickListener(v -> {
             String find = findInput.getText() != null ? findInput.getText().toString() : "";
             if (find.trim().isEmpty()) {
-                Toast.makeText(activity, R.string.txt_display_rule_find_required, Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, R.string.txt_display_rule_find_required);
                 return;
             }
             String beforeSignature = currentTextDisplayRuleSignature();
@@ -257,7 +257,7 @@ final class ReaderTextDisplayRuleDialogController {
             String afterSignature = currentTextDisplayRuleSignature();
             dialog.dismiss();
             if (onSaved != null) activity.handler.post(onSaved);
-            Toast.makeText(activity, editingExistingRule ? R.string.txt_display_rule_saved : R.string.txt_display_rule_added, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, editingExistingRule ? R.string.txt_display_rule_saved : R.string.txt_display_rule_added);
             if (!beforeSignature.equals(afterSignature)) {
                 if (shouldRefreshTxtContent) {
                     requestTextDisplayRuleContentRefreshOnWindowClose();

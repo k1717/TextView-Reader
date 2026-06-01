@@ -1016,7 +1016,7 @@ public class DocumentPageActivity extends AppCompatActivity {
 
     private void refreshCurrentEpubTextSize() {
         if ("EPUB".equals(docType) && epubFixedLayoutLike) {
-            Toast.makeText(this, localizedText("Fixed-layout EPUB keeps its original page layout.", "고정 레이아웃 EPUB은 원본 페이지 배치를 유지합니다."), Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, localizedText("Fixed-layout EPUB keeps its original page layout.", "고정 레이아웃 EPUB은 원본 페이지 배치를 유지합니다."));
             return;
         }
         applyDocumentTextZoom();
@@ -1151,13 +1151,13 @@ public class DocumentPageActivity extends AppCompatActivity {
             try {
                 int target = Integer.parseInt(input.getText().toString().trim());
                 if (target < 1 || target > pages.size()) {
-                    Toast.makeText(this, getString(R.string.page_range_error, pages.size()), Toast.LENGTH_SHORT).show();
+                    ShortToast.show(this, getString(R.string.page_range_error, pages.size()));
                     return;
                 }
                 showPage(target - 1, Integer.compare(target - 1, currentPage));
                 if (dialogRef[0] != null) dialogRef[0].dismiss();
             } catch (Exception ignored) {
-                Toast.makeText(this, getString(R.string.invalid_page_number), Toast.LENGTH_SHORT).show();
+                ShortToast.show(this, getString(R.string.invalid_page_number));
             }
         });
         dialogRef[0] = createStablePositionedDialog(box, DOCUMENT_TOOLBAR_POPUP_Y_DP, true, false);
@@ -1446,7 +1446,7 @@ public class DocumentPageActivity extends AppCompatActivity {
                 b.setExcerpt(excerpt);
                 b.setEndPosition(currentPage);
                 bookmarkManager.updateBookmark(b);
-                Toast.makeText(this, getString(R.string.bookmark_updated), Toast.LENGTH_SHORT).show();
+                ShortToast.show(this, getString(R.string.bookmark_updated));
                 return;
             }
         }
@@ -1456,7 +1456,7 @@ public class DocumentPageActivity extends AppCompatActivity {
         bookmark.setTotalPages(pages.size());
         bookmark.setEndPosition(currentPage);
         bookmarkManager.addBookmark(bookmark);
-        Toast.makeText(this, getString(R.string.bookmark_saved), Toast.LENGTH_SHORT).show();
+        ShortToast.show(this, getString(R.string.bookmark_saved));
     }
 
     private void showBookmarksDialog() {

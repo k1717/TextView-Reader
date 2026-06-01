@@ -712,13 +712,13 @@ final class ReaderFontDialogController {
                     activity.applyPreferences();
                     activity.updatePositionLabel();
                 }
-                Toast.makeText(activity, localizedText("Font removed", "글꼴을 삭제했습니다"), Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, localizedText("Font removed", "글꼴을 삭제했습니다"));
                 dialog.dismiss();
                 if (afterRemove != null) afterRemove.run();
             } else {
-                Toast.makeText(activity, localizedText(
+                ShortToast.show(activity, localizedText(
                         "This font cannot be removed from inside the app.",
-                        "이 글꼴은 앱 안에서 삭제할 수 없습니다."), Toast.LENGTH_SHORT).show();
+                        "이 글꼴은 앱 안에서 삭제할 수 없습니다."));
             }
         });
         dialog.show();

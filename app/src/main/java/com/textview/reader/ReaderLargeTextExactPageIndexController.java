@@ -316,10 +316,8 @@ final class ReaderLargeTextExactPageIndexController {
 
     void showEstimatedJumpToast() {
         boolean failed = isFailed();
-        Toast.makeText(activity,
-                activity.getString(failed
+        ShortToast.show(activity, activity.getString(failed
                         ? R.string.large_text_exact_page_index_failed_estimated_jump
-                        : R.string.large_text_exact_page_index_not_ready_estimated_jump),
-                Toast.LENGTH_SHORT).show();
+                        : R.string.large_text_exact_page_index_not_ready_estimated_jump));
     }
 }

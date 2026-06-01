@@ -45,12 +45,14 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+import com.textview.reader.archive.ArchiveSupport;
 import com.textview.reader.image.ImageDecodeHelper;
 import com.textview.reader.image.ImageInfo;
 import com.textview.reader.image.ImageInfoReader;
 import com.textview.reader.image.LoadedImage;
 import com.textview.reader.util.ImageSequenceNavigationMath;
 import com.textview.reader.util.ImageSequenceState;
+import com.textview.reader.util.FileSortUtils;
 import com.textview.reader.util.FileClipboardController;
 import com.textview.reader.util.FileUtils;
 import com.textview.reader.util.PrefsManager;
@@ -59,7 +61,6 @@ import com.textview.reader.view.ZoomImageView;
 import java.io.File;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -80,8 +81,12 @@ public class ImageReaderActivity extends AppCompatActivity {
     public static final String EXTRA_SOURCE_DISPLAY_NAMES = "source_display_names";
     public static final String EXTRA_SOURCE_ENTRY_PATHS = "source_entry_paths";
     public static final String EXTRA_SOURCE_ARCHIVE_PATH = "source_archive_path";
+    public static final String EXTRA_SEQUENCE_HANDOFF_TOKEN = "sequence_handoff_token";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService sequenceExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService detailExecutor = Executors.newSingleThreadExecutor();
+    private final Object archiveExtractLock = new Object();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ArrayList<String> imagePaths = new ArrayList<>();
     private final ArrayList<String> sourceDisplayNames = new ArrayList<>();
@@ -96,12 +101,18 @@ public class ImageReaderActivity extends AppCompatActivity {
     private String filePath;
     private String fileUri;
     private String sourceArchivePath;
+    private String sequenceHandoffToken;
     private int currentIndex = 0;
     private boolean allowFileOps;
     private boolean destroyed;
     private boolean chromeVisible = true;
+    private int systemTopInset;
+    private int systemBottomInset;
     private Bitmap currentBitmap;
     private Drawable currentDrawable;
+    private int imageLoadGeneration;
+    private boolean currentImageDetailLoaded = true;
+    private int detailRequestGeneration = -1;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -118,6 +129,7 @@ public class ImageReaderActivity extends AppCompatActivity {
         filePath = getIntent().getStringExtra(EXTRA_FILE_PATH);
         fileUri = getIntent().getStringExtra(EXTRA_FILE_URI);
         sourceArchivePath = getIntent().getStringExtra(EXTRA_SOURCE_ARCHIVE_PATH);
+        sequenceHandoffToken = getIntent().getStringExtra(EXTRA_SEQUENCE_HANDOFF_TOKEN);
         allowFileOps = getIntent().getBooleanExtra(EXTRA_ALLOW_FILE_OPS,
                 filePath != null && filePath.trim().length() > 0);
 
@@ -130,12 +142,17 @@ public class ImageReaderActivity extends AppCompatActivity {
         initializeImagePathList();
         buildUi();
         loadImageAsync();
+        loadDeferredImageSequenceAsync();
     }
 
     @Override
     protected void onDestroy() {
         destroyed = true;
+        ImageSequenceHandoffStore.discard(sequenceHandoffToken);
+        sequenceHandoffToken = null;
         executor.shutdownNow();
+        sequenceExecutor.shutdownNow();
+        detailExecutor.shutdownNow();
         if (currentDrawable instanceof AnimatedImageDrawable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             ((AnimatedImageDrawable) currentDrawable).stop();
         }
@@ -164,20 +181,29 @@ public class ImageReaderActivity extends AppCompatActivity {
         ArrayList<String> providedNames = getIntent().getStringArrayListExtra(EXTRA_SOURCE_DISPLAY_NAMES);
         ArrayList<String> providedEntryPaths = getIntent().getStringArrayListExtra(EXTRA_SOURCE_ENTRY_PATHS);
         if (provided != null) {
+            boolean archiveBackedSequence = sourceArchivePath != null && sourceArchivePath.trim().length() > 0;
             for (int i = 0; i < provided.size(); i++) {
                 String path = provided.get(i);
                 if (path == null || path.trim().isEmpty()) continue;
                 File f = new File(path);
-                if (f.exists() && f.isFile() && FileUtils.isImageFile(f.getName())
-                        && !imagePaths.contains(f.getAbsolutePath())) {
+                String entryPath = providedEntryPaths != null && i < providedEntryPaths.size() ? providedEntryPaths.get(i) : "";
+                boolean localImageReady = f.exists() && f.isFile() && FileUtils.isImageFile(f.getName());
+                boolean lazyArchiveImage = archiveBackedSequence
+                        && entryPath != null
+                        && entryPath.trim().length() > 0
+                        && FileUtils.isImageFile(f.getName());
+                if ((localImageReady || lazyArchiveImage) && !imagePaths.contains(f.getAbsolutePath())) {
                     imagePaths.add(f.getAbsolutePath());
                     sourceDisplayNames.add(providedNames != null && i < providedNames.size() ? providedNames.get(i) : f.getName());
-                    sourceEntryPaths.add(providedEntryPaths != null && i < providedEntryPaths.size() ? providedEntryPaths.get(i) : "");
+                    sourceEntryPaths.add(entryPath == null ? "" : entryPath);
                 }
             }
         }
 
-        if (imagePaths.isEmpty() && filePath != null && filePath.trim().length() > 0) {
+        if (imagePaths.isEmpty()
+                && sequenceHandoffToken == null
+                && filePath != null
+                && filePath.trim().length() > 0) {
             imagePaths.addAll(scanParentImages(new File(filePath)));
             for (String path : imagePaths) {
                 sourceDisplayNames.add(new File(path).getName());
@@ -199,6 +225,38 @@ public class ImageReaderActivity extends AppCompatActivity {
         ImageSequenceState.normalizeMetadataLists(imagePaths, sourceDisplayNames, sourceEntryPaths);
     }
 
+    private void loadDeferredImageSequenceAsync() {
+        final String token = sequenceHandoffToken;
+        if (token == null || token.trim().isEmpty()) return;
+        sequenceExecutor.execute(() -> {
+            ImageSequenceHandoffStore.Sequence sequence = ImageSequenceHandoffStore.consume(token);
+            mainHandler.post(() -> {
+                if (token.equals(sequenceHandoffToken)) sequenceHandoffToken = null;
+                applyDeferredImageSequence(sequence);
+            });
+        });
+    }
+
+    private void applyDeferredImageSequence(@Nullable ImageSequenceHandoffStore.Sequence sequence) {
+        if (destroyed || sequence == null || sequence.paths == null || sequence.paths.isEmpty()) return;
+        String currentPath = filePath != null ? new File(filePath).getAbsolutePath() : null;
+        if (currentPath == null || currentPath.trim().isEmpty()) return;
+
+        int found = sequence.paths.indexOf(currentPath);
+        if (found < 0) return;
+
+        imagePaths.clear();
+        imagePaths.addAll(sequence.paths);
+        sourceDisplayNames.clear();
+        sourceDisplayNames.addAll(sequence.displayNames);
+        sourceEntryPaths.clear();
+        sourceEntryPaths.addAll(sequence.entryPaths);
+        ImageSequenceState.normalizeMetadataLists(imagePaths, sourceDisplayNames, sourceEntryPaths);
+        currentIndex = ImageSequenceNavigationMath.clampIndex(found, imagePaths.size());
+        filePath = imagePaths.get(currentIndex);
+        updateToolbarTitle();
+    }
+
     @NonNull
     private ArrayList<String> scanParentImages(@NonNull File selected) {
         ArrayList<String> paths = new ArrayList<>();
@@ -216,7 +274,8 @@ public class ImageReaderActivity extends AppCompatActivity {
         for (File child : children) {
             if (child != null && child.isFile() && FileUtils.isImageFile(child.getName())) images.add(child);
         }
-        Collections.sort(images, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+        int sortMode = prefs != null ? prefs.getSortMode() : PrefsManager.SORT_NAME_ASC;
+        FileSortUtils.sortMainFiles(this, images, sortMode);
         for (File image : images) paths.add(image.getAbsolutePath());
         if (!paths.contains(selected.getAbsolutePath())) paths.add(selected.getAbsolutePath());
         return paths;
@@ -240,6 +299,7 @@ public class ImageReaderActivity extends AppCompatActivity {
             @Override public void onSingleTap() { toggleChrome(); }
             @Override public void onSwipeLeft() { showAdjacentImage(1); }
             @Override public void onSwipeRight() { showAdjacentImage(-1); }
+            @Override public void onZoomRequested() { requestDetailImageForCurrent(); }
         });
         root.addView(imageView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -249,6 +309,8 @@ public class ImageReaderActivity extends AppCompatActivity {
         toolbar.setBackgroundColor(Color.argb(230, 0, 0, 0));
         toolbar.setTitleTextColor(Color.WHITE);
         toolbar.setSubtitleTextColor(Color.rgb(210, 210, 210));
+        toolbar.setTitleTextAppearance(this, R.style.TextAppearance_TextView_ImageViewer_Title);
+        toolbar.setSubtitleTextAppearance(this, R.style.TextAppearance_TextView_ImageViewer_Subtitle);
         toolbar.setTitle(getDisplayName());
         toolbar.setNavigationContentDescription(R.string.back);
         Drawable nav = ContextCompat.getDrawable(this, R.drawable.ic_bottom_arrow_left);
@@ -309,6 +371,8 @@ public class ImageReaderActivity extends AppCompatActivity {
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
                     | WindowInsetsCompat.Type.displayCutout());
+            systemTopInset = Math.max(0, bars.top);
+            systemBottomInset = Math.max(0, bars.bottom);
             toolbar.setPadding(toolbar.getPaddingLeft(), bars.top,
                     toolbar.getPaddingRight(), toolbar.getPaddingBottom());
             ViewGroup.LayoutParams raw = toolbar.getLayoutParams();
@@ -319,8 +383,8 @@ public class ImageReaderActivity extends AppCompatActivity {
                     toolbar.setLayoutParams(raw);
                 }
             }
-            imageView.setPadding(0, 0, 0, bars.bottom);
             if (sliderController != null) sliderController.applyBottomInset(bars.bottom);
+            updateImageViewportBounds();
             imageView.post(imageView::configureBaseMatrix);
             return insets;
         });
@@ -331,13 +395,18 @@ public class ImageReaderActivity extends AppCompatActivity {
     private void tintToolbarMenuIcon(@NonNull Toolbar toolbar) {
         for (int i = 0; i < toolbar.getMenu().size(); i++) {
             MenuItem item = toolbar.getMenu().getItem(i);
-            Drawable icon = item.getIcon();
-            if (icon == null) continue;
-            Drawable wrapped = DrawableCompat.wrap(icon.mutate());
-            DrawableCompat.setTint(wrapped, Color.WHITE);
-            item.setIcon(wrapped);
+            tintMenuItemIcon(item);
         }
         updateRotationMenuTitle();
+    }
+
+    private void tintMenuItemIcon(@Nullable MenuItem item) {
+        if (item == null) return;
+        Drawable icon = item.getIcon();
+        if (icon == null) return;
+        Drawable wrapped = DrawableCompat.wrap(icon.mutate());
+        DrawableCompat.setTint(wrapped, Color.WHITE);
+        item.setIcon(wrapped);
     }
 
     private void toggleScreenOrientation() {
@@ -346,9 +415,6 @@ public class ImageReaderActivity extends AppCompatActivity {
                 ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 : ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT);
         updateRotationMenuTitle(switchToLandscape);
-        Toast.makeText(this,
-                switchToLandscape ? R.string.screen_orientation_landscape : R.string.screen_orientation_portrait,
-                Toast.LENGTH_SHORT).show();
         if (imageView != null) imageView.postDelayed(imageView::configureBaseMatrix, 160);
     }
 
@@ -367,6 +433,10 @@ public class ImageReaderActivity extends AppCompatActivity {
         item.setTitle(currentLandscape
                 ? R.string.screen_orientation_to_portrait
                 : R.string.screen_orientation_to_landscape);
+        item.setIcon(currentLandscape
+                ? R.drawable.ic_screen_rotation
+                : R.drawable.ic_screen_portrait);
+        tintMenuItemIcon(item);
     }
 
     @Override
@@ -382,6 +452,33 @@ public class ImageReaderActivity extends AppCompatActivity {
         if (sliderController != null) sliderController.update(currentIndex, imagePaths.size(), chromeVisible);
     }
 
+    private void updateImageViewportBounds() {
+        if (imageView == null) return;
+        int top = dpToPx(56) + systemTopInset;
+        int sliderItemCountForBounds = shouldReserveImageSliderSpace()
+                ? Math.max(2, imagePaths.size())
+                : imagePaths.size();
+        int bottom = sliderController != null
+                ? sliderController.reservedViewportBottomInset(sliderItemCountForBounds)
+                : systemBottomInset;
+        imageView.setPadding(0, 0, 0, 0);
+        ViewGroup.LayoutParams raw = imageView.getLayoutParams();
+        if (raw instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) raw;
+            if (lp.topMargin != top || lp.bottomMargin != bottom) {
+                lp.topMargin = top;
+                lp.bottomMargin = bottom;
+                imageView.setLayoutParams(lp);
+            }
+        }
+        imageView.post(imageView::configureBaseMatrix);
+    }
+
+    private boolean shouldReserveImageSliderSpace() {
+        return imagePaths.size() > 1
+                || (sequenceHandoffToken != null && !sequenceHandoffToken.trim().isEmpty());
+    }
+
     private void updateToolbarTitle() {
         if (toolbar == null) return;
         toolbar.setTitle(getDisplayName());
@@ -395,6 +492,7 @@ public class ImageReaderActivity extends AppCompatActivity {
 
     private void updateImageSliderState() {
         if (sliderController != null) sliderController.update(currentIndex, imagePaths.size(), chromeVisible);
+        updateImageViewportBounds();
     }
 
     private String getDisplayName() {
@@ -411,6 +509,7 @@ public class ImageReaderActivity extends AppCompatActivity {
     }
 
     private void showAdjacentImage(int direction) {
+        if (imagePaths.size() <= 1) return;
         showImageAtIndex(ImageSequenceNavigationMath.nextIndex(currentIndex, direction, imagePaths.size()));
     }
 
@@ -430,38 +529,35 @@ public class ImageReaderActivity extends AppCompatActivity {
     }
 
     private void loadImageAsync() {
+        final int generation = ++imageLoadGeneration;
+        detailRequestGeneration = -1;
+        currentImageDetailLoaded = false;
+        final int index = currentIndex;
+        final String path = filePath;
+        final String uri = fileUri;
+        final String displayName = getDisplayName();
         setLoading(true, null);
         updateToolbarTitle();
         executor.execute(() -> {
             LoadedImage loaded = null;
             try {
-                loaded = decodeLoadedImage();
+                if (ensureArchiveImageExtracted(index, path)) {
+                    loaded = ImageDecodeHelper.decodePreview(this, path, uri, displayName);
+                }
             } catch (Exception ignored) {
                 loaded = null;
             }
             LoadedImage result = loaded;
             mainHandler.post(() -> {
-                if (destroyed) {
-                    if (result != null && result.bitmap != null && !result.bitmap.isRecycled()) result.bitmap.recycle();
+                if (destroyed || generation != imageLoadGeneration) {
+                    recycleLoadedImage(result);
                     return;
                 }
                 if (result != null && (result.bitmap != null || result.drawable != null)) {
-                    Bitmap oldBitmap = currentBitmap;
-                    Drawable oldDrawable = currentDrawable;
-                    if (oldDrawable instanceof AnimatedImageDrawable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        ((AnimatedImageDrawable) oldDrawable).stop();
-                    }
-                    if (result.drawable != null) {
-                        currentDrawable = result.drawable;
-                        currentBitmap = null;
-                        imageView.setImageDrawableReady(result.drawable);
-                    } else {
-                        currentDrawable = null;
-                        currentBitmap = result.bitmap;
-                        imageView.setImageBitmapReady(result.bitmap);
-                    }
-                    if (oldBitmap != null && oldBitmap != currentBitmap && !oldBitmap.isRecycled()) oldBitmap.recycle();
+                    applyLoadedImage(result, false);
+                    currentImageDetailLoaded = result.originalQuality;
                     persistArchiveImageProgress();
+                    prefetchAdjacentArchiveImages(index);
                     setLoading(false, null);
                 } else {
                     setLoading(false, getString(R.string.image_open_failed));
@@ -470,9 +566,92 @@ public class ImageReaderActivity extends AppCompatActivity {
         });
     }
 
-    @Nullable
-    private LoadedImage decodeLoadedImage() throws Exception {
-        return ImageDecodeHelper.decode(this, filePath, fileUri, getDisplayName());
+    private void requestDetailImageForCurrent() {
+        if (currentImageDetailLoaded || destroyed) return;
+        final int generation = imageLoadGeneration;
+        if (generation <= 0 || detailRequestGeneration == generation) return;
+        detailRequestGeneration = generation;
+        final int index = currentIndex;
+        final String path = filePath;
+        final String uri = fileUri;
+        final String displayName = getDisplayName();
+        detailExecutor.execute(() -> {
+            LoadedImage loaded = null;
+            try {
+                if (ensureArchiveImageExtracted(index, path)) {
+                    loaded = ImageDecodeHelper.decodeDetail(this, path, uri, displayName);
+                }
+            } catch (Exception ignored) {
+                loaded = null;
+            }
+            LoadedImage result = loaded;
+            mainHandler.post(() -> {
+                if (destroyed || generation != imageLoadGeneration) {
+                    recycleLoadedImage(result);
+                    return;
+                }
+                if (result != null && (result.bitmap != null || result.drawable != null)) {
+                    applyLoadedImage(result, true);
+                    currentImageDetailLoaded = result.originalQuality;
+                }
+            });
+        });
+    }
+
+    private void applyLoadedImage(@NonNull LoadedImage result, boolean preserveViewport) {
+        Bitmap oldBitmap = currentBitmap;
+        Drawable oldDrawable = currentDrawable;
+        if (oldDrawable instanceof AnimatedImageDrawable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ((AnimatedImageDrawable) oldDrawable).stop();
+        }
+        if (result.drawable != null) {
+            currentDrawable = result.drawable;
+            currentBitmap = null;
+            imageView.setImageDrawableReady(result.drawable);
+        } else {
+            currentDrawable = null;
+            currentBitmap = result.bitmap;
+            imageView.setImageBitmapReady(result.bitmap, preserveViewport);
+        }
+        if (oldBitmap != null && oldBitmap != currentBitmap && !oldBitmap.isRecycled()) oldBitmap.recycle();
+    }
+
+    private void recycleLoadedImage(@Nullable LoadedImage result) {
+        if (result != null && result.bitmap != null && !result.bitmap.isRecycled()) result.bitmap.recycle();
+    }
+
+
+    private boolean ensureArchiveImageExtracted(int index, @Nullable String expectedPath) {
+        if (expectedPath == null || expectedPath.trim().isEmpty()) return fileUri != null && fileUri.trim().length() > 0;
+        File outFile = new File(expectedPath);
+        if (outFile.exists() && outFile.isFile() && outFile.length() > 0L) return true;
+        if (sourceArchivePath == null || sourceArchivePath.trim().isEmpty()) return false;
+        if (index < 0 || index >= sourceEntryPaths.size()) return false;
+        String entryPath = ImageSequenceState.entryPathAt(sourceEntryPaths, index);
+        if (entryPath == null || entryPath.trim().isEmpty()) return false;
+        File archive = new File(sourceArchivePath);
+        if (!archive.exists() || !archive.isFile()) return false;
+        synchronized (archiveExtractLock) {
+            if (outFile.exists() && outFile.isFile() && outFile.length() > 0L) return true;
+            return ArchiveSupport.extractSingleEntry(archive, entryPath, outFile, null)
+                    && outFile.exists()
+                    && outFile.isFile()
+                    && outFile.length() > 0L;
+        }
+    }
+
+    private void prefetchAdjacentArchiveImages(int centerIndex) {
+        if (sourceArchivePath == null || sourceArchivePath.trim().isEmpty()) return;
+        if (sourceEntryPaths.isEmpty() || imagePaths.size() <= 1) return;
+        final int total = imagePaths.size();
+        final int first = ImageSequenceNavigationMath.nextIndex(centerIndex, 1, total);
+        final int second = ImageSequenceNavigationMath.nextIndex(centerIndex, -1, total);
+        sequenceExecutor.execute(() -> {
+            ensureArchiveImageExtracted(first, first >= 0 && first < imagePaths.size() ? imagePaths.get(first) : null);
+            if (second != first) {
+                ensureArchiveImageExtracted(second, second >= 0 && second < imagePaths.size() ? imagePaths.get(second) : null);
+            }
+        });
     }
 
     private void setLoading(boolean loading, @Nullable String message) {
@@ -556,7 +735,7 @@ public class ImageReaderActivity extends AppCompatActivity {
     }
 
     private void showOpsUnavailableToast() {
-        Toast.makeText(this, R.string.image_file_ops_unavailable, Toast.LENGTH_SHORT).show();
+        ShortToast.show(this, R.string.image_file_ops_unavailable);
     }
 
     private boolean canShareCurrentImage() {
@@ -570,7 +749,7 @@ public class ImageReaderActivity extends AppCompatActivity {
         try {
             Uri uri = getCurrentShareUri();
             if (uri == null) {
-                Toast.makeText(this, R.string.image_share_failed, Toast.LENGTH_SHORT).show();
+                ShortToast.show(this, R.string.image_share_failed);
                 return;
             }
             Intent share = new Intent(Intent.ACTION_SEND);
@@ -579,7 +758,7 @@ public class ImageReaderActivity extends AppCompatActivity {
             share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(Intent.createChooser(share, getString(R.string.share_image)));
         } catch (Exception e) {
-            Toast.makeText(this, R.string.image_share_failed, Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, R.string.image_share_failed);
         }
     }
 
@@ -620,6 +799,9 @@ public class ImageReaderActivity extends AppCompatActivity {
         dialogStyle.addInfoRow(infoList, getString(R.string.image_info_extension), nonEmpty(info.extension), fg, sub, panel);
         dialogStyle.addInfoRow(infoList, getString(R.string.file_info_size), nonEmpty(info.size), fg, sub, panel);
         dialogStyle.addInfoRow(infoList, getString(R.string.file_info_modified), nonEmpty(info.modified), fg, sub, panel);
+        if (!TextUtils.isEmpty(info.created)) {
+            dialogStyle.addInfoRow(infoList, getString(R.string.image_info_created_downloaded), info.created, fg, sub, panel);
+        }
         dialogStyle.addInfoRow(infoList, getString(R.string.image_dimensions), nonEmpty(info.dimensions), fg, sub, panel);
         dialogStyle.addInfoRow(infoList, getString(R.string.image_info_aspect_ratio), nonEmpty(info.aspectRatio), fg, sub, panel);
         dialogStyle.addInfoRow(infoList, getString(R.string.image_info_megapixels), nonEmpty(info.megapixels), fg, sub, panel);
@@ -739,10 +921,10 @@ public class ImageReaderActivity extends AppCompatActivity {
                         renamedIndex >= 0 ? renamedIndex : currentIndex,
                         imagePaths.size());
                 updateToolbarTitle();
-                Toast.makeText(this, R.string.renamed, Toast.LENGTH_SHORT).show();
+                ShortToast.show(this, R.string.renamed);
                 dialog.dismiss();
             } else {
-                Toast.makeText(this, R.string.rename_failed, Toast.LENGTH_SHORT).show();
+                ShortToast.show(this, R.string.rename_failed);
             }
         });
         cancel.setOnClickListener(v -> dialog.dismiss());
@@ -791,7 +973,7 @@ public class ImageReaderActivity extends AppCompatActivity {
                         sourceEntryPaths,
                         oldPath,
                         currentIndex);
-                Toast.makeText(this, R.string.deleted, Toast.LENGTH_SHORT).show();
+                ShortToast.show(this, R.string.deleted);
                 dialog.dismiss();
                 if (result.empty) {
                     finish();
@@ -802,7 +984,7 @@ public class ImageReaderActivity extends AppCompatActivity {
                     loadImageAsync();
                 }
             } else {
-                Toast.makeText(this, R.string.delete_failed, Toast.LENGTH_SHORT).show();
+                ShortToast.show(this, R.string.delete_failed);
             }
         });
         cancel.setOnClickListener(v -> dialog.dismiss());
@@ -818,7 +1000,7 @@ public class ImageReaderActivity extends AppCompatActivity {
         if (result == FileClipboardController.StartResult.STARTED) {
             Toast.makeText(this, R.string.file_move_started, Toast.LENGTH_LONG).show();
         } else {
-            Toast.makeText(this, R.string.file_move_failed, Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, R.string.file_move_failed);
         }
     }
 

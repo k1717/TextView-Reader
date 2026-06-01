@@ -34,6 +34,7 @@ final class ReaderBottomControlsController {
                 R.id.toolbar_scroll_actions,
                 5,
                 2);
+        ButtonOrderManager.applyOrder(activity, activity.prefs, ButtonOrderManager.GROUP_TXT_READER);
 
         activity.readerToolbarController.bindScrollableButton(R.id.btn_home, activity::openHomeFromViewer);
         activity.readerToolbarController.bindScrollableButton(R.id.btn_open_file, activity::openFileBrowserFromViewer);
@@ -41,6 +42,7 @@ final class ReaderBottomControlsController {
         activity.readerToolbarController.bindScrollableButton(R.id.btn_page_move, this::showPageMoveBubble);
         activity.readerToolbarController.bindScrollableButton(R.id.btn_bookmark, activity::showBookmarksForFile);
         activity.readerToolbarController.bindScrollableButton(R.id.btn_auto_page, activity::showAutoPageTurnDialog);
+        activity.readerToolbarController.bindScrollableButton(R.id.btn_tts, activity::showTtsDialog);
         activity.readerToolbarController.bindScrollableButton(R.id.btn_settings, () -> {
             Intent settingsIntent = new Intent(activity, SettingsActivity.class);
             if (activity.filePath != null) settingsIntent.putExtra("txt_file_path", activity.filePath);
@@ -55,7 +57,7 @@ final class ReaderBottomControlsController {
 
     void showPageMoveBubble() {
         if (activity.fileContent == null || activity.fileContent.isEmpty()) {
-            Toast.makeText(activity, activity.getString(R.string.file_not_loaded), Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, activity.getString(R.string.file_not_loaded));
             return;
         }
 
@@ -201,9 +203,7 @@ final class ReaderBottomControlsController {
             try {
                 int page = Integer.parseInt(raw);
                 if (page < 1 || page > activity.getDisplayedTotalPageCount()) {
-                    Toast.makeText(activity,
-                            activity.getString(R.string.page_range_error, activity.getDisplayedTotalPageCount()),
-                            Toast.LENGTH_SHORT).show();
+                    ShortToast.show(activity, activity.getString(R.string.page_range_error, activity.getDisplayedTotalPageCount()));
                     return;
                 }
                 int pages = activity.getDisplayedTotalPageCount();
@@ -218,7 +218,7 @@ final class ReaderBottomControlsController {
                 }
                 dialog.dismiss();
             } catch (NumberFormatException ex) {
-                Toast.makeText(activity, activity.getString(R.string.invalid_page_number), Toast.LENGTH_SHORT).show();
+                ShortToast.show(activity, activity.getString(R.string.invalid_page_number));
             }
         });
 

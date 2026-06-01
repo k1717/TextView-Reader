@@ -35,7 +35,7 @@ final class ReaderBookmarkDialogController {
 
 void showBookmarksForFile() {
     if (activity.filePath == null || activity.fileContent == null) {
-        Toast.makeText(activity, activity.getString(R.string.file_not_loaded), Toast.LENGTH_SHORT).show();
+        ShortToast.show(activity, activity.getString(R.string.file_not_loaded));
         return;
     }
 

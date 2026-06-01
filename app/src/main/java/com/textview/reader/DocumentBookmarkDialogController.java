@@ -264,13 +264,13 @@ final class DocumentBookmarkDialogController {
     private void navigateToBookmark(@NonNull Bookmark b) {
         String path = b.getFilePath();
         if (path == null || path.trim().isEmpty()) {
-            Toast.makeText(activity, getString(R.string.file_not_found_prefix) + "(missing path)", Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, getString(R.string.file_not_found_prefix) + "(missing path)");
             return;
         }
 
         File target = new File(path.trim());
         if (!target.exists()) {
-            Toast.makeText(activity, getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, getString(R.string.file_not_found_prefix) + path);
             return;
         }
         if (path.equals(activity.filePath) || target.getAbsolutePath().equals(activity.filePath)) {

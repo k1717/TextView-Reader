@@ -120,6 +120,7 @@ public class SettingsActivity extends AppCompatActivity {
         setupDarkMode();
         setupCustomMainThemeColors();
         setupReaderControls();
+        setupButtonOrderSettings();
         setupTextDisplayRules();
         setupTextDisplayRulesActualFile();
         setupLock();
@@ -265,6 +266,10 @@ public class SettingsActivity extends AppCompatActivity {
         new SettingsReaderControlsController(this).setupReaderControls();
     }
 
+    private void setupButtonOrderSettings() {
+        new SettingsButtonOrderController(this).setupButtonOrderSettings();
+    }
+
     private void setupTextDisplayRules() {
         View button = findViewById(R.id.btn_txt_display_rules);
         if (button == null) return;
@@ -276,7 +281,7 @@ public class SettingsActivity extends AppCompatActivity {
         if (button == null) return;
         button.setOnClickListener(v -> {
             if (currentTxtFilePath == null || currentTxtFilePath.isEmpty()) {
-                Toast.makeText(this, R.string.txt_display_rules_actual_file_unavailable, Toast.LENGTH_SHORT).show();
+                ShortToast.show(this, R.string.txt_display_rules_actual_file_unavailable);
                 return;
             }
             showTextDisplayRulesActualFileDialog();
@@ -289,7 +294,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         List<TextDisplayRule> activeRules = TextDisplayRuleManager.getActiveRules(this, sourceFile.getAbsolutePath());
         if (activeRules.isEmpty()) {
-            Toast.makeText(this, R.string.txt_display_rules_actual_file_no_rules, Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, R.string.txt_display_rules_actual_file_no_rules);
             return;
         }
 
@@ -430,12 +435,12 @@ public class SettingsActivity extends AppCompatActivity {
 
     private File getCurrentTxtFileOrShowError() {
         if (currentTxtFilePath == null || currentTxtFilePath.isEmpty()) {
-            Toast.makeText(this, R.string.txt_display_rules_actual_file_unavailable, Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, R.string.txt_display_rules_actual_file_unavailable);
             return null;
         }
         File sourceFile = new File(currentTxtFilePath);
         if (!sourceFile.exists() || !sourceFile.isFile()) {
-            Toast.makeText(this, R.string.txt_display_rules_actual_file_unavailable, Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, R.string.txt_display_rules_actual_file_unavailable);
             return null;
         }
         return sourceFile.getAbsoluteFile();
@@ -450,21 +455,20 @@ public class SettingsActivity extends AppCompatActivity {
         final ArrayList<TextDisplayRule> activeRules = new ArrayList<>(
                 TextDisplayRuleManager.getActiveRules(appContext, sourceFile.getAbsolutePath()));
         if (activeRules.isEmpty()) {
-            Toast.makeText(appContext, R.string.txt_display_rules_actual_file_no_rules, Toast.LENGTH_SHORT).show();
+            ShortToast.show(appContext, R.string.txt_display_rules_actual_file_no_rules);
             return;
         }
 
-        Toast.makeText(appContext, R.string.txt_display_rules_actual_file_applying, Toast.LENGTH_SHORT).show();
+        ShortToast.show(appContext, R.string.txt_display_rules_actual_file_applying);
         new Thread(() -> {
             try {
                 String encoding = FileUtils.detectEncoding(sourceFile);
                 String originalText = FileUtils.readTextFile(sourceFile, encoding);
                 String fixedText = TextDisplayRuleManager.apply(originalText, activeRules);
                 if (originalText.equals(fixedText)) {
-                    mainHandler.post(() -> Toast.makeText(
+                    mainHandler.post(() -> ShortToast.show(
                             appContext,
-                            R.string.txt_display_rules_actual_file_no_changes,
-                            Toast.LENGTH_SHORT).show());
+                            R.string.txt_display_rules_actual_file_no_changes));
                     return;
                 }
 
@@ -810,7 +814,7 @@ public class SettingsActivity extends AppCompatActivity {
                 intent.putExtra(LockActivity.EXTRA_MODE, LockActivity.MODE_CHANGE_PIN);
                 lockSetLauncher.launch(intent);
             } else {
-                Toast.makeText(this, getString(R.string.enable_lock_first), Toast.LENGTH_SHORT).show();
+                ShortToast.show(this, getString(R.string.enable_lock_first));
             }
         });
     }
@@ -841,7 +845,7 @@ public class SettingsActivity extends AppCompatActivity {
         MaterialButton reset = makeSettingsDialogButtonNoShade(getString(R.string.settings_reset), text, outline);
         reset.setOnClickListener(v -> {
             prefs.resetReaderAndAppSettings();
-            Toast.makeText(this, R.string.settings_reset_done, Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, R.string.settings_reset_done);
             dialog.dismiss();
             recreate();
         });
@@ -1058,7 +1062,7 @@ public class SettingsActivity extends AppCompatActivity {
             themeManager.reloadFromStorage();
             applySettingsReadableTheme();
             renderReadingThemeRows();
-            Toast.makeText(this, getString(R.string.theme_deleted), Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, getString(R.string.theme_deleted));
         });
         panel.addView(delete);
 
@@ -1347,11 +1351,11 @@ public class SettingsActivity extends AppCompatActivity {
             try (OutputStream os = getContentResolver().openOutputStream(uri)) {
                 if (os != null) {
                     os.write(json.getBytes(StandardCharsets.UTF_8));
-                    Toast.makeText(this, getString(R.string.exported_successfully), Toast.LENGTH_SHORT).show();
+                    ShortToast.show(this, getString(R.string.exported_successfully));
                 }
             }
         } catch (Exception e) {
-            Toast.makeText(this, getString(R.string.export_failed_prefix) + e.getMessage(), Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, getString(R.string.export_failed_prefix) + e.getMessage());
         }
     }
 
@@ -1360,7 +1364,7 @@ public class SettingsActivity extends AppCompatActivity {
             String json = FileUtils.readTextFromUri(this, uri);
             showImportBackupConfirmDialog(json);
         } catch (Exception e) {
-            Toast.makeText(this, getString(R.string.import_failed_prefix) + e.getMessage(), Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, getString(R.string.import_failed_prefix) + e.getMessage());
         }
     }
 
@@ -1410,7 +1414,7 @@ public class SettingsActivity extends AppCompatActivity {
         if (themeManager != null) {
             themeManager.reloadFromStorage();
         }
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        ShortToast.show(this, message);
         recreate();
     }
 

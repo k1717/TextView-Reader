@@ -405,7 +405,7 @@ final class SettingsTextDisplayRuleController {
                                 Runnable onSaved) {
         String find = findInput.getText() != null ? findInput.getText().toString() : "";
         if (find.isEmpty()) {
-            Toast.makeText(activity, R.string.txt_display_rule_find_required, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.txt_display_rule_find_required);
             return;
         }
         String oldScope = editIndex >= 0 ? editing.scope : TextDisplayRule.SCOPE_ALL_TXT;

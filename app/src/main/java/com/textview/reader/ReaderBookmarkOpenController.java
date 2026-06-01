@@ -25,17 +25,13 @@ final class ReaderBookmarkOpenController {
         }
 
         if (filePath == null || filePath.trim().isEmpty()) {
-            Toast.makeText(activity,
-                    activity.getString(R.string.file_not_found_prefix) + "",
-                    Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, activity.getString(R.string.file_not_found_prefix) + "");
             return false;
         }
 
         File targetFile = new File(filePath);
         if (!targetFile.exists()) {
-            Toast.makeText(activity,
-                    activity.getString(R.string.file_not_found_prefix) + filePath,
-                    Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, activity.getString(R.string.file_not_found_prefix) + filePath);
             return false;
         }
 

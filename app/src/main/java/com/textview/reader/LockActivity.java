@@ -172,7 +172,7 @@ public class LockActivity extends AppCompatActivity {
     private void onConfirm() {
         String pin = pinInput.getText().toString();
         if (pin.length() < 4) {
-            Toast.makeText(this, "PIN must be at least 4 digits", Toast.LENGTH_SHORT).show();
+            ShortToast.show(this, "PIN must be at least 4 digits");
             return;
         }
 
@@ -198,7 +198,7 @@ public class LockActivity extends AppCompatActivity {
                     if (pin.equals(firstEntry)) {
                         prefs.setLockPin(pin);
                         prefs.setLockEnabled(true);
-                        Toast.makeText(this, "PIN set successfully", Toast.LENGTH_SHORT).show();
+                        ShortToast.show(this, "PIN set successfully");
                         setResult(RESULT_OK);
                         finish();
                     } else {
@@ -227,7 +227,7 @@ public class LockActivity extends AppCompatActivity {
                 } else {
                     if (pin.equals(firstEntry)) {
                         prefs.setLockPin(pin);
-                        Toast.makeText(this, "PIN changed", Toast.LENGTH_SHORT).show();
+                        ShortToast.show(this, "PIN changed");
                         setResult(RESULT_OK);
                         finish();
                     } else {

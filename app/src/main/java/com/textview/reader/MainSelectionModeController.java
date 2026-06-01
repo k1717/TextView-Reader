@@ -167,7 +167,7 @@ final class MainSelectionModeController {
             if (result == FileClipboardController.StartResult.STARTED) started++;
         }
         if (started <= 0) {
-            Toast.makeText(activity, R.string.file_operation_source_unavailable, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.file_operation_source_unavailable);
             exitFileSelectionMode(true);
             return;
         }
@@ -182,7 +182,7 @@ final class MainSelectionModeController {
     void startSelectedArchiveExtraction() {
         ArrayList<File> archives = getSelectedArchiveFilesSnapshot();
         if (archives.isEmpty()) {
-            Toast.makeText(activity, R.string.archive_extract_failed, Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, R.string.archive_extract_failed);
             exitFileSelectionMode(true);
             return;
         }
@@ -228,11 +228,9 @@ final class MainSelectionModeController {
                     activity.loadRecentFiles();
                 }
                 activity.rebuildDrawerStorageEntries();
-                Toast.makeText(activity,
-                        finalDeletedCount > 0
+                ShortToast.show(activity, finalDeletedCount > 0
                                 ? activity.getString(R.string.selected_files_deleted, finalDeletedCount)
-                                : activity.getString(R.string.selected_files_delete_failed),
-                        Toast.LENGTH_SHORT).show();
+                                : activity.getString(R.string.selected_files_delete_failed));
             });
         });
     }

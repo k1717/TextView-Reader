@@ -37,6 +37,7 @@ final class PdfReaderStartupController {
 
         bindToolbar();
         bindViews();
+        ButtonOrderManager.applyOrder(activity, activity.prefs, ButtonOrderManager.GROUP_PDF_VIEWER);
 
         activity.setupContinuousPdfList();
         activity.bookmarkManager = BookmarkManager.getInstance(activity);
@@ -67,6 +68,7 @@ final class PdfReaderStartupController {
         activity.cancelPdfBackgroundMemoryTrim();
         activity.resolveReaderThemeColors();
         activity.applyDocumentSystemBarColors();
+        ButtonOrderManager.applyOrder(activity, activity.prefs, ButtonOrderManager.GROUP_PDF_VIEWER);
         activity.styleControls();
         activity.restorePdfBitmapsAfterBackgroundTrimIfNeeded();
     }

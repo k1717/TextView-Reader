@@ -108,10 +108,7 @@ final class DocumentPageLoadController {
     private void showLoadError(Exception e) {
         if (activity.activityDestroyed) return;
         if (activity.progressBar != null) activity.progressBar.setVisibility(View.GONE);
-        Toast.makeText(
-                activity,
-                activity.getString(R.string.error_prefix) + e.getMessage(),
-                Toast.LENGTH_SHORT).show();
+        ShortToast.show(activity, activity.getString(R.string.error_prefix) + e.getMessage());
         activity.finish();
     }
 }

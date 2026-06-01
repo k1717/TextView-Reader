@@ -243,7 +243,7 @@ final class ReaderAppearanceDialogController {
             activity.themeManager.deleteCustomTheme(theme.getId());
             activity.themeManager.reloadFromStorage();
             activity.applyTheme();
-            Toast.makeText(activity, activity.getString(R.string.theme_deleted), Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, activity.getString(R.string.theme_deleted));
         });
         cancel.setOnClickListener(v -> {
             if (ref[0] != null) ref[0].dismiss();

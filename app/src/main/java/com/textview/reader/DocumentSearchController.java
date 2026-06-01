@@ -239,7 +239,7 @@ final class DocumentSearchController {
             if (activity.prefs != null) activity.prefs.setLastReaderSearchQuery("");
             clearDocumentSearchState(true);
             if (matchStatus != null) matchStatus.setText("0 / 0");
-            Toast.makeText(activity, getString(R.string.enter_search_text), Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, getString(R.string.enter_search_text));
             return;
         }
 
@@ -252,7 +252,7 @@ final class DocumentSearchController {
             if (activity.prefs != null) activity.prefs.setLastReaderSearchQuery(query);
             clearWebViewDocumentMatches();
             if (matchStatus != null) matchStatus.setText("0 / 0");
-            Toast.makeText(activity, getString(R.string.not_found), Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, getString(R.string.not_found));
             return;
         }
 
@@ -287,7 +287,7 @@ final class DocumentSearchController {
             activity.documentSearchSelectLastAfterCount = !forward;
             updateDocumentSearchStatus(matchStatus);
         } else {
-            Toast.makeText(activity, getString(R.string.not_found), Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, getString(R.string.not_found));
             updateDocumentSearchStatus(matchStatus);
         }
     }

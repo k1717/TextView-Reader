@@ -35,7 +35,7 @@ final class PdfBookmarkDialogController {
 
 private void addBookmarkForCurrentPage() {
     if (activity.filePath == null || activity.pageCount <= 0) {
-        Toast.makeText(activity, activity.getString(R.string.file_not_loaded), Toast.LENGTH_SHORT).show();
+        ShortToast.show(activity, activity.getString(R.string.file_not_loaded));
         return;
     }
 
@@ -48,7 +48,7 @@ private void addBookmarkForCurrentPage() {
             b.setExcerpt(pageLabel(activity.currentPage));
             b.setEndPosition(activity.currentPage);
             activity.bookmarkManager.updateBookmark(b);
-            Toast.makeText(activity, activity.getString(R.string.bookmark_updated), Toast.LENGTH_SHORT).show();
+            ShortToast.show(activity, activity.getString(R.string.bookmark_updated));
             return;
         }
     }
@@ -58,7 +58,7 @@ private void addBookmarkForCurrentPage() {
     bookmark.setTotalPages(activity.pageCount);
     bookmark.setEndPosition(activity.currentPage);
     activity.bookmarkManager.addBookmark(bookmark);
-    Toast.makeText(activity, activity.getString(R.string.bookmark_saved), Toast.LENGTH_SHORT).show();
+    ShortToast.show(activity, activity.getString(R.string.bookmark_saved));
 }
 
 private String pageLabel(int zeroBasedPage) {
@@ -67,7 +67,7 @@ private String pageLabel(int zeroBasedPage) {
 
 void showBookmarksDialog() {
     if (activity.filePath == null) {
-        Toast.makeText(activity, activity.getString(R.string.file_not_loaded), Toast.LENGTH_SHORT).show();
+        ShortToast.show(activity, activity.getString(R.string.file_not_loaded));
         return;
     }
 
@@ -298,13 +298,13 @@ private android.app.Dialog createSmallBookmarkHintDialog(@NonNull View content) 
 private void navigateToBookmark(@NonNull Bookmark b) {
     String path = b.getFilePath();
     if (path == null || path.trim().isEmpty()) {
-        Toast.makeText(activity, activity.getString(R.string.file_not_found_prefix) + "(missing path)", Toast.LENGTH_SHORT).show();
+        ShortToast.show(activity, activity.getString(R.string.file_not_found_prefix) + "(missing path)");
         return;
     }
 
     File target = new File(path.trim());
     if (!target.exists()) {
-        Toast.makeText(activity, activity.getString(R.string.file_not_found_prefix) + path, Toast.LENGTH_SHORT).show();
+        ShortToast.show(activity, activity.getString(R.string.file_not_found_prefix) + path);
         return;
     }
     if (path.equals(activity.filePath) || target.getAbsolutePath().equals(activity.filePath)) {
