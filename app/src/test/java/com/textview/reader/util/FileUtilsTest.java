@@ -1,6 +1,7 @@
 package com.textview.reader.util;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -292,6 +293,22 @@ public class FileUtilsTest {
 
         assertEquals("Thai TIS-620 detector aliases should remain Thai",
                 "thai", result.family);
+    }
+
+    @Test
+    public void visibleAllFilter_includesExternalOpenableApkAndVideo() {
+        assertTrue(FileUtils.isVisibleInAllFilesFilter("sample.apk"));
+        assertTrue(FileUtils.isExternalOpenableFile("sample.apk"));
+        assertEquals("APK", FileUtils.getReadableFileType("sample.apk"));
+
+        assertTrue(FileUtils.isVisibleInAllFilesFilter("movie.mkv"));
+        assertTrue(FileUtils.isExternalOpenableFile("movie.mkv"));
+        assertEquals("Video", FileUtils.getReadableFileType("movie.mkv"));
+
+        assertFalse("Plain .ts files are treated as MPEG transport streams, not TypeScript text",
+                FileUtils.isTextFile("index.ts"));
+        assertTrue("Short taps route .ts through external video-capable apps",
+                FileUtils.isVideoFile("index.ts"));
     }
 
     private File writeText(String name, String text, Charset charset) throws Exception {
