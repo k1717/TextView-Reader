@@ -59,12 +59,24 @@ This 2.2.2 package adds TXT text-to-speech on top of the 2.2.1 GitHub-ready sour
 - Centralized app-wide short feedback toasts through `ShortToast` and set the effective display window to about 700ms.
 - Button / icon order can now be configured in Settings for the main filter strip and TXT / EPUB-Word / PDF viewer controls. The order editor uses compact one-line rows, and TXT default-visible slots are highlighted without heavy dark accent cards.
 - TXT search dialog bottom actions are now plain text-style buttons, recent-file mode hides the IMG filter chip, sorting no longer rescans the current folder just to change order, and recent/main fast-scroll tracks no longer appear as double dragbars.
+- Recent files now show up to 100 usable visible entries while scanning a larger recent-state candidate window, so stale or filtered-out states do not reduce the visible list too aggressively.
+- Recent-file right-edge dragging now uses the same custom fast-scroll controller as the main file list.
+- Main search root calculation and recursive file walking were split into `MainFileSearchRoots` and `MainFileSearchWalker`.
+- Main folder loading, progressive folder publishing, reveal scrolling, sort-only refresh, priority folder-open cancellation, and shared background file-operation execution were moved into `MainFolderLoadController`.
 
 ### Main screen drawer
 
 - Improved tablet and large-screen drawer dismissal so outside taps and left swipes from the outside scrim close the open drawer reliably.
 - Kept the bottom file-type sliding chips and search controls explicitly excluded from the full-screen drawer-open gesture.
 - Smoothed drawer bottom actions by running File Open, Bookmarks, and Settings after the drawer close transition begins.
+- Drawer shortcut placeholder text now comes from localized string resources.
+
+### Refactor and GitHub cleanup
+
+- `MainActivity` is down to roughly 1,815 lines after moving search walking and folder loading into focused classes.
+- Clipboard, archive extraction, and multi-select deletion controllers no longer call the folder-load executor directly; they use the centralized folder background-work API.
+- Fast-scroll installation now guards optional layout components before attaching the controller.
+- TTS uses Android platform TTS APIs and the foreground-service/media-button stack already available from the Android framework; no new third-party runtime dependency was added for TTS.
 
 ## 2.2.1
 

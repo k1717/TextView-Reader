@@ -5,6 +5,10 @@ This file records third-party components that are used by the Android build or b
 
 ## Runtime / app dependencies
 
+### Android platform APIs
+
+TXT text-to-speech in 2.2.2 uses Android platform TTS, foreground-service notification, and media-button APIs. The app does not bundle a third-party TTS engine or voice model; user-installed Android TTS voices remain managed by the device TTS engine and system settings.
+
 ### AndroidX libraries
 
 Used artifacts:

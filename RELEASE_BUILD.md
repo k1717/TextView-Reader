@@ -77,6 +77,7 @@ Expected results:
 - `*.keystore`, `*.jks`, `local.properties`, and build outputs are ignored by git.
 - R8/minify and resource shrinking are enabled for release builds.
 - JUniversalChardet remains active for TXT encoding detection.
+- TXT TTS uses Android platform TTS APIs and does not add a bundled third-party voice engine.
 - Network cleartext is disabled, and WebView resource interception explicitly blocks non-local requests.
 - Short feedback toasts are centralized in `ShortToast` with a roughly 700ms display window; longer user-facing warnings remain explicit long toasts where needed.
 
@@ -114,3 +115,5 @@ Before publishing this 2.2.2 source, verify image preview/detail policy on a lar
 
 
 Also verify Settings > Button / icon order for the main filter strip and TXT / EPUB-Word / PDF viewer controls, including reset-to-default and Settings return/apply behavior.
+
+Verify large-folder browsing and search on a folder with thousands of files: progressive folder entries should appear before the final sorted list, sort changes should reorder the visible list without an app-not-responding pause, and both the main list and recent list right-edge drag scrollers should track the loaded item count.

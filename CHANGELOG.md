@@ -1,5 +1,5 @@
 
-## 2.2.2 - 2026-05-31
+## 2.2.2 - 2026-06-01
 This package uses Android metadata `versionCode 2220` and `versionName "2.2.2"`.
 
 ### TXT reader TTS
@@ -59,12 +59,23 @@ This package uses Android metadata `versionCode 2220` and `versionName "2.2.2"`.
 - Simplified TXT search dialog bottom actions to plain text-style buttons and hid the IMG filter chip on the recent-files home list.
 - Sort changes now reorder the currently loaded visible folder list instead of forcing a disk rescan, while active progressive folder loads read the latest sort mode before publishing final results.
 - Cleaned recent/main fast-scroll track styling so the fast-scroll thumb remains available without a doubled scrollbar/dragbar track.
+- Recent files now display up to 100 usable visible entries while scanning a larger recent-state candidate window, so missing/cache/image-filtered states do not prematurely shrink the visible recent list.
+- Recent-file fast scrolling now uses the same custom right-edge fast-scroll controller as the main file list, replacing the inconsistent default RecyclerView fast-scroll path.
+- Main file-search root selection and recursive walking are split into `MainFileSearchRoots` and `MainFileSearchWalker`, keeping the search/filter UI controller focused on UI state and result presentation.
+- Main folder loading, progressive folder publishing, priority folder-open cancellation, reveal scrolling, visible-list resorting, and background file-operation execution are centralized in `MainFolderLoadController` instead of being embedded in `MainActivity`.
 
 ### Main screen drawer
 
 - Improved tablet and large-screen drawer dismissal so tapping outside the open drawer or swiping left from the outside scrim closes the drawer reliably.
 - Kept the bottom file-type sliding chips/search controls explicitly excluded from the full-screen drawer-open gesture so horizontal chip scrolling remains independent.
 - Smoothed drawer bottom actions by letting File Open, Bookmarks, and Settings run after the drawer close transition starts instead of competing with the close animation.
+- Drawer shortcut placeholders now use normal Android string resources instead of runtime locale string branching, improving localization hygiene.
+
+### Refactor and maintainability
+
+- Continued reducing `MainActivity` from a large mixed coordinator toward a shell around focused controllers; after this pass it is roughly 1,815 lines, with search walking and folder loading moved out.
+- Removed direct `folderLoadExecutor` access from clipboard, archive extraction, and multi-select deletion controllers; background file operations now go through the activity's folder-work API so cancellation and shutdown policy stay centralized.
+- Added defensive fast-scroll installation guards so missing optional rails/thumbs cannot crash startup on layout variants.
 
 ## 2.2.1 - 2026-05-30
 This package uses Android metadata `versionCode 2210` and `versionName "2.2.1"`.

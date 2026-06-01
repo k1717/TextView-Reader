@@ -28,11 +28,14 @@ Current version: **2.2.2**
 - Opening large folders now progressively shows discovered entries while the folder is still loading, then replaces them with the final sorted list.
 - New folder-open requests now take priority over stale queued folder loads, so tapping into another folder during progressive loading starts that folder's load immediately while older work is discarded or ignored.
 - Current-folder and All-folders file search no longer apply a result cap.
+- Recent files now show up to 100 usable entries and share the same custom right-edge drag fast scroller used by the main file list.
+- Main file-search root selection, recursive search walking, folder loading, progressive folder publishing, sort-only refresh, and background file-operation execution have been split out of `MainActivity` into focused controllers/helpers.
 - Date sorting and file-row dates now use Android MediaStore download/added time first, falling back to filesystem created time and then modified time; image info separates modified, created/downloaded, and EXIF taken dates.
 - TXT search highlighting now keeps a visible theme-derived secondary highlight for other visible matches, with a stronger related tone for the active match.
 - App-wide short feedback toasts now use a centralized helper with a roughly 700ms display window, reducing queued stale toast messages while staying readable.
 - Settings now include Button / icon order controls for the main filter strip plus TXT, EPUB/Word, and PDF viewer toolbars. TXT default-visible toolbar slots are highlighted in the order editor, and the order rows use compact one-line cards.
 - The TXT search dialog uses plain text-style action buttons instead of heavier card buttons, recent-file mode hides the IMG filter chip, current-folder sorting reorders the already loaded list without rescanning the folder, and recent/main fast-scroll track styling avoids the double dragbar look.
+- `MainActivity` is now roughly 1,815 lines after the 2.2.2 cleanup pass, with search walking and folder loading moved to `MainFileSearchRoots`, `MainFileSearchWalker`, and `MainFolderLoadController`.
 - Built on the 2.2.1 GitHub-ready source with archive browsing/extraction, image-sequence viewing, large-TXT continuity hardening, bookmark page-model cleanup, controller-based refactoring, and expanded regression coverage.
 
 ## 2.2.1 release summary

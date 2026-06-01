@@ -29,6 +29,8 @@ This source package uses Android metadata:
 - The All file filter includes APK and common video files, including MPEG transport stream `.ts`, with short taps routed to Android package install or external video playback apps.
 - Main file search includes an icon scope toggle beside the search field, shows parent-folder paths in search results, and uses a centered loading spinner while scanning. The All-folders scope icon has been redrawn to remove darker vector-overlap seams.
 - Current-folder and All-folders file search no longer apply a result cap, so large folders are not cut off at 300 items.
+- Recent files now show up to 100 usable visible entries and share the custom right-edge drag fast scroller with the main file list.
+- Main search root calculation, recursive search walking, progressive folder loading, visible-list resorting, reveal scrolling, and folder background-work execution are split into focused helper/controller classes.
 - Date sorting and file-row dates prefer Android MediaStore download/added time when available, falling back to filesystem created time and then modified time; image info separates modified, created/downloaded, and EXIF taken dates.
 - TXT search highlights use theme-blended translucent colors to better match custom reading themes.
 - TXT search highlighting preserves a visible theme-derived secondary tone for other matches and a stronger related tone for the active match.
@@ -37,6 +39,7 @@ This source package uses Android metadata:
 - Settings include configurable button/icon order for main filters and TXT / EPUB-Word / PDF viewer controls. The editor uses compact one-line rows and highlights TXT default-visible slots.
 - Sorting the current folder no longer triggers a full folder reload, recent-file mode hides the IMG chip, TXT search action buttons are text-only, and fast-scroll track styling avoids doubled dragbars.
 - Tablet and large-screen drawer dismissal is improved so outside taps and left swipes from the outside scrim close the open drawer reliably, while bottom file-type sliding chips remain excluded from drawer-open gestures and drawer bottom actions transition more smoothly.
+- TTS is implemented on Android platform APIs; this update does not add a new third-party runtime TTS dependency.
 - This source is based on the 2.2.1 GitHub-ready cleanup package.
 
 ## 2.2.1 baseline summary
