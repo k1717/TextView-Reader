@@ -36,7 +36,7 @@ Current version: **2.2.3**
 | GZ / BZ2 / XZ / LZMA / Z | Single-file decompression paths are covered by tests. | These are compressor streams, not multi-file archives. |
 | RAR / CBR | First-party metadata listing, safe paths, RAR4 Unicode names, stored method-0 extraction, limited RAR5 encrypted stored-data decrypt, stored split-payload assembly, and Junrar fallback extraction for compressed RAR4/RAR3 entries. | RAR creation is not supported. Compressed RAR5, solid RAR, compressed split RAR, encrypted headers, compressed encrypted data, and encrypted split payloads remain unsupported. |
 | ALZ | First-party local-header parsing with Store/Deflate/BZip2 extraction, including ZipCrypto for the covered cases. CRC-verified. | Unusual descriptors, broader split handling, and unverified legacy variants remain unsupported. |
-| EGG | First-party container parser (header/FILE/FILENAME/BLOCK) with Store/Deflate/BZip2/LZMA extraction, per-block CRC32 verification, and path-traversal-safe names. Built from the published EGG spec and official unEGG reference sources. | ESTsoft proprietary AZO compression, and encrypted/split/solid EGG archives, are unsupported. |
+| EGG | First-party container parser (header/FILE/FILENAME/BLOCK) with Store/Deflate/BZip2/LZMA extraction, per-block CRC32 verification, and path-traversal-safe names. The implementation is first-party Java code based on public EGG container concepts and interoperability behavior; no ESTsoft/unEGG source files or binary modules are bundled. | ESTsoft proprietary AZO compression, and encrypted/split/solid EGG archives, are unsupported. |
 
 ## 2.2.2 release summary
 

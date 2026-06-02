@@ -1,8 +1,6 @@
 # EGG Format Notes (for EggArchiveReader)
 
-Derived from ESTsoft's official unEGG v0.5 sources (UnRAR-style read-only use)
-and the public EGG_Specification.pdf. Recorded so the parser can be maintained
-without re-deriving the layout.
+Notes for the first-party `EggArchiveReader` implementation. These notes summarize public EGG container concepts and observed interoperability behavior so the parser can be maintained without repeatedly re-deriving the layout. No ESTsoft source files, unEGG source files, UnEGG binary module, or other third-party EGG decoder code is bundled in this repository.
 
 ## Magic numbers (little-endian uint32)
 - EGG header:      0x41474745  ("EGGA")

@@ -24,8 +24,8 @@ import java.util.zip.InflaterInputStream;
  * Read-only decoder for the ESTsoft EGG archive container.
  *
  * <p>The container layout (magic numbers, header field order and sizes, block
- * structure and compression-method codes) follows ESTsoft's published
- * EGG_Specification.pdf and the official unEGG v0.5 reference sources. See
+ * structure and compression-method codes) is implemented as first-party Java code
+ * from public EGG container concepts and observed interoperability behavior. See
  * {@code docs/EGG_FORMAT_NOTES.md}. This reader extracts entries compressed with
  * Store / Deflate / BZip2 / LZMA. ESTsoft's proprietary AZO method, encrypted,
  * split and solid EGG archives are reported as unsupported rather than producing
@@ -33,7 +33,7 @@ import java.util.zip.InflaterInputStream;
  */
 final class EggArchiveReader {
 
-    // Little-endian uint32 magic numbers (from unEGG EggTypes.h).
+    // Little-endian uint32 magic numbers used by the EGG container.
     private static final int MAGIC_EGG = 0x41474745;
     private static final int MAGIC_FILE = 0x0a8590e3;
     private static final int MAGIC_BLOCK = 0x02b50c13;
@@ -378,7 +378,7 @@ final class EggArchiveReader {
     @NonNull
     private static byte[] decodeLzmaBlock(@NonNull byte[] data, long uncompSize) throws IOException {
         // EGG prepends a 9-byte LZMA data header (5-byte properties + 4-byte
-        // dictionary/size hint per unEGG). org.tukaani LZMAInputStream accepts the
+        // dictionary/size hint observed in compatible EGG LZMA blocks). org.tukaani LZMAInputStream accepts the
         // 5 properties bytes plus an explicit uncompressed size.
         if (data.length < LZMA_DATA_HEADER_SIZE) {
             throw new ArchiveSupport.UnsupportedArchiveFeatureException("Truncated EGG LZMA header");
