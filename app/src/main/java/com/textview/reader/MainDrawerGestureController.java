@@ -28,9 +28,15 @@ final class MainDrawerGestureController {
             return false;
         }
 
-        if (!activity.drawerSwipeTracking
-                && !activity.drawerManualDragging
-                && activity.drawerLayout.isDrawerOpen(GravityCompat.START)) {
+        if (!activity.drawerDismissTracking
+                && event.getActionMasked() == MotionEvent.ACTION_DOWN
+                && isDrawerDismissible(drawerView)
+                && isTouchInsideView(drawerView, event)) {
+            resetDrawerSwipeState();
+            return false;
+        }
+
+        if (shouldRouteToDrawerDismiss(drawerView, event)) {
             return handleOpenDrawerDismissGesture(drawerView, event);
         }
 
@@ -83,9 +89,7 @@ final class MainDrawerGestureController {
                 boolean fullyPulled = activity.drawerSlideOffset >= 0.30f;
                 resetDrawerSwipeState();
                 if (fullyPulled) {
-                    drawerView.setTranslationX(0f);
-                    drawerView.setVisibility(View.VISIBLE);
-                    activity.drawerLayout.openDrawer(GravityCompat.START);
+                    openDrawerReliably(drawerView);
                 } else {
                     forceDrawerClosedVisualState(drawerView);
                     activity.drawerLayout.closeDrawer(GravityCompat.START);
@@ -105,6 +109,30 @@ final class MainDrawerGestureController {
             default:
                 return false;
         }
+    }
+
+
+    private boolean shouldRouteToDrawerDismiss(@NonNull View drawerView, @NonNull MotionEvent event) {
+        if (activity.drawerDismissTracking) return true;
+        if (event.getActionMasked() != MotionEvent.ACTION_DOWN) return false;
+        if (!isDrawerDismissible(drawerView)) return false;
+        if (isTouchInsideView(drawerView, event)) {
+            resetDrawerSwipeState();
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isDrawerDismissible(@NonNull View drawerView) {
+        if (activity.drawerLayout == null) return false;
+        if (activity.drawerLayout.isDrawerOpen(GravityCompat.START)) return true;
+
+        // Only treat a partial drawer as dismissible when our tracked offset says
+        // it is materially on-screen. Do not use isDrawerVisible() or raw view
+        // coordinates here: DrawerLayout can report/lay out the drawer in ways
+        // that look visible even when the user is starting a normal right-swipe
+        // open gesture from the closed state.
+        return drawerView.getVisibility() == View.VISIBLE && activity.drawerSlideOffset >= 0.15f;
     }
 
     private boolean isTouchInsideMainBottomControls(@NonNull MotionEvent event) {
@@ -127,37 +155,43 @@ final class MainDrawerGestureController {
     private boolean handleOpenDrawerDismissGesture(@NonNull View drawerView, @NonNull MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                if (isTouchInsideView(drawerView, event)) {
-                    resetDrawerSwipeState();
-                    return false;
-                }
                 activity.drawerSwipeStartX = event.getX();
                 activity.drawerSwipeStartY = event.getY();
                 activity.drawerSwipeTracking = true;
+                activity.drawerDismissTracking = true;
                 activity.drawerManualDragging = false;
                 activity.drawerSwipeOpened = false;
                 return true;
 
             case MotionEvent.ACTION_MOVE:
-                if (!activity.drawerSwipeTracking) return false;
+                if (!activity.drawerDismissTracking || !activity.drawerSwipeTracking) return false;
 
                 float dx = event.getX() - activity.drawerSwipeStartX;
                 float dy = event.getY() - activity.drawerSwipeStartY;
                 float absDx = Math.abs(dx);
                 float absDy = Math.abs(dy);
-                if (absDx > activity.drawerSwipeTouchSlop && absDx > absDy * 1.10f) {
-                    activity.drawerManualDragging = true;
+                float closeThreshold = Math.max(activity.dpToPx(32), activity.drawerSwipeTouchSlop * 1.8f);
+
+                if (absDy > activity.drawerSwipeTouchSlop * 2.2f && absDy > absDx * 1.25f) {
+                    // Vertical scrolling/touch noise outside the open drawer should
+                    // not dismiss it. Keep consuming while the drawer is open so the
+                    // underlying list does not receive a stray click.
+                    activity.drawerManualDragging = false;
+                    return true;
                 }
-                if (dx < -Math.max(activity.dpToPx(24), activity.drawerSwipeTouchSlop * 1.5f)
-                        && absDx > absDy * 1.10f) {
+
+                if (dx < -closeThreshold && absDx > absDy * 1.10f) {
+                    activity.drawerManualDragging = true;
                     closeDrawerReliably(drawerView);
                     resetDrawerSwipeState();
                 }
                 return true;
 
             case MotionEvent.ACTION_UP:
-                if (!activity.drawerSwipeTracking) return false;
-                closeDrawerReliably(drawerView);
+                if (!activity.drawerDismissTracking || !activity.drawerSwipeTracking) return false;
+                // Do not close on a simple tap. The requested behavior is
+                // anywhere-left-swipe close; a tiny touch outside the drawer must
+                // leave it open.
                 resetDrawerSwipeState();
                 return true;
 
@@ -166,7 +200,7 @@ final class MainDrawerGestureController {
                 return false;
 
             default:
-                return activity.drawerSwipeTracking;
+                return activity.drawerDismissTracking && activity.drawerSwipeTracking;
         }
     }
 
@@ -220,6 +254,43 @@ final class MainDrawerGestureController {
                 && rawY >= loc[1] && rawY <= loc[1] + view.getHeight();
     }
 
+    private void openDrawerReliably(@NonNull View drawerView) {
+        if (activity.drawerLayout == null) {
+            resetDrawerSwipeState();
+            return;
+        }
+
+        activity.drawerClosePartialOnRelease = false;
+        activity.drawerForceSettling = true;
+        drawerView.setTranslationX(0f);
+        drawerView.setVisibility(View.VISIBLE);
+
+        try {
+            activity.drawerLayout.openDrawer(GravityCompat.START);
+        } catch (IllegalArgumentException ignored) {
+            activity.drawerForceSettling = false;
+            return;
+        }
+
+        drawerView.postDelayed(() -> {
+            if (activity.drawerLayout == null) return;
+            if (!activity.drawerLayout.isDrawerOpen(GravityCompat.START)
+                    && activity.drawerSlideOffset >= 0.30f) {
+                drawerView.setTranslationX(0f);
+                drawerView.setVisibility(View.VISIBLE);
+                try {
+                    activity.drawerLayout.openDrawer(GravityCompat.START);
+                } catch (IllegalArgumentException ignored) {
+                    activity.drawerForceSettling = false;
+                    return;
+                }
+            }
+            if (!activity.drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                activity.drawerForceSettling = false;
+            }
+        }, 360L);
+    }
+
     void closeDrawerAfterSelection() {
         if (activity.drawerLayout == null) {
             resetDrawerSwipeState();
@@ -268,6 +339,7 @@ final class MainDrawerGestureController {
         activity.drawerSwipeTracking = false;
         activity.drawerManualDragging = false;
         activity.drawerSwipeOpened = false;
+        activity.drawerDismissTracking = false;
     }
 
     private void cancelMainListPendingPresses() {

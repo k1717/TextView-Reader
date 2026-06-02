@@ -71,6 +71,7 @@ import com.textview.reader.model.ReaderState;
 import com.textview.reader.util.BookmarkManager;
 import com.textview.reader.util.EdgeToEdgeUtil;
 import com.textview.reader.util.FileClipboardController;
+import com.textview.reader.util.FileOperationProgress;
 import com.textview.reader.util.FileTypeFilter;
 import com.textview.reader.util.FileUtils;
 import com.textview.reader.util.PrefsManager;
@@ -160,6 +161,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     static final int FILTER_IMAGE = FileTypeFilter.IMAGE;
     int activeFileFilter = FILTER_ALL;
     final ExecutorService fileSearchExecutor = Executors.newSingleThreadExecutor();
+    final ExecutorService fileOperationExecutor = Executors.newSingleThreadExecutor();
     final Handler fileSearchHandler = new Handler(Looper.getMainLooper());
     Runnable pendingFileSearchRunnable;
     volatile boolean activityDestroyed = false;
@@ -175,6 +177,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     boolean drawerSwipeTracking = false;
     boolean drawerManualDragging = false;
     boolean drawerSwipeOpened = false;
+    boolean drawerDismissTracking = false;
     int drawerSwipeTouchSlop;
     float drawerSlideOffset = 0f;
     boolean drawerForceSettling = false;
@@ -194,6 +197,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     /** Toolbar reference cached so onResume can re-apply the theme cheaply. */
     Toolbar mainToolbar;
     ImageButton mainOverflowButton;
+    ImageButton mainOperationProgressButton;
     ImageButton mainPendingActionButton;
     private LinearLayout mainToolbarActionContainer;
     boolean fileSelectionMode = false;
@@ -213,6 +217,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private MainFileActionDialogController mainFileActionDialogController;
     private MainSearchFilterController mainSearchFilterController;
     private MainArchiveExtractController mainArchiveExtractController;
+    private MainArchiveCreateController mainArchiveCreateController;
     private MainClipboardController mainClipboardController;
     private MainShareController mainShareController;
     private MainConfirmDialogController mainConfirmDialogController;
@@ -221,6 +226,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private MainActivityStartupController mainActivityStartupController;
     private MainRecentFilesController mainRecentFilesController;
     private MainFolderLoadController mainFolderLoadController;
+    private MainFileOperationProgressController mainFileOperationProgressController;
 
     private MainActivityStartupController startup() {
         if (mainActivityStartupController == null) {
@@ -283,6 +289,13 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         return mainArchiveExtractController;
     }
 
+    private MainArchiveCreateController mainArchiveCreate() {
+        if (mainArchiveCreateController == null) {
+            mainArchiveCreateController = new MainArchiveCreateController(this);
+        }
+        return mainArchiveCreateController;
+    }
+
     private MainClipboardController mainClipboard() {
         if (mainClipboardController == null) {
             mainClipboardController = new MainClipboardController(this);
@@ -323,6 +336,13 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             mainFolderLoadController = new MainFolderLoadController(this);
         }
         return mainFolderLoadController;
+    }
+
+    private MainFileOperationProgressController mainFileOperationProgress() {
+        if (mainFileOperationProgressController == null) {
+            mainFileOperationProgressController = new MainFileOperationProgressController(this);
+        }
+        return mainFileOperationProgressController;
     }
 
     final ActivityResultLauncher<String[]> openFileLauncher =
@@ -445,6 +465,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (drawerStorageList != null) drawerStorageList.setAdapter(null);
 
         fileSearchExecutor.shutdownNow();
+        fileOperationExecutor.shutdownNow();
         if (mainFolderLoadController != null) mainFolderLoadController.shutdownNow();
         super.onDestroy();
     }
@@ -607,7 +628,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     private void ensureMainOverflowButton(@NonNull Toolbar toolbar) {
         if (mainToolbarActionContainer != null && mainToolbarActionContainer.getParent() == toolbar
-                && mainPendingActionButton != null && mainOverflowButton != null) {
+                && mainOperationProgressButton != null && mainPendingActionButton != null && mainOverflowButton != null) {
+            tintMainOperationProgressButton();
             tintMainPendingActionButton();
             tintMainOverflowButton();
             updateMainOverflowButtonVisibility();
@@ -620,6 +642,9 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         if (mainPendingActionButton != null && mainPendingActionButton.getParent() instanceof ViewGroup) {
             ((ViewGroup) mainPendingActionButton.getParent()).removeView(mainPendingActionButton);
         }
+        if (mainOperationProgressButton != null && mainOperationProgressButton.getParent() instanceof ViewGroup) {
+            ((ViewGroup) mainOperationProgressButton.getParent()).removeView(mainOperationProgressButton);
+        }
         if (mainOverflowButton != null && mainOverflowButton.getParent() instanceof ViewGroup) {
             ((ViewGroup) mainOverflowButton.getParent()).removeView(mainOverflowButton);
         }
@@ -630,6 +655,16 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         mainToolbarActionContainer.setBackgroundColor(Color.TRANSPARENT);
         mainToolbarActionContainer.setClipChildren(false);
         mainToolbarActionContainer.setClipToPadding(false);
+
+        mainOperationProgressButton = new ImageButton(this);
+        mainOperationProgressButton.setBackgroundColor(Color.TRANSPARENT);
+        mainOperationProgressButton.setContentDescription(getString(R.string.operation_progress_open));
+        mainOperationProgressButton.setPadding(dpToPx(10), dpToPx(10), dpToPx(10), dpToPx(10));
+        mainOperationProgressButton.setScaleType(ImageView.ScaleType.CENTER);
+        mainOperationProgressButton.setOnClickListener(v -> showActiveFileOperationProgress());
+        tintMainOperationProgressButton();
+        LinearLayout.LayoutParams progressLp = new LinearLayout.LayoutParams(dpToPx(44), dpToPx(48));
+        mainToolbarActionContainer.addView(mainOperationProgressButton, progressLp);
 
         mainPendingActionButton = new ImageButton(this);
         mainPendingActionButton.setBackgroundColor(Color.TRANSPARENT);
@@ -673,6 +708,16 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         }
     }
 
+    private void tintMainOperationProgressButton() {
+        if (mainOperationProgressButton == null) return;
+        Drawable icon = ContextCompat.getDrawable(this, R.drawable.ic_operation_progress);
+        if (icon != null) {
+            Drawable wrapped = DrawableCompat.wrap(icon.mutate());
+            DrawableCompat.setTint(wrapped, Color.WHITE);
+            mainOperationProgressButton.setImageDrawable(wrapped);
+        }
+    }
+
     private void tintMainPendingActionButton() {
         if (mainPendingActionButton == null) return;
         Drawable icon = ContextCompat.getDrawable(this, R.drawable.ic_pending_actions);
@@ -694,6 +739,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                 mainPendingActionButton.setVisibility(View.GONE);
                 mainPendingActionButton.setEnabled(false);
             }
+            if (mainOperationProgressButton != null) {
+                mainOperationProgressButton.setVisibility(View.GONE);
+                mainOperationProgressButton.setEnabled(false);
+            }
             return;
         }
 
@@ -712,11 +761,24 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             mainPendingActionButton.setEnabled(enabled);
             mainPendingActionButton.setAlpha(enabled ? 1.0f : 0.55f);
         }
+        if (mainOperationProgressButton != null) {
+            boolean showProgress = mainFileOperationProgress().hasBackgroundProgress();
+            mainOperationProgressButton.setContentDescription(getString(R.string.operation_progress_open));
+            mainOperationProgressButton.setVisibility(showProgress ? View.VISIBLE : View.GONE);
+            mainOperationProgressButton.setEnabled(showProgress);
+            mainOperationProgressButton.setAlpha(showProgress ? 1.0f : 0.55f);
+        }
     }
 
 
     private void showPendingActionQueueDialog() {
         mainFileDialogs().showPendingActionQueueDialog();
+    }
+
+    private void showActiveFileOperationProgress() {
+        if (!mainFileOperationProgress().showActiveProgressDialog()) {
+            updateMainOverflowButtonVisibility();
+        }
     }
 
     private void widenDrawerEdgeDragArea(@NonNull DrawerLayout layout, int desiredPx) {
@@ -1258,7 +1320,16 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     }
 
     void executeFolderBackgroundTask(@NonNull Runnable task) {
-        mainFolderLoad().executeBackgroundTask(task);
+        fileOperationExecutor.execute(task);
+    }
+
+    @NonNull
+    FileOperationProgress showFileOperationProgress(@NonNull String title, @Nullable String detail) {
+        return mainFileOperationProgress().show(title, detail);
+    }
+
+    void finishFileOperationProgress(@Nullable FileOperationProgress progress) {
+        mainFileOperationProgress().finish(progress);
     }
 
     private boolean isRootStorage(File dir) {
@@ -1345,6 +1416,9 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     @NonNull
     ArrayList<File> getSelectedArchiveFilesSnapshot() { return mainSelectionMode().getSelectedArchiveFilesSnapshot(); }
 
+    @NonNull
+    ArrayList<File> getSelectedFilesSnapshot() { return mainSelectionMode().getSelectedFilesSnapshot(); }
+
     @Nullable
     File getSingleSelectedFile() { return mainSelectionMode().getSingleSelectedFile(); }
 
@@ -1357,6 +1431,12 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     void startSelectedClipboardOperation(boolean copy) { mainSelectionMode().startSelectedClipboardOperation(copy); }
 
     void startSelectedArchiveExtraction() { mainSelectionMode().startSelectedArchiveExtraction(); }
+
+    void startSelectedArchiveCreation() {
+        ArrayList<File> selected = getSelectedFilesSnapshot();
+        exitFileSelectionMode(true);
+        mainArchiveCreate().startArchiveCreation(selected);
+    }
 
     void showSelectedDeleteConfirm() { mainSelectionMode().showSelectedDeleteConfirm(); }
 
@@ -1553,12 +1633,28 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         return mainArchiveExtract().isSupportedArchive(file);
     }
 
+    void openArchiveFolderPreview(@NonNull File file) {
+        if (!ArchiveSupport.isSupportedArchive(file) || !file.exists() || !file.isFile()) {
+            ShortToast.show(this, R.string.archive_open_failed);
+            return;
+        }
+        saveArchiveRecentState(file);
+        Intent intent = new Intent(this, ArchiveBrowserActivity.class);
+        intent.putExtra(ArchiveBrowserActivity.EXTRA_ARCHIVE_PATH, file.getAbsolutePath());
+        intent.putExtra(ArchiveBrowserActivity.EXTRA_FORCE_FOLDER_PREVIEW, true);
+        startActivity(intent);
+    }
+
     void startArchiveExtraction(@NonNull File archive) {
         mainArchiveExtract().startArchiveExtraction(archive);
     }
 
     void startArchiveExtractions(@NonNull List<File> archives) {
         mainArchiveExtract().startArchiveExtractions(archives);
+    }
+
+    void startArchiveCreation(@NonNull File source) {
+        mainArchiveCreate().startArchiveCreation(source);
     }
 
     boolean setActivePendingArchiveExtraction(@Nullable File archive) {
@@ -1571,6 +1667,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     void confirmPendingArchiveExtractionToCurrentDirectory() {
         mainArchiveExtract().confirmPendingArchiveExtractionToCurrentDirectory();
+    }
+
+    void confirmAllPendingArchiveExtractionsToCurrentDirectory() {
+        mainArchiveExtract().confirmAllPendingArchiveExtractionsToCurrentDirectory();
     }
 
     void shareSelectedFiles() {
@@ -1613,6 +1713,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     void pastePendingClipboardItemToCurrentDirectory() {
         mainClipboard().pastePendingClipboardItemToCurrentDirectory();
+    }
+
+    void pasteAllPendingClipboardItemsToCurrentDirectory() {
+        mainClipboard().pasteAllPendingClipboardItemsToCurrentDirectory();
     }
 
     void showRenameDialog(File file) {
@@ -1677,13 +1781,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     }
 
     boolean deleteRecursive(File file) {
-        if (file.isDirectory()) {
-            File[] children = file.listFiles();
-            if (children != null) {
-                for (File c : children) deleteRecursive(c);
-            }
-        }
-        return file.delete();
+        return file != null && com.textview.reader.util.FileSystemOps.delete(file);
     }
 
     void showFileInfo(File file) {

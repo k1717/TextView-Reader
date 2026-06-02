@@ -633,7 +633,7 @@ public class ImageReaderActivity extends AppCompatActivity {
         if (!archive.exists() || !archive.isFile()) return false;
         synchronized (archiveExtractLock) {
             if (outFile.exists() && outFile.isFile() && outFile.length() > 0L) return true;
-            return ArchiveSupport.extractSingleEntry(archive, entryPath, outFile, null)
+            return ArchiveSupport.extractSingleEntryDetailed(archive, entryPath, outFile, null).success
                     && outFile.exists()
                     && outFile.isFile()
                     && outFile.length() > 0L;

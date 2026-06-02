@@ -23,3 +23,7 @@ Android Gradle Plugin 9.x may print deprecation or sync-performance warnings for
 ## Java toolchain resolver
 
 `settings.gradle` applies `org.gradle.toolchains.foojay-resolver-convention` version `1.0.0` so Gradle can resolve Java toolchains during local builds. This is a build-time plugin and is recorded in `THIRD_PARTY_NOTICES.md`.
+
+## 2.2.3 archive/drawer note
+
+The 2.2.3 source includes archive-support matrix work plus drawer gesture repairs. Build failures in this package should be debugged as normal Java/XML/Gradle errors; drawer behavior changes are implemented in `MainDrawerGestureController` and drawer bottom action routing is in `MainDrawerController`.

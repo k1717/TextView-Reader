@@ -249,8 +249,14 @@ public class FileUtils {
             return isArchiveFile(fileName.substring(0, fileName.length() - 4));
         }
         return lower.endsWith(".zip") || lower.endsWith(".cbz")
+                || lower.endsWith(".rar") || lower.endsWith(".cbr")
+                || lower.matches(".*\\.r\\d{2,3}$")
+                || lower.endsWith(".alz")
+                || lower.endsWith(".egg")
                 || lower.endsWith(".7z")
+                || lower.endsWith(".cb7")
                 || lower.endsWith(".tar")
+                || lower.endsWith(".cbt")
                 || lower.endsWith(".tar.gz") || lower.endsWith(".tgz")
                 || lower.endsWith(".tar.bz2") || lower.endsWith(".tbz2") || lower.endsWith(".tbz")
                 || lower.endsWith(".tar.xz") || lower.endsWith(".txz")

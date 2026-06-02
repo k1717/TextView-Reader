@@ -1,5 +1,68 @@
 # Patch Notes
 
+## 2.2.3
+
+This 2.2.3 package starts the first-party RAR/CBR engine track on top of the 2.2.2 source, with Android metadata `versionCode 2230` and `versionName "2.2.3"`.
+
+### RAR / CBR engine foundation
+
+- Added a first-party `RarArchiveReader` and wired `.rar` / `.cbr` into `ArchiveSupport` and `FileUtils`.
+- The first pass supports direct RAR5 header parsing, entry listing, safe path handling, synthetic folder rows, header CRC checks, and extraction of RAR5 entries stored with method 0, meaning no compression.
+- RAR4/RAR3-style headers are also parsed for entry listing and method-0 stored entry extraction, improving odds with older CBR files.
+- RAR4 Unicode filename records are decoded, so non-ASCII paths can be listed and extracted by their real Unicode names when present.
+- RAR5/RAR4 single-entry extraction is available for the archive-preview/image path when the entry is stored.
+- Added Junrar as an extraction-only fallback for compressed RAR4/RAR3 entries. This is deliberately not connected to RAR creation or compression.
+- Compressed RAR5, solid RAR, compressed split RAR, encrypted headers, compressed encrypted data, and encrypted split payloads intentionally fail as unsupported for now so the app does not emit corrupted files.
+- ALZ/EGG names are now recognized by the archive type system and filters. ALZ extraction covers Store/Deflate/BZip2 with CRC verification, and EGG extraction covers Store/Deflate/BZip2/LZMA through the first-party `EggArchiveReader`; unsupported ALZip-family variants fail explicitly instead of writing partial output.
+- RAR encrypted-header archives now enter the password flow instead of failing as a generic unsupported archive. Visible encrypted file entries can still be listed, while actual RAR data decryption remains blocked after password entry until the first-party decryptor exists.
+- RAR volume filenames (`.partN.rar` and `.rNN`) are recognized. Opening a later volume resolves to the first volume for safer metadata listing; entries with split data flags remain unsupported rather than being concatenated into corrupt output.
+- RAR5 file encryption records are parsed and method-0 encrypted stored payloads now take a limited AES/PBKDF2 decrypt path before CRC validation. This does not cover encrypted headers, compressed encrypted data, RAR4 encryption, or split encrypted payloads.
+- Stored split payloads are now supported for method-0 RAR entries. Split chains are collected from sibling volumes and written in order, while compressed/solid/encrypted split chains continue to fail explicitly.
+- CB7 and CBT are recognized as 7z/TAR-backed comic archives.
+- Added unit coverage for RAR/CBR extension detection, RAR5 and RAR4 stored-entry listing/extraction, RAR4 Unicode filename decoding, compressed RAR5 rejection, and compressed RAR3/RAR4 fixture extraction through Junrar.
+- This package bundles Junrar for RAR extraction-only fallback. RAR creation remains unsupported.
+
+### ZIP / CBZ lightweight path
+
+- Added experimental `LightweightZipArchiveReader` for plain non-encrypted ZIP/CBZ archives.
+- The lightweight path handles stored/deflated ZIP entries, safe paths, synthetic folder rows, single-entry extraction, and multi-worker full extraction.
+- Encrypted ZIP and standard split ZIP continue through Zip4j, preserving compatibility.
+- Added a comparison test that extracts the same plain ZIP with the lightweight engine and Zip4j, verifies identical output, and writes a simple timing report to `build/reports/archive-engine-benchmark.txt`.
+- Added encrypted ZIP and split ZIP fallback tests.
+- The current benchmark fixture favored Zip4j, so production ZIP/CBZ routing remains on Zip4j instead of switching to the experimental engine.
+
+### File-operation progress window
+
+- Added a centered file-manager style progress window for copy, move, delete, and archive extraction execution.
+- The window supports pause/resume, cancel, and background continuation. Background dismisses the window while the operation continues through the existing folder background executor.
+- Copy/move progress is byte-based and cooperative, checking pause/cancel between file chunks.
+- Single-file delete and multi-select delete now run through the same progress-token path, so deleting large folders no longer happens as an opaque background action.
+- The pending cut/copy queue now offers Paste all here when multiple items are waiting. It runs the queue sequentially in the current folder and creates copy-name targets for conflicts instead of overwriting during batch execution.
+- The progress window now shows the current item and current folder separately above the progress bar, splits percent from `done / total` byte progress, and places Pause/Resume beside the progress bar.
+- Background no longer resumes a paused operation. A new toolbar progress button appears beside the pending-action queue button when a running operation is backgrounded, reopening the same progress token.
+- File operations now use a dedicated file-operation executor, so folder reloads after resume or navigation no longer restart the executor that is copying, deleting, moving, or extracting files.
+- ZIP/TAR/7z/single-stream extraction paths now receive the same progress token and check pause/cancel while writing entries; RAR progress-token wiring remains a follow-up for the custom RAR extraction loop.
+- CBZ/CBR/CB7/CBT auto-open now launches the image reader as the final destination and finishes the intermediate archive browser, preventing Back from landing inside the archive file list after a saved-position comic open.
+- Added an Archive open mode setting: Normal mode opens archive contents first, while Comic mode opens image-based generic archives directly like comic books and attempts to restore the last viewed archive image.
+- Added Archive preview to archive long-press and one-file multi-select actions, forcing the internal archive folder view even when Comic mode would otherwise auto-open the image viewer.
+- This setting is a UI/routing layer over the existing archive support; it does not add a new third-party archive engine.
+
+### Archive support matrix and failure UX
+
+- Added explicit extraction result classification for password-required, unsupported-feature, and generic failure paths.
+- Single archive extraction, batch extraction, archive preview item opening, and archive image preview now use the same failure classification instead of collapsing every case into a generic failure toast.
+- Unsupported RAR, ALZ, and EGG cases now show format-specific messages so users can distinguish a damaged file from a format variant outside the current verified decoder boundary.
+- Documented the 2.2.3 archive support matrix in `README.md`, including the current limits for compressed RAR5, solid/encrypted RAR, ALZ variants, EGG, Unix compressor streams, and OpenPGP-wrapped `.tar.*.gpg` files.
+- Added `.zipx` recognition as a ZIP-family archive. ZIPX AES/password detection now falls back to raw ZIP header scanning when Zip4j cannot parse the compression method, and ZIPX central-directory listing can still show entries for unsupported method-95/XZ samples while extraction remains explicitly unsupported.
+- Added an optional external fixture smoke test, enabled with `TEXTVIEW_EXTERNAL_ARCHIVE_FIXTURE_DIR`, covering the provided password ZIP, password 7z, password ZIPX, and `rar-test-files-master.zip` samples. Added EGG synthetic fixture tests for Store/Deflate extraction and encrypted-entry failure classification.
+
+### Drawer gesture and bottom actions
+
+- Repaired the drawer open/close gesture split after the archive-engine work. Rightward swipes from the main screen still open the drawer, while leftward swipes from the outside area close an already open or partially open drawer.
+- The close path no longer triggers from a single outside tap. It requires actual leftward movement, so accidental taps do not act like a back/close command.
+- Manual drawer drags now settle to a full open or full closed state, avoiding the previous half-open stuck state caused by overlapping dismiss/open gesture handling.
+- The drawer bottom **Open File**, **Bookmarks**, and **Settings** buttons now run their action immediately and then close the drawer in the background.
+
 ## 2.2.2
 
 This 2.2.2 package adds TXT text-to-speech on top of the 2.2.1 GitHub-ready source, with Android metadata `versionCode 2220` and `versionName "2.2.2"`.
@@ -86,7 +149,7 @@ This 2.2.1 package is prepared for GitHub upload with Android metadata `versionC
 
 - Added long-press actions for containing-folder jump, cut/copy queueing, archive extraction queueing, overwrite/create-copy conflict handling, and folder move bookmark rebinding.
 - Unified pending cut/copy/extract jobs under one top-bar pending-action dropdown with inline cancellation and clear-all behavior.
-- Added ZIP/CBZ archive browsing, encrypted ZIP/7z password prompts, standard split ZIP handling, numeric `.001` split support for supported archive families, TAR-family extraction, and single-file compressor streams (`.gz`, `.bz2`, `.xz`, `.lzma`, `.Z`). RAR/CBR and lzip `.lz` are still unsupported.
+- Added ZIP/CBZ archive browsing, encrypted ZIP/7z password prompts, standard split ZIP handling, numeric `.001` split support for supported archive families, TAR-family extraction, and single-file compressor streams (`.gz`, `.bz2`, `.xz`, `.lzma`, `.Z`). RAR/CBR compression was still unsupported in 2.2.1.
 - Added Archive and Image quick filters, compact five-slot quick-filter layout, full filter-strip drawer-gesture blocking, and release-only snapping.
 - Fixed tablet/large-screen drawer selection behavior so drawer shortcuts, drawer recent folders, and recent-file taps close a stale visible drawer panel.
 - Kept the multi-file selection dropdown compact, borderless, non-scrollable, and height-wrapped so all actions are visible at once.

@@ -74,6 +74,28 @@ final class MainPendingActionDropdownController {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 activity.dpToPx(34)));
 
+        TextView runClipboardAllView = makeRunAllButton(style);
+        LinearLayout.LayoutParams runAllLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                activity.dpToPx(42));
+        runAllLp.setMargins(activity.dpToPx(6), 0, activity.dpToPx(6), activity.dpToPx(6));
+        box.addView(runClipboardAllView, runAllLp);
+        runClipboardAllView.setOnClickListener(v -> {
+            popup.dismiss();
+            activity.pasteAllPendingClipboardItemsToCurrentDirectory();
+        });
+
+        TextView runExtractAllView = makeRunAllButton(style);
+        LinearLayout.LayoutParams extractAllLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                activity.dpToPx(42));
+        extractAllLp.setMargins(activity.dpToPx(6), 0, activity.dpToPx(6), activity.dpToPx(6));
+        box.addView(runExtractAllView, extractAllLp);
+        runExtractAllView.setOnClickListener(v -> {
+            popup.dismiss();
+            activity.confirmAllPendingArchiveExtractionsToCurrentDirectory();
+        });
+
         LinearLayout rowsContainer = new LinearLayout(activity);
         rowsContainer.setOrientation(LinearLayout.VERTICAL);
         box.addView(rowsContainer, new LinearLayout.LayoutParams(
@@ -97,6 +119,12 @@ final class MainPendingActionDropdownController {
         refreshRows[0] = () -> {
             rowsContainer.removeAllViews();
             boolean hasAny = false;
+            int clipboardCount = activity.fileClipboardController.getPendingItems().size();
+            int extractCount = activity.pendingExtractArchives.size();
+            runClipboardAllView.setText(activity.getString(R.string.paste_all_here));
+            runClipboardAllView.setVisibility(clipboardCount > 0 ? View.VISIBLE : View.GONE);
+            runExtractAllView.setText(activity.getString(R.string.extract_all_here));
+            runExtractAllView.setVisibility(extractCount > 0 ? View.VISIBLE : View.GONE);
 
             for (FileClipboardController.PendingItem item : activity.fileClipboardController.getPendingItems()) {
                 hasAny = true;
@@ -222,9 +250,9 @@ final class MainPendingActionDropdownController {
                 1f));
 
         TextView cancelView = new TextView(activity);
-        cancelView.setText("×");
+        cancelView.setText("X");
         cancelView.setTextColor(dangerColor);
-        cancelView.setTextSize(24f);
+        cancelView.setTextSize(17f);
         cancelView.setTypeface(Typeface.DEFAULT_BOLD);
         cancelView.setGravity(Gravity.CENTER);
         cancelView.setIncludeFontPadding(false);
@@ -234,7 +262,7 @@ final class MainPendingActionDropdownController {
             cancelAction.run();
         });
         row.addView(cancelView, new LinearLayout.LayoutParams(
-                activity.dpToPx(40),
+                activity.dpToPx(32),
                 LinearLayout.LayoutParams.MATCH_PARENT));
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -242,5 +270,22 @@ final class MainPendingActionDropdownController {
                 LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.setMargins(activity.dpToPx(6), 0, activity.dpToPx(6), activity.dpToPx(6));
         box.addView(row, lp);
+    }
+
+    @NonNull
+    private TextView makeRunAllButton(@NonNull MainDropdownStyle style) {
+        TextView button = new TextView(activity);
+        button.setTextColor(style.fg);
+        button.setTextSize(14f);
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setGravity(Gravity.CENTER);
+        button.setSingleLine(true);
+        button.setIncludeFontPadding(false);
+        button.setPadding(activity.dpToPx(12), 0, activity.dpToPx(12), 0);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(style.rowPanel);
+        bg.setCornerRadius(activity.dpToPx(8));
+        button.setBackground(bg);
+        return button;
     }
 }

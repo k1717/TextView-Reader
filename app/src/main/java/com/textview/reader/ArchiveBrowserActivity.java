@@ -60,6 +60,7 @@ import java.util.concurrent.Executors;
 
 public class ArchiveBrowserActivity extends AppCompatActivity {
     public static final String EXTRA_ARCHIVE_PATH = "com.textview.reader.ARCHIVE_PATH";
+    public static final String EXTRA_FORCE_FOLDER_PREVIEW = "com.textview.reader.FORCE_ARCHIVE_FOLDER_PREVIEW";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -91,6 +92,7 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
     private int archiveFilterStepPx;
     private int archiveSortMode = PrefsManager.SORT_NAME_ASC;
     private boolean autoOpenedComicArchive = false;
+    private boolean forceFolderPreview = false;
     private final Runnable archiveFilterSnapRunnable = this::snapArchiveFilterToSlot;
     private String archiveSearchQuery = "";
     private int activeArchiveFilter = FILTER_ALL;
@@ -111,6 +113,7 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
         prefs = PrefsManager.getInstance(this);
         bookmarkManager = BookmarkManager.getInstance(this);
         archiveSortMode = prefs != null ? prefs.getArchiveSortMode() : PrefsManager.SORT_NAME_ASC;
+        forceFolderPreview = getIntent().getBooleanExtra(EXTRA_FORCE_FOLDER_PREVIEW, false);
 
         String path = getIntent().getStringExtra(EXTRA_ARCHIVE_PATH);
         if (path == null || path.trim().isEmpty()) {
@@ -530,6 +533,13 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
                     showLoading(false, null);
                     showPasswordDialog(passwordText -> loadArchiveEntries(passwordText.toCharArray()));
                 });
+            } catch (ArchiveSupport.UnsupportedArchiveFeatureException e) {
+                mainHandler.post(() -> {
+                    if (destroyed) return;
+                    showLoading(false, null);
+                    ShortToast.show(this, ArchiveFailureMessages.unsupportedFeatureMessageRes(archiveFile));
+                    finish();
+                });
             } catch (Exception e) {
                 mainHandler.post(() -> {
                     if (destroyed) return;
@@ -693,18 +703,22 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
         showLoading(true, null);
         File outFile = buildPreviewOutputFile(entry);
         executor.execute(() -> {
-            boolean ok = ArchiveSupport.extractSingleEntry(archiveFile, entry.path, outFile, archivePassword);
+            ArchiveSupport.ExtractionResult result = ArchiveSupport.extractSingleEntryDetailed(
+                    archiveFile,
+                    entry.path,
+                    outFile,
+                    archivePassword);
             mainHandler.post(() -> {
                 if (destroyed) return;
                 showLoading(false, null);
-                if (!ok || !outFile.exists()) {
-                    if (ArchiveSupport.canUsePassword(archiveFile)) {
+                if (!result.success || !outFile.exists()) {
+                    if (shouldAskArchivePassword(result)) {
                         showPasswordDialog(passwordText -> {
                             archivePassword = passwordText.toCharArray();
                             extractEntryAndOpen(entry);
                         });
                     } else {
-                        ShortToast.show(this, R.string.archive_entry_open_failed);
+                        showArchiveEntryExtractionFailure(result);
                     }
                     return;
                 }
@@ -725,15 +739,22 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
     }
 
     private void maybeAutoOpenComicArchive() {
-        if (autoOpenedComicArchive || archiveFile == null || !isComicBookArchiveName(archiveFile.getName())) return;
+        if (autoOpenedComicArchive || archiveFile == null || !shouldAutoOpenArchiveAsComic()) return;
         if (allEntries == null || allEntries.isEmpty()) return;
         autoOpenedComicArchive = true;
         openArchiveImageSequence(null, true);
     }
 
+    private boolean shouldAutoOpenArchiveAsComic() {
+        if (forceFolderPreview) return false;
+        if (archiveFile == null) return false;
+        if (isComicBookArchiveName(archiveFile.getName())) return true;
+        return prefs != null && prefs.shouldOpenGenericArchivesAsComics();
+    }
+
     private boolean isComicBookArchiveName(@NonNull String name) {
         String lower = name.toLowerCase(Locale.ROOT);
-        return lower.endsWith(".cbz");
+        return lower.endsWith(".cbz") || lower.endsWith(".cbr") || lower.endsWith(".cb7") || lower.endsWith(".cbt");
     }
 
     private void openArchiveImageSequence(@Nullable ArchiveSupport.EntryInfo selectedEntry, boolean useSavedPosition) {
@@ -763,18 +784,23 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
 
         final List<ArchiveSupport.EntryInfo> sequence = images;
         final int targetIndex = selectedIndex;
+        final boolean finishAfterOpen = useSavedPosition
+                && selectedEntry == null
+                && archiveFile != null
+                && shouldAutoOpenArchiveAsComic();
         if (archivePassword == null || archivePassword.length == 0) {
-            openLazyArchiveImageSequence(selectedEntry, useSavedPosition, sequence, targetIndex);
+            openLazyArchiveImageSequence(selectedEntry, useSavedPosition, sequence, targetIndex, finishAfterOpen);
             return;
         }
-        openFullyExtractedArchiveImageSequence(selectedEntry, useSavedPosition, sequence, targetIndex);
+        openFullyExtractedArchiveImageSequence(selectedEntry, useSavedPosition, sequence, targetIndex, finishAfterOpen);
     }
 
 
     private void openLazyArchiveImageSequence(@Nullable ArchiveSupport.EntryInfo selectedEntry,
                                               boolean useSavedPosition,
                                               @NonNull List<ArchiveSupport.EntryInfo> sequence,
-                                              int targetIndex) {
+                                              int targetIndex,
+                                              boolean finishAfterOpen) {
         executor.execute(() -> {
             ArrayList<String> imagePaths = new ArrayList<>();
             ArrayList<String> displayNames = new ArrayList<>();
@@ -787,32 +813,69 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
             }
 
             boolean selectedReady = false;
+            ArchiveSupport.ExtractionResult selectedResult = null;
             if (targetIndex >= 0 && targetIndex < sequence.size()) {
                 ArchiveSupport.EntryInfo targetEntry = sequence.get(targetIndex);
                 File targetFile = buildPreviewOutputFile(targetEntry);
-                selectedReady = (targetFile.exists() && targetFile.isFile() && targetFile.length() > 0L)
-                        || ArchiveSupport.extractSingleEntry(archiveFile, targetEntry.path, targetFile, null);
+                if (targetFile.exists() && targetFile.isFile() && targetFile.length() > 0L) {
+                    selectedReady = true;
+                    selectedResult = ArchiveSupport.ExtractionResult.success();
+                } else {
+                    selectedResult = ArchiveSupport.extractSingleEntryDetailed(
+                            archiveFile,
+                            targetEntry.path,
+                            targetFile,
+                            null);
+                    selectedReady = selectedResult.success;
+                }
+            }
+
+            int openIndex = targetIndex;
+            if (!selectedReady && selectedResult != null
+                    && selectedResult.failure == ArchiveSupport.ExtractionFailure.UNSUPPORTED_FEATURE) {
+                for (int i = 0; i < sequence.size(); i++) {
+                    if (i == targetIndex) continue;
+                    ArchiveSupport.EntryInfo imageEntry = sequence.get(i);
+                    File outFile = buildPreviewOutputFile(imageEntry);
+                    if (outFile.exists() && outFile.isFile() && outFile.length() > 0L) {
+                        selectedReady = true;
+                        openIndex = i;
+                        break;
+                    }
+                    ArchiveSupport.ExtractionResult fallbackResult = ArchiveSupport.extractSingleEntryDetailed(
+                            archiveFile,
+                            imageEntry.path,
+                            outFile,
+                            null);
+                    if (fallbackResult.success && outFile.exists() && outFile.isFile() && outFile.length() > 0L) {
+                        selectedReady = true;
+                        openIndex = i;
+                        break;
+                    }
+                }
             }
 
             final ArrayList<String> resultPaths = imagePaths;
             final ArrayList<String> resultNames = displayNames;
             final ArrayList<String> resultEntryPaths = entryPaths;
             final boolean currentOk = selectedReady;
+            final ArchiveSupport.ExtractionResult currentResult = selectedResult;
+            final int resultIndex = openIndex;
             mainHandler.post(() -> {
                 if (destroyed) return;
                 hideImagePreviewLoadingWindow();
                 if (!currentOk || resultPaths.isEmpty()) {
-                    if (ArchiveSupport.canUsePassword(archiveFile)) {
+                    if (shouldAskArchivePassword(currentResult)) {
                         showPasswordDialog(passwordText -> {
                             archivePassword = passwordText.toCharArray();
                             openArchiveImageSequence(selectedEntry, useSavedPosition);
                         });
                     } else {
-                        ShortToast.show(this, R.string.archive_entry_open_failed);
+                        showArchiveEntryExtractionFailure(currentResult);
                     }
                     return;
                 }
-                openExtractedImageFiles(resultPaths, resultNames, resultEntryPaths, targetIndex);
+                openExtractedImageFiles(resultPaths, resultNames, resultEntryPaths, resultIndex, finishAfterOpen);
             });
         });
     }
@@ -820,17 +883,31 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
     private void openFullyExtractedArchiveImageSequence(@Nullable ArchiveSupport.EntryInfo selectedEntry,
                                                         boolean useSavedPosition,
                                                         @NonNull List<ArchiveSupport.EntryInfo> sequence,
-                                                        int targetIndex) {
+                                                        int targetIndex,
+                                                        boolean finishAfterOpen) {
         executor.execute(() -> {
             ArrayList<String> imagePaths = new ArrayList<>();
             ArrayList<String> displayNames = new ArrayList<>();
             ArrayList<String> entryPaths = new ArrayList<>();
             int extractedSelectedIndex = 0;
             boolean selectedExtracted = false;
+            ArchiveSupport.ExtractionResult selectedResult = null;
             for (int i = 0; i < sequence.size(); i++) {
                 ArchiveSupport.EntryInfo imageEntry = sequence.get(i);
                 File outFile = buildPreviewOutputFile(imageEntry);
-                boolean ok = (outFile.exists() && outFile.isFile() && outFile.length() > 0L) || ArchiveSupport.extractSingleEntry(archiveFile, imageEntry.path, outFile, archivePassword);
+                boolean ok;
+                ArchiveSupport.ExtractionResult result;
+                if (outFile.exists() && outFile.isFile() && outFile.length() > 0L) {
+                    ok = true;
+                    result = ArchiveSupport.ExtractionResult.success();
+                } else {
+                    result = ArchiveSupport.extractSingleEntryDetailed(
+                            archiveFile,
+                            imageEntry.path,
+                            outFile,
+                            archivePassword);
+                    ok = result.success;
+                }
                 if (ok && outFile.exists()) {
                     if (i == targetIndex) {
                         extractedSelectedIndex = imagePaths.size();
@@ -839,30 +916,50 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
                     imagePaths.add(outFile.getAbsolutePath());
                     displayNames.add(imageEntry.name());
                     entryPaths.add(imageEntry.path);
+                } else if (i == targetIndex) {
+                    selectedResult = result;
                 }
+            }
+            if (!selectedExtracted && !imagePaths.isEmpty() && selectedResult != null
+                    && selectedResult.failure == ArchiveSupport.ExtractionFailure.UNSUPPORTED_FEATURE) {
+                extractedSelectedIndex = 0;
+                selectedExtracted = true;
             }
             final ArrayList<String> resultPaths = imagePaths;
             final ArrayList<String> resultNames = displayNames;
             final ArrayList<String> resultEntryPaths = entryPaths;
             final int resultIndex = extractedSelectedIndex;
             final boolean currentOk = selectedExtracted;
+            final ArchiveSupport.ExtractionResult currentResult = selectedResult;
             mainHandler.post(() -> {
                 if (destroyed) return;
                 hideImagePreviewLoadingWindow();
                 if (!currentOk || resultPaths.isEmpty()) {
-                    if (ArchiveSupport.canUsePassword(archiveFile)) {
+                    if (shouldAskArchivePassword(currentResult)) {
                         showPasswordDialog(passwordText -> {
                             archivePassword = passwordText.toCharArray();
                             openArchiveImageSequence(selectedEntry, useSavedPosition);
                         });
                     } else {
-                        ShortToast.show(this, R.string.archive_entry_open_failed);
+                        showArchiveEntryExtractionFailure(currentResult);
                     }
                     return;
                 }
-                openExtractedImageFiles(resultPaths, resultNames, resultEntryPaths, resultIndex);
+                openExtractedImageFiles(resultPaths, resultNames, resultEntryPaths, resultIndex, finishAfterOpen);
             });
         });
+    }
+
+    private boolean shouldAskArchivePassword(@Nullable ArchiveSupport.ExtractionResult result) {
+        return archiveFile != null
+                && ArchiveSupport.canUsePassword(archiveFile)
+                && result != null
+                && result.failure == ArchiveSupport.ExtractionFailure.PASSWORD_REQUIRED
+                && (archivePassword == null || archivePassword.length == 0);
+    }
+
+    private void showArchiveEntryExtractionFailure(@Nullable ArchiveSupport.ExtractionResult result) {
+        ShortToast.show(this, ArchiveFailureMessages.entryFailureMessageRes(archiveFile, result));
     }
 
     @NonNull
@@ -890,7 +987,8 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
     private void openExtractedImageFiles(@NonNull ArrayList<String> imagePaths,
                                          @NonNull ArrayList<String> displayNames,
                                          @NonNull ArrayList<String> entryPaths,
-                                         int selectedIndex) {
+                                         int selectedIndex,
+                                         boolean finishAfterOpen) {
         if (imagePaths.isEmpty()) return;
         saveHostArchiveRecentState();
         int safeIndex = Math.max(0, Math.min(selectedIndex, imagePaths.size() - 1));
@@ -906,6 +1004,7 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
         intent.putExtra(ImageReaderActivity.EXTRA_ALLOW_FILE_OPS, false);
         startActivity(intent);
         overridePendingTransition(0, 0);
+        if (finishAfterOpen) finish();
     }
 
     private void openExtractedFile(@NonNull File file) {

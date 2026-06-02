@@ -12,6 +12,8 @@ import androidx.core.graphics.drawable.DrawableCompat;
 
 import com.textview.reader.adapter.FileAdapter;
 import com.textview.reader.util.FileClipboardController;
+import com.textview.reader.util.FileOperationProgress;
+import com.textview.reader.util.FileSystemOps;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -206,21 +208,47 @@ final class MainSelectionModeController {
     private void deleteSelectedFiles(@NonNull ArrayList<File> selected) {
         if (selected.isEmpty()) return;
         ArrayList<String> deletedPaths = new ArrayList<>();
+        FileOperationProgress progress = activity.showFileOperationProgress(
+                activity.getString(R.string.file_deleting),
+                activity.getString(R.string.file_selection_count, selected.size()));
+        if (activity.currentDirectory != null) {
+            progress.setFolder(activity.currentDirectory.getName().length() > 0
+                    ? activity.currentDirectory.getName()
+                    : activity.currentDirectory.getAbsolutePath());
+        }
         activity.executeFolderBackgroundTask(() -> {
+            long totalBytes = 0L;
+            for (File file : selected) {
+                if (file == null) continue;
+                totalBytes += FileSystemOps.measureBytes(file);
+                if (totalBytes < 0L) {
+                    totalBytes = Long.MAX_VALUE;
+                    break;
+                }
+            }
+            progress.setTotalBytes(totalBytes);
             int deletedCount = 0;
             for (File file : selected) {
                 if (file == null || !file.exists()) continue;
                 String path = file.getAbsolutePath();
                 boolean wasDirectory = file.isDirectory();
-                if (activity.deleteRecursive(file)) {
+                if (FileSystemOps.delete(file, progress, false)) {
                     deletedCount++;
                     deletedPaths.add(path);
                     if (activity.bookmarkManager != null) activity.bookmarkManager.deleteReadingState(path);
                     activity.cleanupNavigationStateAfterDelete(path, wasDirectory);
                 }
+                if (progress.isCancelled()) break;
             }
             final int finalDeletedCount = deletedCount;
             activity.fileSearchHandler.post(() -> {
+                activity.finishFileOperationProgress(progress);
+                if (progress.isCancelled()) {
+                    exitFileSelectionMode(true);
+                    activity.refreshVisibleFileListAfterDelete();
+                    ShortToast.show(activity, R.string.file_operation_cancelled);
+                    return;
+                }
                 exitFileSelectionMode(true);
                 if (activity.currentDirectory != null && activity.currentDirectory.exists() && activity.currentDirectory.isDirectory() && !activity.homeMode) {
                     activity.loadDirectory(activity.currentDirectory);

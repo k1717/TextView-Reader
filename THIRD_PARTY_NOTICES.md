@@ -9,6 +9,30 @@ This file records third-party components that are used by the Android build or b
 
 TXT text-to-speech in 2.2.2 uses Android platform TTS, foreground-service notification, and media-button APIs. The app does not bundle a third-party TTS engine or voice model; user-installed Android TTS voices remain managed by the device TTS engine and system settings.
 
+### RAR / CBR support boundary
+
+The initial RAR/CBR reader parses RAR5 and RAR4/RAR3-style archive metadata in this source tree, decodes RAR4 Unicode filename records, extracts entries stored without compression, assembles stored split payloads, and includes a limited first-party RAR5 encrypted stored-data decrypt attempt. Junrar is additionally bundled as a RAR extraction-only fallback for compressed RAR4/RAR3 entries. Compressed RAR5, solid RAR, compressed split RAR, encrypted headers, compressed encrypted RAR, and encrypted split payloads remain unsupported.
+
+### Junrar
+
+Artifact: `com.github.junrar:junrar:7.6.0`
+
+Use in this project: RAR extraction-only fallback for compressed RAR4/RAR3 entries. This code path is not used for RAR creation, RAR compression, or building a WinRAR-compatible archiver.
+
+License: UnRAR License. The UnRAR license permits use and distribution for processing RAR archives, but prohibits using the source to develop a RAR-compatible compression/archiving product.
+
+### First-party ALZ / EGG support boundary
+
+ALZ/EGG archive names are recognized by the app's archive type system. This package does not bundle ALZip, the UnEGG binary module, or any other third-party ALZ/EGG decoder; the readers are first-party code.
+
+The ALZ path parses local headers and extracts Store, Deflate, and BZip2 entries (BZip2 via Apache Commons Compress), including ZipCrypto for the covered encrypted cases, with CRC verification.
+
+The EGG decoder (`EggArchiveReader`) was implemented from ESTsoft's publicly published EGG file-format specification (`EGG_Specification.pdf`) and the official unEGG v0.5 reference sources, which ESTsoft released for reading/extracting EGG archives. Only the container layout, magic numbers, and standard compression methods (Store/Deflate/BZip2/LZMA) are reimplemented in first-party Java; no ESTsoft source code is copied or bundled. ESTsoft's proprietary AZO compression algorithm is not reimplemented and is reported as unsupported, as are encrypted, split, and solid EGG archives. The decoder is read/extraction-only and is not used to create EGG archives. Every extracted block's CRC32 is verified, and entry paths are sanitized against directory traversal.
+
+### First-party lightweight ZIP / CBZ path
+
+Plain non-encrypted ZIP/CBZ archives can be listed and extracted by the experimental source code path in this project using Android/JDK ZIP primitives. Production ZIP/CBZ routing remains on Zip4j until the first-party path consistently outperforms it. Encrypted ZIP and standard split ZIP remain routed through Zip4j for compatibility.
+
 ### AndroidX libraries
 
 Used artifacts:

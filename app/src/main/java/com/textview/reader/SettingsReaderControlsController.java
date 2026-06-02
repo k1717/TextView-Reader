@@ -32,6 +32,7 @@ final class SettingsReaderControlsController {
         setupLineSpacing();
         setupTextZoneTuning();
         setupLargeTextPartitionMode();
+        setupArchiveOpenMode();
         setupEpubBoundary();
         setupEpubPageBehavior();
         setupSwitches();
@@ -148,6 +149,29 @@ final class SettingsReaderControlsController {
                 prefs.setLargeTextPartitionMode(position == PrefsManager.LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
                         ? PrefsManager.LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
                         : PrefsManager.LARGE_TEXT_PARTITION_MODE_STANDARD);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+    }
+
+    private void setupArchiveOpenMode() {
+        Spinner modeSpinner = activity.findViewById(R.id.spinner_archive_open_mode);
+        if (modeSpinner == null) return;
+
+        String[] choices = {
+                activity.getString(R.string.archive_open_mode_normal),
+                activity.getString(R.string.archive_open_mode_comic)
+        };
+        modeSpinner.setAdapter(makeSettingsSpinnerAdapter(choices));
+        modeSpinner.setSelection(prefs.getArchiveOpenMode() == PrefsManager.ARCHIVE_OPEN_MODE_COMIC
+                ? PrefsManager.ARCHIVE_OPEN_MODE_COMIC
+                : PrefsManager.ARCHIVE_OPEN_MODE_NORMAL);
+        modeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                styleSpinnerText(view);
+                prefs.setArchiveOpenMode(position == PrefsManager.ARCHIVE_OPEN_MODE_COMIC
+                        ? PrefsManager.ARCHIVE_OPEN_MODE_COMIC
+                        : PrefsManager.ARCHIVE_OPEN_MODE_NORMAL);
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });

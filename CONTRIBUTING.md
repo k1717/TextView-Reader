@@ -48,3 +48,7 @@ When behavior changes, update the relevant docs:
 - `PATCHNOTES.md` for patch-level summaries intended for GitHub releases.
 - `PRIVACY.md` for data, permissions, TXT display-rule storage, or file-writing behavior.
 - `GITHUB_UPLOAD_NOTES.md` for packaging/upload workflow changes.
+
+## Drawer gesture changes
+
+The main drawer intentionally supports broad right-swipe opening from the main browser area. When changing `MainDrawerGestureController`, keep open and close tracking separate: right swipes should open, real outside left swipes should close only when the drawer is open or partially open, outside taps alone should not close the drawer, and manual drags should settle fully open or closed.

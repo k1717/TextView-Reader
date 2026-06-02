@@ -143,6 +143,10 @@ public final class FileClipboardController {
         }
     }
 
+    public void clearAfterSuccess(@NonNull PendingItem item) {
+        cancel(item.id);
+    }
+
     public boolean hasPending() {
         return !pendingItems.isEmpty();
     }
@@ -179,6 +183,18 @@ public final class FileClipboardController {
         if (item != null) item.inProgress = inProgress;
     }
 
+    public void setItemsInProgress(@NonNull List<PendingItem> items, boolean inProgress) {
+        for (PendingItem target : items) {
+            if (target == null) continue;
+            for (PendingItem item : pendingItems) {
+                if (item.id == target.id) {
+                    item.inProgress = inProgress;
+                    break;
+                }
+            }
+        }
+    }
+
     @Nullable
     public File getSource() {
         PendingItem item = getActiveItem();
@@ -198,6 +214,11 @@ public final class FileClipboardController {
     @NonNull
     public PastePlan preparePaste(@Nullable File destinationDir) {
         PendingItem item = getActiveItem();
+        return preparePaste(item, destinationDir);
+    }
+
+    @NonNull
+    public PastePlan preparePaste(@Nullable PendingItem item, @Nullable File destinationDir) {
         if (item == null) {
             return new PastePlan(PasteStatus.NO_SOURCE, null, destinationDir, null);
         }
@@ -227,11 +248,25 @@ public final class FileClipboardController {
     }
 
     public boolean performOperation(@NonNull File destination, boolean overwrite) {
+        return performOperation(destination, overwrite, null);
+    }
+
+    public boolean performOperation(@NonNull File destination,
+                                    boolean overwrite,
+                                    @Nullable FileOperationProgress progress) {
         PendingItem item = getActiveItem();
+        return performOperation(item, destination, overwrite, progress, true);
+    }
+
+    public boolean performOperation(@Nullable PendingItem item,
+                                    @NonNull File destination,
+                                    boolean overwrite,
+                                    @Nullable FileOperationProgress progress,
+                                    boolean assignTotalBytes) {
         if (item == null || !isValidSource(item.source)) return false;
         return item.copy
-                ? FileSystemOps.copy(item.source, destination, overwrite)
-                : FileSystemOps.move(item.source, destination, overwrite);
+                ? FileSystemOps.copy(item.source, destination, overwrite, progress, assignTotalBytes)
+                : FileSystemOps.move(item.source, destination, overwrite, progress, assignTotalBytes);
     }
 
     @Nullable

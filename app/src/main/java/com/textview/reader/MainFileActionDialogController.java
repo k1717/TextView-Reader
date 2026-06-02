@@ -21,6 +21,8 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 
 import com.textview.reader.util.FileClipboardController;
+import com.textview.reader.util.FileOperationProgress;
+import com.textview.reader.util.FileSystemOps;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -72,6 +74,10 @@ final class MainFileActionDialogController {
                 }));
             }
             if (activity.isSupportedArchive(file)) {
+                actions.add(new MainVerticalActionSheet.Action(activity.getString(R.string.archive_folder_preview), colors.fg, () -> {
+                    sheet.dismiss(ref);
+                    activity.openArchiveFolderPreview(file);
+                }));
                 actions.add(new MainVerticalActionSheet.Action(activity.getString(R.string.extract_archive), colors.fg, () -> {
                     sheet.dismiss(ref);
                     activity.startArchiveExtraction(file);
@@ -102,6 +108,12 @@ final class MainFileActionDialogController {
             sheet.dismiss(ref);
             activity.showRenameDialog(file);
         }));
+        if (!isBuiltInFolder) {
+            actions.add(new MainVerticalActionSheet.Action(activity.getString(R.string.archive_create), colors.fg, () -> {
+                sheet.dismiss(ref);
+                activity.startArchiveCreation(file);
+            }));
+        }
         if (!isBuiltInFolder) {
             actions.add(new MainVerticalActionSheet.Action(activity.getString(R.string.cut), colors.fg, () -> {
                 sheet.dismiss(ref);
@@ -334,17 +346,34 @@ final class MainFileActionDialogController {
         delete.setOnClickListener(v -> {
             String deletedPath = file.getAbsolutePath();
             boolean deletedDirectory = file.isDirectory();
-            if (activity.deleteRecursive(file)) {
-                dialog.dismiss();
-                if (activity.bookmarkManager != null) {
-                    activity.bookmarkManager.deleteReadingState(deletedPath);
-                }
-                activity.cleanupNavigationStateAfterDelete(deletedPath, deletedDirectory);
-                activity.refreshVisibleFileListAfterDelete();
-                ShortToast.show(activity, activity.getString(R.string.deleted));
-            } else {
-                ShortToast.show(activity, activity.getString(R.string.delete_failed));
-            }
+            dialog.dismiss();
+            FileOperationProgress progress = activity.showFileOperationProgress(
+                    activity.getString(R.string.file_deleting),
+                    file.getName());
+            File parent = file.getParentFile();
+            if (parent != null) progress.setFolder(parent.getName().length() > 0 ? parent.getName() : parent.getAbsolutePath());
+            activity.executeFolderBackgroundTask(() -> {
+                boolean deleted = FileSystemOps.delete(file, progress);
+                activity.fileSearchHandler.post(() -> {
+                    activity.finishFileOperationProgress(progress);
+                    if (activity.activityDestroyed) return;
+                    if (progress.isCancelled()) {
+                        activity.refreshVisibleFileListAfterDelete();
+                        ShortToast.show(activity, R.string.file_operation_cancelled);
+                        return;
+                    }
+                    if (deleted) {
+                        if (activity.bookmarkManager != null) {
+                            activity.bookmarkManager.deleteReadingState(deletedPath);
+                        }
+                        activity.cleanupNavigationStateAfterDelete(deletedPath, deletedDirectory);
+                        activity.refreshVisibleFileListAfterDelete();
+                        ShortToast.show(activity, activity.getString(R.string.deleted));
+                    } else {
+                        ShortToast.show(activity, activity.getString(R.string.delete_failed));
+                    }
+                });
+            });
         });
         dialog.show();
     }

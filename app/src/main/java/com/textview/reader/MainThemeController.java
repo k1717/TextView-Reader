@@ -212,6 +212,14 @@ final class MainThemeController {
     }
 
     private void tintMainToolbarIcons(@NonNull Toolbar toolbar, int color) {
+        if (activity.mainOperationProgressButton != null) {
+            Drawable progress = ContextCompat.getDrawable(activity, R.drawable.ic_operation_progress);
+            if (progress != null) {
+                Drawable wrappedProgress = DrawableCompat.wrap(progress.mutate());
+                DrawableCompat.setTint(wrappedProgress, color);
+                activity.mainOperationProgressButton.setImageDrawable(wrappedProgress);
+            }
+        }
         if (activity.mainPendingActionButton != null) {
             Drawable pending = ContextCompat.getDrawable(activity, R.drawable.ic_pending_actions);
             if (pending != null) {

@@ -57,6 +57,8 @@ public class PrefsManager {
     public static final int LARGE_TEXT_PARTITION_BUFFER_LINES_STANDARD = 400;
     public static final int LARGE_TEXT_PARTITION_LINES_HIGH_BUFFER = 12000;
     public static final int LARGE_TEXT_PARTITION_BUFFER_LINES_HIGH_BUFFER = 600;
+    public static final int ARCHIVE_OPEN_MODE_NORMAL = 0;
+    public static final int ARCHIVE_OPEN_MODE_COMIC = 1;
 
     private final SharedPreferences prefs;
     private static PrefsManager instance;
@@ -215,6 +217,7 @@ public class PrefsManager {
                 "paging_overlap_lines",
                 "active_theme_id",
                 "large_text_partition_mode",
+                "archive_open_mode",
                 "main_custom_bg",
                 "main_custom_panel",
                 "main_custom_bar",
@@ -710,6 +713,20 @@ public class PrefsManager {
         return mode == LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
                 ? LARGE_TEXT_PARTITION_MODE_HIGH_BUFFER
                 : LARGE_TEXT_PARTITION_MODE_STANDARD;
+    }
+
+    public int getArchiveOpenMode() {
+        int mode = prefs.getInt("archive_open_mode", ARCHIVE_OPEN_MODE_NORMAL);
+        return mode == ARCHIVE_OPEN_MODE_COMIC ? ARCHIVE_OPEN_MODE_COMIC : ARCHIVE_OPEN_MODE_NORMAL;
+    }
+
+    public void setArchiveOpenMode(int mode) {
+        prefs.edit().putInt("archive_open_mode",
+                mode == ARCHIVE_OPEN_MODE_COMIC ? ARCHIVE_OPEN_MODE_COMIC : ARCHIVE_OPEN_MODE_NORMAL).apply();
+    }
+
+    public boolean shouldOpenGenericArchivesAsComics() {
+        return getArchiveOpenMode() == ARCHIVE_OPEN_MODE_COMIC;
     }
 
     public String getLastDirectory() { return prefs.getString("last_directory", null); }

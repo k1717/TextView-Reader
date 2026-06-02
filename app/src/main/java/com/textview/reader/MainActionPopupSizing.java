@@ -13,7 +13,7 @@ import androidx.annotation.NonNull;
  */
 final class MainActionPopupSizing {
     private static final float LONG_HOLD_WIDTH_RATIO = 0.85f;
-    private static final int SELECTION_DROPDOWN_DP = 150;
+    private static final int SELECTION_DROPDOWN_DP = 168;
 
     private MainActionPopupSizing() {}
 
@@ -28,7 +28,7 @@ final class MainActionPopupSizing {
     static int selectionDropdownWidth(@NonNull MainActivity activity) {
         DisplayMetrics dm = activity.getResources().getDisplayMetrics();
         int fixedWidth = activity.dpToPx(SELECTION_DROPDOWN_DP);
-        int maxByScreen = Math.round(dm.widthPixels * 0.70f);
+        int maxByScreen = Math.round(dm.widthPixels * 0.76f);
         return Math.min(fixedWidth, maxByScreen);
     }
 }

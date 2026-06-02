@@ -2,8 +2,41 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, Word, image, and archive workflows. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow.
 
-Current version: **2.2.2**
+Current version: **2.2.3**
 
+
+## 2.2.3 release summary
+
+- Updated Android version metadata to `versionCode 2230` and `versionName "2.2.3"`.
+- Added the first pass of a RAR/CBR engine. `.rar` and `.cbr` files are recognized as archives, RAR5 and RAR4/RAR3-style headers can be listed directly, RAR4 Unicode filenames are decoded, and entries stored without compression can be extracted.
+- Added Junrar as a RAR extraction-only fallback for compressed RAR4/RAR3 entries. RAR creation is not supported, and the Junrar/UnRAR code path must not be used for RAR compression.
+- Compressed RAR5, solid RAR, compressed split RAR, encrypted headers, and compressed encrypted RAR remain blocked as unsupported.
+- Added ALZ/EGG archive support. ALZ extracts Store/Deflate/BZip2; EGG is parsed and extracted from a first-party decoder (Store/Deflate/BZip2/LZMA). Proprietary or encrypted/split/solid variants fail cleanly instead of writing partial output, and every block CRC is verified.
+- RAR password and split-volume handling is safer: encrypted headers enter the password flow, visible encrypted entries can still be listed, `.partN.rar` / `.rNN` names resolve through the first volume for listing, and split/encrypted payload extraction remains blocked until verified first-party decoding exists.
+- Added a limited first-party RAR5 encrypted stored-data decrypt attempt for method-0 entries. Compressed encrypted RAR, encrypted headers, RAR4 encryption, and split payloads remain blocked unless future verified decoder work covers them.
+- Stored split RAR payloads can now be assembled across `.partN.rar` / `.rNN` volumes when the entry itself is not compressed, solid, or encrypted.
+- Repaired the main drawer gesture split so right swipes can still open the drawer from the main screen, while a real left swipe from the outside area closes an already open or partially open drawer without turning a light tap into a close action.
+- Changed the drawer bottom **Open File / Bookmarks / Settings** actions so the requested action runs immediately and the drawer closes in the background instead of delaying the action until after the close animation.
+- CB7 and CBT are recognized as 7z/TAR-backed comic archives, and CBZ/CBR/CB7/CBT saved-position auto-open now returns to the caller instead of leaving the archive browser underneath the image reader.
+- Added an experimental first-party lightweight ZIP/CBZ path for plain non-encrypted stored/deflated entries, including multi-worker full extraction. The current benchmark fixture favored Zip4j, so production ZIP/CBZ routing remains on Zip4j while the experimental engine stays available for comparison.
+- Copy, move, delete, and common archive-extraction actions now open a centered file-manager style progress window with pause/resume, cancel, and background controls, backed by a cooperative progress token shared by file-operation code.
+- Pending cut/copy queues can be run in bulk with Paste all here, using safe copy-name targets for conflicts during batch execution.
+- Backgrounded file operations can be reopened from a toolbar progress button, paused operations stay paused while backgrounded, and file operations run on a dedicated executor so folder reloads do not interrupt them.
+- Settings now include an Archive open mode. Normal mode opens archive contents first, while Comic mode opens image-based generic archives directly like CBZ/CBR and restores the last viewed archive image when possible.
+- Archive long-press and one-file multi-select actions include Archive preview, which forces the internal archive folder list even when Comic mode is enabled.
+- Bundled RAR third-party code is extraction-only. RAR compression/creation is intentionally not implemented.
+
+### Archive support status in 2.2.3
+
+| Format family | Current support | Known limits |
+| --- | --- | --- |
+| ZIP / ZIPX / CBZ | Production path through Zip4j for ZIP/CBZ listing, extraction, encrypted ZIP, and standard split ZIP. ZIPX names are recognized and AES/password detection has a raw-header fallback when Zip4j cannot parse the compression method. Experimental first-party stored/deflate ZIP path remains benchmarked but not the production default. | ZIPX entries using unsupported compression methods such as ZIP method 95/XZ can be listed but not extracted yet. ZIP creation is plain ZIP only; encrypted ZIP creation is not implemented. |
+| 7z / CB7 | Listing and extraction through Apache Commons Compress, with password forwarding. | Unsupported 7z methods depend on Commons Compress coverage. |
+| TAR / CBT and TAR.GZ / TAR.BZ2 / TAR.XZ / TAR.LZMA / TAR.Z | Listing, single-entry extraction, and full extraction are covered by tests. | These formats do not have an internal password layer; `.tar.*.gpg` would require a separate OpenPGP decrypt step. |
+| GZ / BZ2 / XZ / LZMA / Z | Single-file decompression paths are covered by tests. | These are compressor streams, not multi-file archives. |
+| RAR / CBR | First-party metadata listing, safe paths, RAR4 Unicode names, stored method-0 extraction, limited RAR5 encrypted stored-data decrypt, stored split-payload assembly, and Junrar fallback extraction for compressed RAR4/RAR3 entries. | RAR creation is not supported. Compressed RAR5, solid RAR, compressed split RAR, encrypted headers, compressed encrypted data, and encrypted split payloads remain unsupported. |
+| ALZ | First-party local-header parsing with Store/Deflate/BZip2 extraction, including ZipCrypto for the covered cases. CRC-verified. | Unusual descriptors, broader split handling, and unverified legacy variants remain unsupported. |
+| EGG | First-party container parser (header/FILE/FILENAME/BLOCK) with Store/Deflate/BZip2/LZMA extraction, per-block CRC32 verification, and path-traversal-safe names. Built from the published EGG spec and official unEGG reference sources. | ESTsoft proprietary AZO compression, and encrypted/split/solid EGG archives, are unsupported. |
 
 ## 2.2.2 release summary
 
@@ -36,11 +69,12 @@ Current version: **2.2.2**
 - Settings now include Button / icon order controls for the main filter strip plus TXT, EPUB/Word, and PDF viewer toolbars. TXT default-visible toolbar slots are highlighted in the order editor, and the order rows use compact one-line cards.
 - The TXT search dialog uses plain text-style action buttons instead of heavier card buttons, recent-file mode hides the IMG filter chip, current-folder sorting reorders the already loaded list without rescanning the folder, and recent/main fast-scroll track styling avoids the double dragbar look.
 - `MainActivity` is now roughly 1,815 lines after the 2.2.2 cleanup pass, with search walking and folder loading moved to `MainFileSearchRoots`, `MainFileSearchWalker`, and `MainFolderLoadController`.
+- Built on the 2.2.1 GitHub-ready source with archive browsing/extraction, image-sequence viewing, large-TXT continuity hardening, bookmark page-model cleanup, controller-based refactoring, and expanded regression coverage.
 
 ## 2.2.1 release summary
 
 - Updated Android version metadata to `versionCode 2210` and `versionName "2.2.1"`.
-- Added archive browsing and extraction for ZIP/CBZ, encrypted ZIP/7z prompts, standard split ZIP handling, numeric `.001` split handling for supported archive families, TAR-family formats, and single-file compressor streams (`.gz`, `.bz2`, `.xz`, `.lzma`, `.Z`). RAR/CBR and lzip `.lz` remain unsupported.
+- Added archive browsing and extraction for ZIP/CBZ, encrypted ZIP/7z prompts, standard split ZIP handling, numeric `.001` split handling for supported archive families, TAR-family formats, and single-file compressor streams (`.gz`, `.bz2`, `.xz`, `.lzma`, `.Z`). RAR/CBR compression remained unsupported in 2.2.1.
 - Added image-sequence viewing for archive/comic workflows, including recursive image order inside ZIP/CBZ-style archives, remembered CBZ reopen position, smoother zoomed-image pan/fling, and stable image-info dialog styling.
 - Reworked the main quick-search type chips with five visible compact slots, Archive and Image filters, drawer-gesture blocking across the filter strip, and release-only snap behavior.
 - Added main-screen long-press actions for containing-folder jump, cut/copy queueing, archive extraction queueing, conflict handling, and same-folder overwrite/create-copy decisions.
@@ -272,6 +306,8 @@ Current version: **2.2.2**
 - **Sort button** opens sort options for recent files and folder browsing.
 - **← Parent folder** / **← 상위 폴더로** appears on the right side of the path bar while browsing folders.
 - **Left drawer** contains fixed storage shortcuts, user-added folder shortcuts, recent folders, and bottom actions.
+- Swipe right from the main browser area to open the drawer. When the drawer is open or partially open, swipe left from the outside area to close it. A simple outside tap is not treated as a close swipe.
+- The drawer bottom actions (**Open File**, **Bookmarks**, **Settings**) execute immediately; the drawer then closes behind the transition.
 - **Long-press a folder** in the file browser to add or remove it as a drawer shortcut.
 - **Long-press a user-added shortcut** in the drawer to remove it.
 

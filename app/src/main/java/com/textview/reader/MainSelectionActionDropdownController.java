@@ -92,6 +92,13 @@ final class MainSelectionActionDropdownController {
         ArrayList<Action> actions = new ArrayList<>();
         File single = activity.getSingleSelectedFile();
         if (single != null) {
+            if (single.isFile() && activity.isSupportedArchive(single)) {
+                actions.add(new Action(activity.getString(R.string.archive_folder_preview), fg, () -> {
+                    dismiss(popupRef);
+                    activity.exitFileSelectionMode(true);
+                    activity.openArchiveFolderPreview(single);
+                }));
+            }
             actions.add(new Action(activity.getString(single.isDirectory() ? R.string.folder_info : R.string.file_info), fg, () -> {
                 dismiss(popupRef);
                 activity.showFileInfo(single);
@@ -118,6 +125,10 @@ final class MainSelectionActionDropdownController {
                 activity.startSelectedArchiveExtraction();
             }));
         }
+        actions.add(new Action(activity.getString(R.string.archive_create), fg, () -> {
+            dismiss(popupRef);
+            activity.startSelectedArchiveCreation();
+        }));
         actions.add(new Action(activity.getString(R.string.cut), fg, () -> {
             dismiss(popupRef);
             activity.startSelectedClipboardOperation(false);

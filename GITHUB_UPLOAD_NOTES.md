@@ -1,12 +1,32 @@
-# TextView Reader 2.2.2 GitHub Upload Notes
+# TextView Reader 2.2.3 GitHub Upload Notes
 
-Use this package as the GitHub submission source for **TextView Reader 2.2.2**.
+Use this package as the GitHub submission source for **TextView Reader 2.2.3**.
 
 This source package uses Android metadata:
 
-- `versionCode 2220`
-- `versionName "2.2.2"`
+- `versionCode 2230`
+- `versionName "2.2.3"`
 - package ID `com.textview.reader`
+
+## 2.2.3 release summary
+
+- Android metadata is `versionCode 2230` and `versionName "2.2.3"`.
+- A RAR/CBR engine foundation is included. `.rar` and `.cbr` are recognized, RAR5 and RAR4/RAR3-style headers can be listed, RAR4 Unicode filenames are decoded, and method-0 stored entries can be extracted.
+- Junrar is bundled only as a RAR extraction fallback for compressed RAR4/RAR3 entries. RAR creation/compression is intentionally not implemented.
+- Compressed RAR5, solid RAR, compressed split RAR, encrypted-header RAR, compressed encrypted RAR, and encrypted split RAR extraction remain unsupported so partial or corrupted output is not written. Encrypted-header RARs request a password, `.partN.rar` / `.rNN` volume names are recognized for safer first-volume listing, stored split method-0 payloads can be assembled, and RAR5 encrypted stored method-0 entries have a limited decrypt attempt with CRC validation.
+- ALZ/EGG archive support is included. ALZ extracts Store/Deflate/BZip2 with CRC verification, and EGG extracts Store/Deflate/BZip2/LZMA through `EggArchiveReader`; AZO, encrypted, split, solid, and unverified legacy variants fail cleanly.
+- Drawer gesture handling has been repaired: main-screen right swipes open the drawer, real outside left swipes close it, light outside taps no longer close it by accident, and manual drags settle instead of sticking half-open.
+- Drawer bottom **Open File / Bookmarks / Settings** actions execute immediately and close the drawer in the background.
+- CB7 and CBT are recognized as 7z/TAR-backed comic archives, and CBZ/CBR/CB7/CBT saved-position auto-open no longer leaves the archive browser underneath the image reader.
+- An experimental first-party lightweight ZIP/CBZ path is included for plain non-encrypted stored/deflated entries, including multi-worker full extraction.
+- The current benchmark fixture favored Zip4j, so production ZIP/CBZ routing remains on Zip4j. Encrypted ZIP and standard split ZIP also remain on Zip4j.
+- Copy, move, delete, and common archive extraction actions now show a centered file-manager style progress window with pause/resume, cancel, and background continuation controls.
+- Pending cut/copy queues support Paste all here for batch execution in the current folder, creating copy-name targets for conflicts instead of overwriting during the batch run.
+- Backgrounded file-operation progress can be reopened from the toolbar, paused background operations stay paused, and file operations are isolated from folder-loading executor restarts.
+- Archive open mode is configurable from Settings: Normal mode opens internal archive folders first, while Comic mode opens image-based generic archives directly and restores the last viewed archive image when possible.
+- Archive preview is available from archive long-press and single-item multi-select actions, forcing the internal archive folder list even when Comic mode auto-open is enabled.
+- Third-party notices include Junrar / UnRAR License terms. The bundled RAR third-party path is extraction-only and must not be used to build RAR-compatible compression.
+- This source is based on the 2.2.2 TTS/image/file-browser cleanup package.
 
 ## 2.2.2 release summary
 
@@ -44,8 +64,8 @@ This source package uses Android metadata:
 
 ## 2.2.1 baseline summary
 
-- Main file operations now include containing-folder jump, cut/copy queueing, archive extraction queueing, conflict handling, pending-action dropdown cleanup, and tablet drawer close fixes.
-- Archive support covers ZIP/CBZ browsing, encrypted ZIP/7z prompts, standard split ZIP, supported numeric `.001` split archive families, TAR-family formats, and single-file compressor streams. RAR/CBR and lzip `.lz` remain unsupported.
+- Main file operations now include containing-folder jump, cut/copy queueing, archive extraction queueing, conflict handling, pending-action dropdown cleanup, progress-window execution controls, and tablet drawer close fixes.
+- Archive support in the 2.2.1 baseline covered ZIP/CBZ browsing, encrypted ZIP/7z prompts, standard split ZIP, supported numeric `.001` split archive families, TAR-family formats, and single-file compressor streams. RAR/CBR and lzip `.lz` remained unsupported in that older baseline; 2.2.3 adds the RAR/CBR, ALZ, and EGG support summarized above.
 - TXT large-file navigation, final page movement, bookmark page metadata, partition switching, and exact page-model logic are split into dedicated controllers and utility tests.
 - Image viewing now supports smoother zoomed pan/fling and archive/comic image sequences.
 - The public source tree has been cleaned for upload: no build outputs, APK/AAB files, keystores, local SDK paths, Android Studio workspace files, or local large-TXT fixtures should be included.
@@ -90,7 +110,7 @@ Highlights:
 ## Suggested commit message
 
 ```text
-Update TextView Reader 2.2.2 source and docs
+Update TextView Reader 2.2.3 source and docs
 ```
 
 ## Safe upload contents
@@ -171,7 +191,7 @@ captures/
 6. Click **Add file > Upload files**.
 7. Drag the selected contents into GitHub.
 8. Wait until GitHub finishes processing the files.
-9. Commit with the suggested message above, or a similarly concise 2.2.2 update message.
+9. Commit with the suggested message above, or a similarly concise 2.2.3 update message.
 
 ## Important limitation
 

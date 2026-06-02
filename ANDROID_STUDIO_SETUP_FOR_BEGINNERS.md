@@ -86,6 +86,13 @@ Copy the exact first red error line and send it back. Common first failures are:
 Do not randomly change files before capturing the first error.
 
 
+## 2.2.3 quick manual QA
+
+- Open and close the left drawer with gestures: right-swipe should open it from the main browser area, and left-swipe from the outside area should close it only when the drawer is open or partially open. A light outside tap should not close it.
+- Tap the drawer bottom **Open File**, **Bookmarks**, and **Settings** actions and confirm each action starts immediately while the drawer closes behind it.
+- Open RAR/CBR, ALZ, EGG, ZIP/CBZ, and ZIPX fixtures that match the documented support matrix and confirm unsupported variants show clear unsupported-feature messages instead of partial output.
+- Run optional external archive fixture tests with `TEXTVIEW_EXTERNAL_ARCHIVE_FIXTURE_DIR` when sample archives are available.
+
 ## 2.2.2 quick manual QA
 
 - Open a large ZIP/CBZ image archive: the selected image should appear before the whole archive is extracted, nearby pages should load lazily/prefetch, and zoom should request higher detail using the 12MP preview / 48MP detail policy.
