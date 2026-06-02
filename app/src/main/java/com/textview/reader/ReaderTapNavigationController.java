@@ -38,7 +38,8 @@ final class ReaderTapNavigationController {
         } else if (action == TapZoneMath.ACTION_NEXT) {
             activity.pageDown();
         } else {
-            activity.toggleToolbar();
+            if (activity.toolbarVisible) activity.toggleToolbar();
+            else activity.showToolbar();
         }
     }
 }

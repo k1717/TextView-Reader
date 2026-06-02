@@ -24,6 +24,10 @@ public final class FileOperationProgress {
         public final boolean cancelled;
         public final boolean indeterminate;
         public final boolean complete;
+        public final int itemIndex;
+        public final int itemTotal;
+        public final int folderIndex;
+        public final int folderTotal;
 
         private Snapshot(@NonNull String title,
                          @NonNull String detail,
@@ -33,7 +37,11 @@ public final class FileOperationProgress {
                          boolean paused,
                          boolean cancelled,
                          boolean indeterminate,
-                         boolean complete) {
+                         boolean complete,
+                         int itemIndex,
+                         int itemTotal,
+                         int folderIndex,
+                         int folderTotal) {
             this.title = title;
             this.detail = detail;
             this.folder = folder;
@@ -43,6 +51,10 @@ public final class FileOperationProgress {
             this.cancelled = cancelled;
             this.indeterminate = indeterminate;
             this.complete = complete;
+            this.itemIndex = itemIndex;
+            this.itemTotal = itemTotal;
+            this.folderIndex = folderIndex;
+            this.folderTotal = folderTotal;
         }
 
         public int percent() {
@@ -65,6 +77,10 @@ public final class FileOperationProgress {
     private boolean cancelled = false;
     private boolean indeterminate = true;
     private boolean complete = false;
+    private int itemIndex = 0;
+    private int itemTotal = 0;
+    private int folderIndex = 0;
+    private int folderTotal = 0;
 
     public FileOperationProgress(@NonNull String title, @Nullable Listener listener) {
         this.title = title;
@@ -82,8 +98,8 @@ public final class FileOperationProgress {
     public void setTotalBytes(long totalBytes) {
         synchronized (lock) {
             this.totalBytes = Math.max(0L, totalBytes);
+            this.doneBytes = 0L;
             this.indeterminate = this.totalBytes <= 0L;
-            if (doneBytes > this.totalBytes && this.totalBytes > 0L) doneBytes = this.totalBytes;
             if (!cancelled) complete = false;
         }
         notifyListener();
@@ -99,6 +115,48 @@ public final class FileOperationProgress {
     public void setFolder(@Nullable String folder) {
         synchronized (lock) {
             this.folder = folder == null ? "" : folder;
+        }
+        notifyListener();
+    }
+
+    public void setItemProgress(int index, int total) {
+        synchronized (lock) {
+            if (total <= 0) {
+                itemIndex = 0;
+                itemTotal = 0;
+            } else {
+                itemTotal = total;
+                itemIndex = Math.max(1, Math.min(index, total));
+            }
+        }
+        notifyListener();
+    }
+
+    public void clearItemProgress() {
+        synchronized (lock) {
+            itemIndex = 0;
+            itemTotal = 0;
+        }
+        notifyListener();
+    }
+
+    public void setFolderProgress(int index, int total) {
+        synchronized (lock) {
+            if (total <= 0) {
+                folderIndex = 0;
+                folderTotal = 0;
+            } else {
+                folderTotal = total;
+                folderIndex = Math.max(1, Math.min(index, total));
+            }
+        }
+        notifyListener();
+    }
+
+    public void clearFolderProgress() {
+        synchronized (lock) {
+            folderIndex = 0;
+            folderTotal = 0;
         }
         notifyListener();
     }
@@ -176,7 +234,7 @@ public final class FileOperationProgress {
     @NonNull
     public Snapshot snapshot() {
         synchronized (lock) {
-            return new Snapshot(title, detail, folder, doneBytes, totalBytes, paused, cancelled, indeterminate, complete);
+            return new Snapshot(title, detail, folder, doneBytes, totalBytes, paused, cancelled, indeterminate, complete, itemIndex, itemTotal, folderIndex, folderTotal);
         }
     }
 

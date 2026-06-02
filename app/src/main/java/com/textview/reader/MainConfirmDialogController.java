@@ -79,7 +79,7 @@ final class MainConfirmDialogController {
         cancelLp.setMargins(0, activity.dpToPx(4), 0, 0);
         box.addView(cancel, cancelLp);
 
-        android.app.Dialog dialog = activity.createStableBottomDialog(box, activity.mainFileTypeAlignedDialogYOffsetPx(), 0.22f);
+        android.app.Dialog dialog = activity.createStableCenterDialog(box, 0, 0.22f);
         ref[0] = dialog;
         cancel.setOnClickListener(v -> dialog.dismiss());
         dialog.show();

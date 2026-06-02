@@ -15,7 +15,6 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 
 import com.textview.reader.controller.ReaderToolbarController;
-import java.util.Locale;
 
 final class ReaderBottomControlsController {
     private static final int TXT_TOOLBAR_POPUP_Y_DP = 74;
@@ -89,7 +88,8 @@ final class ReaderBottomControlsController {
         label.setTextSize(17f);
         label.setTypeface(Typeface.DEFAULT_BOLD);
         label.setTextColor(bubbleFg);
-        label.setText(formatPageMoveLabel(currentPage, totalPages));
+        label.setText(formatPageMoveLabel(currentPage, totalPages,
+                activity.getLineOffsetWithinDisplayedPage(currentPage, totalPages)));
         box.addView(label, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -172,7 +172,8 @@ final class ReaderBottomControlsController {
                 int pages = activity.getDisplayedTotalPageCount();
                 int page = Math.max(1, Math.min(pages, progress + 1));
                 pendingPage[0] = page;
-                label.setText(formatPageMoveLabel(page, pages));
+                label.setText(formatPageMoveLabel(page, pages,
+                        activity.getLineOffsetWithinDisplayedPage(page, pages)));
                 pageInput.setText(String.valueOf(page));
                 pageInput.setSelection(pageInput.getText().length());
             }
@@ -225,8 +226,22 @@ final class ReaderBottomControlsController {
         dialog.show();
     }
 
-    String formatPageMoveLabel(int page, int totalPages) {
-        return String.format(Locale.getDefault(), "Page %d / %d", page, Math.max(1, totalPages));
+    String formatPageMoveLabel(int page, int totalPages, int lineNumber) {
+        return formatPageMoveLabel(page, String.valueOf(Math.max(1, totalPages)), lineNumber);
+    }
+
+    String formatPageMoveLabel(int page, String totalPagesText, int lineNumber) {
+        int safeLine = Math.max(1, lineNumber);
+        String safeTotal = (totalPagesText == null || totalPagesText.trim().isEmpty())
+                ? "1"
+                : totalPagesText;
+        if (safeLine <= 1) {
+            return page + " / " + safeTotal;
+        }
+        return activity.getString(R.string.page_move_label_with_line,
+                page,
+                safeTotal,
+                safeLine);
     }
 
 }

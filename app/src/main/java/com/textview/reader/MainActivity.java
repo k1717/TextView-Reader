@@ -204,7 +204,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     final LinkedHashSet<String> selectedFilePaths = new LinkedHashSet<>();
     File pendingExtractArchive;
     final List<File> pendingExtractArchives = new ArrayList<>();
+    MainPendingArchiveCreation pendingArchiveCreation;
+    final List<MainPendingArchiveCreation> pendingArchiveCreations = new ArrayList<>();
     boolean archiveExtractInProgress = false;
+    boolean archiveCreateInProgress = false;
     private DrawerEntry pendingDrawerNavigationEntry;
     private boolean drawerNavigationPending = false;
     /**
@@ -754,12 +757,16 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         }
         if (mainPendingActionButton != null) {
             boolean hasPendingExtract = !pendingExtractArchives.isEmpty();
-            boolean showPending = inBrowse && (fileClipboardController.hasPending() || hasPendingExtract);
-            boolean enabled = showPending && !fileClipboardController.isInProgress() && !archiveExtractInProgress;
+            boolean hasPendingCreate = !pendingArchiveCreations.isEmpty();
+            boolean showPending = inBrowse && (fileClipboardController.hasPending() || hasPendingExtract || hasPendingCreate);
+            // Keep the pending queue inspectable even while a file/archive operation is
+            // running in the background. The dropdown itself disables execution controls
+            // during active work so a second operation cannot replace the active progress
+            // dialog or mutate a queue being consumed by a worker thread.
             mainPendingActionButton.setContentDescription(getString(R.string.pending_actions));
             mainPendingActionButton.setVisibility(showPending ? View.VISIBLE : View.GONE);
-            mainPendingActionButton.setEnabled(enabled);
-            mainPendingActionButton.setAlpha(enabled ? 1.0f : 0.55f);
+            mainPendingActionButton.setEnabled(showPending);
+            mainPendingActionButton.setAlpha(showPending ? 1.0f : 0.55f);
         }
         if (mainOperationProgressButton != null) {
             boolean showProgress = mainFileOperationProgress().hasBackgroundProgress();
@@ -1655,6 +1662,22 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     void startArchiveCreation(@NonNull File source) {
         mainArchiveCreate().startArchiveCreation(source);
+    }
+
+    boolean setActivePendingArchiveCreation(@Nullable MainPendingArchiveCreation task) {
+        return mainArchiveCreate().setActivePendingArchiveCreation(task);
+    }
+
+    void cancelPendingArchiveCreation(@Nullable MainPendingArchiveCreation task) {
+        mainArchiveCreate().cancelPendingArchiveCreation(task);
+    }
+
+    void confirmPendingArchiveCreation() {
+        mainArchiveCreate().confirmPendingArchiveCreation();
+    }
+
+    void confirmAllPendingArchiveCreations() {
+        mainArchiveCreate().confirmAllPendingArchiveCreations();
     }
 
     boolean setActivePendingArchiveExtraction(@Nullable File archive) {

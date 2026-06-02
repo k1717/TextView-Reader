@@ -47,7 +47,12 @@ public final class FileSystemOps {
 
         long totalBytes = measureBytes(source);
         if (progress != null) {
-            if (assignTotalBytes) progress.setTotalBytes(totalBytes);
+            if (assignTotalBytes) {
+                progress.setTotalBytes(totalBytes);
+                progress.setItemProgress(1, 1);
+                if (source.isDirectory()) progress.setFolderProgress(1, 1);
+                else progress.clearFolderProgress();
+            }
             if (!progress.checkpoint()) return false;
         }
 
@@ -101,6 +106,9 @@ public final class FileSystemOps {
         if (progress != null) {
             if (assignTotalBytes) {
                 progress.setTotalBytes(knownTotalBytes >= 0L ? knownTotalBytes : measureBytes(source));
+                progress.setItemProgress(1, 1);
+                if (source.isDirectory()) progress.setFolderProgress(1, 1);
+                else progress.clearFolderProgress();
             }
             if (!progress.checkpoint()) return false;
         }
@@ -124,26 +132,43 @@ public final class FileSystemOps {
     public static boolean delete(@NonNull File target,
                                  @Nullable FileOperationProgress progress,
                                  boolean assignTotalBytes) {
-        if (progress != null && assignTotalBytes) progress.setTotalBytes(measureBytes(target));
+        if (progress != null && assignTotalBytes) {
+            progress.setTotalBytes(measureBytes(target));
+            progress.setItemProgress(1, 1);
+            if (target.isDirectory()) progress.setFolderProgress(1, 1);
+            else progress.clearFolderProgress();
+        }
         return deleteRecursively(target, progress);
     }
 
     public static boolean deleteAll(@NonNull List<File> targets, @Nullable FileOperationProgress progress) {
         if (progress != null) {
             long totalBytes = 0L;
+            int totalFolders = 0;
             for (File target : targets) {
                 if (target == null) continue;
                 totalBytes += measureBytes(target);
+                if (target.isDirectory()) totalFolders++;
                 if (totalBytes < 0L) {
                     totalBytes = Long.MAX_VALUE;
                     break;
                 }
             }
             progress.setTotalBytes(totalBytes);
+            if (totalFolders <= 0) progress.clearFolderProgress();
         }
         boolean allDeleted = true;
+        int itemIndex = 0;
+        int itemTotal = countExistingTargets(targets);
+        int folderIndex = 0;
+        int totalFolders = progress == null ? 0 : countTopLevelDirectories(targets);
         for (File target : targets) {
-            if (target == null) continue;
+            if (target == null || !target.exists()) continue;
+            if (progress != null) {
+                progress.setItemProgress(++itemIndex, itemTotal);
+                if (target.isDirectory()) progress.setFolderProgress(++folderIndex, totalFolders);
+                else if (totalFolders > 0) progress.clearFolderProgress();
+            }
             if (!deleteRecursively(target, progress)) allDeleted = false;
             if (progress != null && progress.isCancelled()) return false;
         }
@@ -177,6 +202,22 @@ public final class FileSystemOps {
         } catch (SecurityException ignored) {
             return false;
         }
+    }
+
+    private static int countExistingTargets(@NonNull List<File> targets) {
+        int count = 0;
+        for (File target : targets) {
+            if (target != null && target.exists()) count++;
+        }
+        return count;
+    }
+
+    private static int countTopLevelDirectories(@NonNull List<File> targets) {
+        int count = 0;
+        for (File target : targets) {
+            if (target != null && target.isDirectory()) count++;
+        }
+        return count;
     }
 
     public static boolean isSameOrDescendant(@NonNull File ancestor,

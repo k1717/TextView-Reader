@@ -205,6 +205,22 @@ final class MainSelectionModeController {
                 () -> deleteSelectedFiles(selected));
     }
 
+    private int countSelectedFolders(@NonNull ArrayList<File> selected) {
+        int count = 0;
+        for (File file : selected) {
+            if (file != null && file.isDirectory()) count++;
+        }
+        return count;
+    }
+
+    private int countExistingSelectedItems(@NonNull ArrayList<File> selected) {
+        int count = 0;
+        for (File file : selected) {
+            if (file != null && file.exists()) count++;
+        }
+        return count;
+    }
+
     private void deleteSelectedFiles(@NonNull ArrayList<File> selected) {
         if (selected.isEmpty()) return;
         ArrayList<String> deletedPaths = new ArrayList<>();
@@ -228,10 +244,18 @@ final class MainSelectionModeController {
             }
             progress.setTotalBytes(totalBytes);
             int deletedCount = 0;
+            int itemIndex = 0;
+            int itemTotal = countExistingSelectedItems(selected);
+            int folderIndex = 0;
+            int folderTotal = countSelectedFolders(selected);
+            if (folderTotal <= 0) progress.clearFolderProgress();
             for (File file : selected) {
                 if (file == null || !file.exists()) continue;
                 String path = file.getAbsolutePath();
                 boolean wasDirectory = file.isDirectory();
+                progress.setItemProgress(++itemIndex, itemTotal);
+                if (wasDirectory) progress.setFolderProgress(++folderIndex, folderTotal);
+                else if (folderTotal > 0) progress.clearFolderProgress();
                 if (FileSystemOps.delete(file, progress, false)) {
                     deletedCount++;
                     deletedPaths.add(path);

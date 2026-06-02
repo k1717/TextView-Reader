@@ -72,6 +72,7 @@
     <string name="enter_page_number">Enter page number</string>
     <string name="error_prefix">Error: </string>
     <string name="exact_page_number">Exact page number</string>
+    <string name="page_move_label_with_line">%1$d (%3$d) / %2$s</string>
     <string name="large_text_exact_page_index_not_ready_estimated_jump">Exact page index is not ready yet. Moving to an estimated position.</string>
     <string name="large_text_exact_page_index_failed_estimated_jump">Exact page index failed. Moving to an estimated position.</string>
     <string name="example_1000">e.g. 1000</string>
@@ -95,7 +96,7 @@
     <string name="archive_extracted">Extracted</string>
     <string name="archive_extract_failed">Extract failed</string>
     <string name="archive_extract_unsupported_feature">This archive uses a feature that is not supported yet</string>
-    <string name="archive_extract_unsupported_rar">This RAR uses compression, solid mode, or encryption that is not supported yet</string>
+    <string name="archive_extract_unsupported_rar">This RAR uses RAR5 compression or another unsupported RAR feature</string>
     <string name="archive_extract_unsupported_alz">This ALZ variant is not supported yet</string>
     <string name="archive_extract_unsupported_egg">Unsupported EGG archive variant</string>
     <string name="archive_extract_conflict_title">Extraction folder already exists</string>
@@ -121,6 +122,13 @@
     <string name="archive_created">Archive created</string>
     <string name="archive_create_failed">Compression failed</string>
     <string name="archive_create_default_name">Archive</string>
+    <string name="archive_create_queued">Compression task added to pending actions</string>
+    <string name="archive_create_all">Compress all pending</string>
+    <string name="archive_create_all_title">Compress all pending items?</string>
+    <string name="archive_create_all_message">Create %1$d pending ZIP archive(s)?</string>
+    <string name="archive_create_all_done">Created %1$d / %2$d archive(s)</string>
+    <string name="archive_create_all_partial">Created %1$d / %2$d archive(s). Some items failed.</string>
+    <string name="pending_create_action">Compress %1$d item(s): %2$s</string>
     <string name="archive_open_mode">Archive open mode</string>
     <string name="archive_open_mode_normal">Normal mode</string>
     <string name="archive_open_mode_comic">Comic mode</string>
@@ -160,7 +168,9 @@
     <string name="operation_working">Working...</string>
     <string name="operation_paused">Paused</string>
     <string name="operation_progress_open">Open file operation progress</string>
+    <string name="operation_detail_count_format">%1$s (%2$d/%3$d)</string>
     <string name="operation_folder_format">Folder: %1$s</string>
+    <string name="operation_folder_count_format">Folder: %1$s (%2$d/%3$d)</string>
     <string name="operation_folder_unknown">Folder: -</string>
     <string name="operation_percent_format">%1$d%%</string>
     <string name="operation_percent_paused_format">Paused %1$d%%</string>
@@ -628,4 +638,6 @@ Rules: %2$d enabled rules</string>
     <string name="button_order_reset">Order reset</string>
     <string name="reset_to_default">Reset to default</string>
     <string name="viewer_mode">Mode</string>
+    <string name="choose_from_palette">Choose from palette</string>
+    <string name="palette_hue">Hue</string>
 </resources>

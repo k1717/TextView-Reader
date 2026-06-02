@@ -12,6 +12,7 @@ import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry;
 import org.apache.commons.compress.archivers.sevenz.SevenZFile;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.utils.MultiReadOnlySeekableByteChannel;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.apache.commons.compress.compressors.lzma.LZMACompressorInputStream;
@@ -29,6 +30,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -50,6 +52,9 @@ public final class ArchiveSupport {
     private static final Pattern RAR_OLD_STYLE_PART = Pattern.compile("^(.*)\\.r(\\d{2,3})$", Pattern.CASE_INSENSITIVE);
     private static final Pattern EGG_VOLUME_PART = Pattern.compile("^(.*)\\.vol(\\d+)\\.egg$", Pattern.CASE_INSENSITIVE);
     private static final Pattern ALZ_VOLUME_PART = Pattern.compile("^(.*)\\.a(\\d{2,3})$", Pattern.CASE_INSENSITIVE);
+
+    private static final long MAX_EXTRACTION_TOTAL_BYTES = 32L * 1024L * 1024L * 1024L;
+    private static final long MIN_EXTRACTION_FREE_MARGIN_BYTES = 64L * 1024L * 1024L;
 
     public enum Type {
         ZIP,
@@ -143,6 +148,7 @@ public final class ArchiveSupport {
     @Nullable
     public static Type getSupportedArchiveType(@NonNull String fileName) {
         String name = fileName.toLowerCase(Locale.ROOT);
+        if (SevenZSplitVolumeResolver.isSevenZSplitPartName(fileName)) return Type.SEVEN_Z;
         if (isFirstNumericSplitName(name)) {
             Type splitBaseType = getSupportedArchiveType(name.substring(0, name.length() - 4));
             if (splitBaseType != null) return splitBaseType;
@@ -188,7 +194,8 @@ public final class ArchiveSupport {
     public static String getArchiveOutputBaseName(@NonNull File archive, @NonNull String fallback) {
         String name = archive.getName();
         String lower = name.toLowerCase(Locale.ROOT);
-        if (isFirstNumericSplitName(lower)) {
+        if (isFirstNumericSplitName(lower)
+                || SevenZSplitVolumeResolver.isSevenZSplitPartName(name)) {
             name = name.substring(0, name.length() - 4);
             lower = lower.substring(0, lower.length() - 4);
         }
@@ -505,8 +512,20 @@ public final class ArchiveSupport {
             workDir = tempDir;
         }
 
-        if (workDir.exists()) return ExtractionResult.failed(ExtractionFailure.FAILED, null);
         try {
+            long estimatedPayloadBytes = estimateArchivePayloadBytes(archive, password);
+            if (estimatedPayloadBytes > MAX_EXTRACTION_TOTAL_BYTES) {
+                return ExtractionResult.failed(ExtractionFailure.UNSUPPORTED_FEATURE,
+                        "Archive expands beyond the extraction safety limit");
+            }
+            if (estimatedPayloadBytes > 0L) {
+                if (progress != null) progress.setTotalBytes(estimatedPayloadBytes);
+                if (!hasUsableSpaceForExtraction(parent, estimatedPayloadBytes)) {
+                    return ExtractionResult.failed(ExtractionFailure.FAILED, "Not enough free space for extraction");
+                }
+            }
+
+            if (workDir.exists()) return ExtractionResult.failed(ExtractionFailure.FAILED, null);
             if (!workDir.mkdirs()) return ExtractionResult.failed(ExtractionFailure.FAILED, null);
             boolean ok = extractArchiveIntoDirectory(archive, workDir, password, progress);
             if (!ok) {
@@ -514,25 +533,8 @@ public final class ArchiveSupport {
                 return ExtractionResult.failed(ExtractionFailure.FAILED, null);
             }
 
-            if (tempDir != null) {
-                if (!deleteFileSystemItem(destinationDir)) {
-                    deleteFileSystemItem(tempDir);
-                    return ExtractionResult.failed(ExtractionFailure.FAILED, null);
-                }
-                boolean replaced;
-                try {
-                    replaced = tempDir.renameTo(destinationDir);
-                } catch (SecurityException ignored) {
-                    replaced = false;
-                }
-                if (!replaced) {
-                    replaced = copyDirectoryRecursively(tempDir, destinationDir);
-                    deleteFileSystemItem(tempDir);
-                }
-                if (!replaced) {
-                    deleteFileSystemItem(destinationDir);
-                    return ExtractionResult.failed(ExtractionFailure.FAILED, null);
-                }
+            if (tempDir != null && !replaceExistingDirectoryWithTemp(destinationDir, tempDir)) {
+                return ExtractionResult.failed(ExtractionFailure.FAILED, null);
             }
             return ExtractionResult.success();
         } catch (PasswordRequiredException e) {
@@ -671,11 +673,11 @@ public final class ArchiveSupport {
                 case SEVEN_Z:
                     return extractSevenZIntoDirectory(prepared.file, targetDir, password, progress);
                 case RAR:
-                    return extractRarIntoDirectory(prepared.file, targetDir, password);
+                    return extractRarIntoDirectory(prepared.file, targetDir, password, progress);
                 case ALZ:
-                    return AlzipArchiveReader.extractArchiveIntoDirectory(prepared.file, targetDir, password);
+                    return AlzipArchiveReader.extractArchiveIntoDirectory(prepared.file, targetDir, password, progress);
                 case EGG:
-                    return EggArchiveReader.extractArchiveIntoDirectory(prepared.file, targetDir, password);
+                    return EggArchiveReader.extractArchiveIntoDirectory(prepared.file, targetDir, password, progress);
                 case TAR:
                 case TAR_GZ:
                 case TAR_BZ2:
@@ -820,6 +822,9 @@ public final class ArchiveSupport {
         if ((type == Type.ALZ || type == Type.EGG) && isAlzipSplitPart(archive)) {
             File firstPart = resolveFirstAlzipPart(archive, type);
             return new PreparedArchive(firstPart, type, null);
+        }
+        if (type == Type.SEVEN_Z && SevenZSplitVolumeResolver.isSevenZSplitPart(archive)) {
+            return new PreparedArchive(SevenZSplitVolumeResolver.resolveFirstPart(archive), type, null);
         }
         if (!isFirstNumericSplitArchive(archive)) return new PreparedArchive(archive, type, null);
 
@@ -1211,8 +1216,9 @@ public final class ArchiveSupport {
 
     private static boolean extractRarIntoDirectory(@NonNull File archive,
                                                    @NonNull File targetDir,
-                                                   @Nullable char[] password) throws IOException {
-        return RarArchiveReader.extractArchiveIntoDirectory(archive, targetDir, password);
+                                                   @Nullable char[] password,
+                                                   @Nullable FileOperationProgress progress) throws IOException {
+        return RarArchiveReader.extractArchiveIntoDirectory(archive, targetDir, password, progress);
     }
 
     private static boolean extractSingleRarEntry(@NonNull File archive,
@@ -1232,6 +1238,20 @@ public final class ArchiveSupport {
     }
 
     private static SevenZFile openSevenZFile(@NonNull File archive, @Nullable char[] password) throws IOException {
+        SevenZSplitVolumeResolver.VolumeSet splitVolumes = SevenZSplitVolumeResolver.resolve(archive);
+        if (splitVolumes != null) {
+            SeekableByteChannel channel = MultiReadOnlySeekableByteChannel.forFiles(
+                    splitVolumes.parts.toArray(new File[0]));
+            try {
+                if (password != null && password.length > 0) {
+                    return new SevenZFile(channel, password);
+                }
+                return new SevenZFile(channel);
+            } catch (IOException | RuntimeException e) {
+                try { channel.close(); } catch (IOException ignored) {}
+                throw e;
+            }
+        }
         if (password != null && password.length > 0) {
             return new SevenZFile(archive, password);
         }
@@ -1386,6 +1406,82 @@ public final class ArchiveSupport {
             map.put(path, entry);
         }
         return new ArrayList<>(map.values());
+    }
+
+    private static long estimateArchivePayloadBytes(@NonNull File archive,
+                                                    @Nullable char[] password) throws IOException {
+        long total = 0L;
+        boolean unknown = false;
+        List<EntryInfo> entries = listEntries(archive, password);
+        for (EntryInfo entry : entries) {
+            if (entry == null || entry.directory) continue;
+            if (entry.size < 0L) {
+                unknown = true;
+                continue;
+            }
+            total = addMeasuredBytes(total, entry.size);
+            if (total == Long.MAX_VALUE) return total;
+        }
+        return total > 0L ? total : (unknown ? -1L : 0L);
+    }
+
+    private static boolean hasUsableSpaceForExtraction(@NonNull File parentDir, long expectedBytes) {
+        if (expectedBytes <= 0L) return true;
+        long usable;
+        try {
+            usable = parentDir.getUsableSpace();
+        } catch (SecurityException ignored) {
+            return true;
+        }
+        if (usable <= 0L) return true;
+        long required = addMeasuredBytes(expectedBytes, MIN_EXTRACTION_FREE_MARGIN_BYTES);
+        return required != Long.MAX_VALUE && usable >= required;
+    }
+
+    private static boolean replaceExistingDirectoryWithTemp(@NonNull File destinationDir,
+                                                            @NonNull File tempDir) {
+        File parent = destinationDir.getParentFile();
+        if (parent == null || !destinationDir.exists() || !tempDir.exists()) {
+            deleteFileSystemItem(tempDir);
+            return false;
+        }
+        File backupDir = buildTempExtractDirectory(parent, destinationDir.getName() + "_backup");
+        if (backupDir == null) {
+            deleteFileSystemItem(tempDir);
+            return false;
+        }
+        if (!renameFileSystemItem(destinationDir, backupDir)) {
+            deleteFileSystemItem(tempDir);
+            return false;
+        }
+
+        boolean installed = renameFileSystemItem(tempDir, destinationDir);
+        if (!installed) {
+            installed = copyDirectoryRecursively(tempDir, destinationDir);
+            deleteFileSystemItem(tempDir);
+        }
+
+        if (installed) {
+            deleteFileSystemItem(backupDir);
+            return true;
+        }
+
+        deleteFileSystemItem(destinationDir);
+        boolean restored = renameFileSystemItem(backupDir, destinationDir);
+        if (!restored) {
+            restored = copyDirectoryRecursively(backupDir, destinationDir);
+            deleteFileSystemItem(backupDir);
+        }
+        return false;
+    }
+
+    private static boolean renameFileSystemItem(@NonNull File source, @NonNull File destination) {
+        if (!source.exists() || destination.exists()) return false;
+        try {
+            return source.renameTo(destination);
+        } catch (SecurityException ignored) {
+            return false;
+        }
     }
 
     @Nullable

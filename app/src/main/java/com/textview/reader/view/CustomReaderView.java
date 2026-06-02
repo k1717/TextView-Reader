@@ -1087,6 +1087,37 @@ public class CustomReaderView extends View {
         return pageAnchors.get(clampedPage - 1);
     }
 
+    public int getPageStartCharPosition(int page) {
+        if (layout == null || text.isEmpty()) return 0;
+        return getCharPositionForScrollYLineStart(getPageAnchorScrollY(page));
+    }
+
+    public int getCurrentLineOffsetWithinPage() {
+        if (layout == null || text.isEmpty()) return 1;
+        ensurePageAnchors();
+        if (pageAnchors.isEmpty()) return 1;
+
+        int currentPage = getCurrentPageNumber();
+
+        // Use the same visual row anchor that TXT bookmarks use.  The previous
+        // implementation sampled readerScrollY directly; after restoring a
+        // bookmark, the displayed text row could be correct while the status
+        // label was off by one because the visual/title-covered row and the raw
+        // scroll boundary were not always the same StaticLayout line.
+        int pageStartChar = getPageStartCharPosition(currentPage);
+        int currentVisualChar = getCharPositionAtTitleCoveredRow();
+
+        int pageStartLine = getStableLineForCharPosition(pageStartChar);
+        int currentLine = getStableLineForCharPosition(currentVisualChar);
+        return Math.max(1, currentLine - pageStartLine + 1);
+    }
+
+    private int getStableLineForCharPosition(int charPosition) {
+        if (layout == null || layout.getLineCount() <= 0 || text.isEmpty()) return 0;
+        int pos = Math.max(0, Math.min(text.length(), charPosition));
+        return Math.max(0, Math.min(layout.getLineCount() - 1, layout.getLineForOffset(pos)));
+    }
+
     public void scrollToPage(int page) {
         setReaderScrollY(getPageAnchorScrollY(page));
     }

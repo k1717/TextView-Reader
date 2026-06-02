@@ -132,6 +132,25 @@ final class SettingsMainCustomThemeController {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
+        MaterialButton paletteButton = new MaterialButton(activity);
+        paletteButton.setText(R.string.choose_from_palette);
+        paletteButton.setAllCaps(false);
+        paletteButton.setMinHeight(activity.dpToPx(40));
+        paletteButton.setTextColor(activity.prefs != null ? activity.prefs.getMainTextColor(activity) : Color.rgb(32, 33, 36));
+        paletteButton.setStrokeWidth(Math.max(1, activity.dpToPx(1)));
+        paletteButton.setStrokeColor(android.content.res.ColorStateList.valueOf(activity.prefs != null
+                ? activity.prefs.getMainOutlineColor(activity)
+                : Color.rgb(190, 190, 190)));
+        paletteButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activity.prefs != null
+                ? activity.prefs.getMainPanelColor(activity)
+                : Color.WHITE));
+        paletteButton.setCornerRadius(activity.dpToPx(10));
+        LinearLayout.LayoutParams paletteLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        paletteLp.setMargins(0, 0, 0, activity.dpToPx(8));
+        box.addView(paletteButton, paletteLp);
+
         SeekBar red = new SeekBar(activity);
         SeekBar green = new SeekBar(activity);
         SeekBar blue = new SeekBar(activity);
@@ -173,6 +192,20 @@ final class SettingsMainCustomThemeController {
 
         setMainCustomSlidersFromColor(bars, values, initialColor, suppress);
         applyMainCustomHexFieldPreview(field, initialColor);
+
+        paletteButton.setOnClickListener(v -> {
+            Integer parsed = parseHexColor(field.getText() != null ? field.getText().toString() : null);
+            int startColor = parsed != null ? parsed : initialColor;
+            ColorPaletteDialog.show(activity, activity.getString(R.string.choose_from_palette), startColor, color -> {
+                suppress[0] = true;
+                field.setText(colorToHex(color));
+                field.setSelection(field.getText().length());
+                suppress[0] = false;
+                setMainCustomSlidersFromColor(bars, values, color, suppress);
+                applyMainCustomHexFieldPreview(field, color);
+                field.setError(null);
+            });
+        });
 
         field.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence text, int start, int count, int after) {}

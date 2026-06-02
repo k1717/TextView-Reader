@@ -136,7 +136,7 @@ final class MainImageOpenController {
                 return;
             }
             activity.startActivity(intent);
-            activity.overridePendingTransition(0, 0);
+            activity.overridePendingTransition(R.anim.image_viewer_enter, R.anim.image_viewer_hold);
             hideImageOpenLoadingWindow();
             activity.finishIfReturnToViewerMode();
         }, 90L);

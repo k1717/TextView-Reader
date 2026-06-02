@@ -25,6 +25,8 @@ import java.util.zip.CRC32;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
 
+import com.textview.reader.util.FileOperationProgress;
+
 /**
  * Recognition boundary for ESTsoft ALZip-family archives.
  *
@@ -73,13 +75,23 @@ final class AlzipArchiveReader {
     static boolean extractArchiveIntoDirectory(@NonNull File archive,
                                                @NonNull File targetDir,
                                                @Nullable char[] password) throws IOException {
+        return extractArchiveIntoDirectory(archive, targetDir, password, null);
+    }
+
+    static boolean extractArchiveIntoDirectory(@NonNull File archive,
+                                               @NonNull File targetDir,
+                                               @Nullable char[] password,
+                                               @Nullable FileOperationProgress progress) throws IOException {
         if (detectFamily(archive) == Family.EGG) {
             requirePasswordThenFailUnsupported(archive, password);
             throw unsupported(archive);
         }
         List<AlzEntry> entries = readAlzEntries(archive);
+        if (progress != null) progress.setTotalBytes(sumUncompressedBytes(entries));
         boolean sawEntry = false;
         for (AlzEntry entry : entries) {
+            if (progress != null && !progress.checkpoint()) return false;
+            if (progress != null) progress.setDetail(entry.path);
             File out = resolveOutput(targetDir, entry.path);
             if (out == null) return false;
             sawEntry = true;
@@ -87,7 +99,7 @@ final class AlzipArchiveReader {
                 if (!out.exists() && !out.mkdirs()) return false;
                 continue;
             }
-            extractEntryPayload(archive, entry, out, password);
+            extractEntryPayload(archive, entry, out, password, progress);
         }
         return sawEntry;
     }
@@ -105,7 +117,7 @@ final class AlzipArchiveReader {
         List<AlzEntry> entries = readAlzEntries(archive);
         for (AlzEntry entry : entries) {
             if (entry.directory || !normalized.equals(entry.path)) continue;
-            extractEntryPayload(archive, entry, outFile, password);
+            extractEntryPayload(archive, entry, outFile, password, null);
             return true;
         }
         return false;
@@ -204,7 +216,9 @@ final class AlzipArchiveReader {
     private static void extractEntryPayload(@NonNull File archive,
                                             @NonNull AlzEntry entry,
                                             @NonNull File outFile,
-                                            @Nullable char[] password) throws IOException {
+                                            @Nullable char[] password,
+                                            @Nullable FileOperationProgress progress) throws IOException {
+        if (progress != null && !progress.checkpoint()) throw new IOException("ALZ extraction cancelled");
         if (entry.directory) return;
         if (entry.compressedSize > Integer.MAX_VALUE) {
             throw new ArchiveSupport.UnsupportedArchiveFeatureException("ALZ entry is too large for this decoder pass");
@@ -217,6 +231,7 @@ final class AlzipArchiveReader {
             raf.seek(entry.dataOffset);
             raf.readFully(payload);
         }
+        if (progress != null && !progress.checkpoint()) throw new IOException("ALZ extraction cancelled");
         if (entry.encrypted) {
             if (password == null || password.length == 0) throw new ArchiveSupport.PasswordRequiredException();
             if (entry.encryptedHeader == null) throw new IOException("Missing ALZ encryption header");
@@ -226,18 +241,24 @@ final class AlzipArchiveReader {
             }
             crypto.decryptInPlace(payload, 0, payload.length);
         }
-        byte[] plain = decodePayload(entry, payload);
+        byte[] plain = decodePayload(entry, payload, progress);
         verifyCrc(entry, plain);
         try (OutputStream out = new BufferedOutputStream(new FileOutputStream(outFile))) {
+            if (progress != null && !progress.checkpoint()) throw new IOException("ALZ extraction cancelled");
             out.write(plain);
+            if (progress != null && (entry.method == COMP_STORED || entry.method == COMP_BZIP2)) {
+                progress.addDoneBytes(plain.length);
+            }
         }
     }
 
     @NonNull
-    private static byte[] decodePayload(@NonNull AlzEntry entry, @NonNull byte[] payload) throws IOException {
+    private static byte[] decodePayload(@NonNull AlzEntry entry,
+                                        @NonNull byte[] payload,
+                                        @Nullable FileOperationProgress progress) throws IOException {
         if (entry.method == COMP_STORED) return payload;
         if (entry.method == COMP_DEFLATE) {
-            return readAll(new InflaterInputStream(new ByteArrayInputStream(payload), new Inflater(true)));
+            return readAll(new InflaterInputStream(new ByteArrayInputStream(payload), new Inflater(true)), progress);
         }
         if (entry.method == COMP_BZIP2) {
             // ALZ's BZip2 method carries a BZip2 stream. commons-compress (already
@@ -258,7 +279,7 @@ final class AlzipArchiveReader {
                 }
             }
             try {
-                return readAll(new BZip2CompressorInputStream(new ByteArrayInputStream(stream)));
+                return readAll(new BZip2CompressorInputStream(new ByteArrayInputStream(stream)), null);
             } catch (IOException e) {
                 throw new ArchiveSupport.UnsupportedArchiveFeatureException(
                         "ALZ BZip2 stream could not be decoded: " + e.getMessage());
@@ -277,14 +298,34 @@ final class AlzipArchiveReader {
     }
 
     @NonNull
-    private static byte[] readAll(@NonNull InputStream input) throws IOException {
+    private static byte[] readAll(@NonNull InputStream input,
+                                  @Nullable FileOperationProgress progress) throws IOException {
         try (InputStream in = input;
              java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
             byte[] buffer = new byte[BUFFER_SIZE];
             int read;
-            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+            while ((read = in.read(buffer)) != -1) {
+                if (progress != null && !progress.checkpoint()) throw new IOException("ALZ extraction cancelled");
+                out.write(buffer, 0, read);
+                if (progress != null) progress.addDoneBytes(read);
+            }
             return out.toByteArray();
         }
+    }
+
+    private static long sumUncompressedBytes(@NonNull List<AlzEntry> entries) {
+        long total = 0L;
+        boolean unknown = false;
+        for (AlzEntry entry : entries) {
+            if (entry == null || entry.directory) continue;
+            if (entry.uncompressedSize < 0L) {
+                unknown = true;
+                continue;
+            }
+            if (Long.MAX_VALUE - total < entry.uncompressedSize) return Long.MAX_VALUE;
+            total += entry.uncompressedSize;
+        }
+        return total > 0L ? total : (unknown ? -1L : 0L);
     }
 
     @Nullable

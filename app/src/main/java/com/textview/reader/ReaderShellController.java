@@ -22,7 +22,15 @@ final class ReaderShellController {
     }
 
     void toggleToolbar() {
-        activity.toolbarVisible = !activity.toolbarVisible;
+        setToolbarVisible(!activity.toolbarVisible);
+    }
+
+    void showToolbar() {
+        setToolbarVisible(true);
+    }
+
+    private void setToolbarVisible(boolean visible) {
+        activity.toolbarVisible = visible;
         activity.toolbar.setVisibility(View.GONE);
         activity.bottomBar.setVisibility(activity.toolbarVisible ? View.VISIBLE : View.GONE);
         if (activity.toolbarVisible && activity.bottomBar != null) {

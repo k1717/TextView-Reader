@@ -1,5 +1,36 @@
 # Patch Notes
 
+## 2.2.4
+
+### Release scope
+- Android metadata: `versionCode 2240`, `versionName "2.2.4"`.
+- First-party source license: Apache License 2.0 with `Copyright 2026 k1717 aka Delphinium` and root `NOTICE`.
+- Release materials should keep `LICENSE`, `NOTICE`, and `THIRD_PARTY_NOTICES.md` together.
+- SDK metadata remains on `compileSdk 35`, `targetSdk 35`, and `minSdk 24`.
+
+### Final changes included in this upload
+- Compress actions now enter the pending-actions queue instead of running immediately; queued ZIP creation can be executed individually or through **Compress all pending**.
+- Archive support was expanded and stabilized across RAR/CBR, ALZ, EGG, 7z/CB7 split volumes, ZIP/CBZ, TAR-family archives, and single-file compressor streams.
+- RAR4/RAR3 complex extraction attempts Junrar fallback where possible. RAR5 compressed/solid/encrypted extraction remains optional through `app/libs/unrar5j-v1.0.3.jar`; without the jar, unsupported RAR5 cases fail cleanly.
+- EGG AZO extraction is supported through an extraction-only modified Java port of `kippler/xunazo`; encrypted/split/solid EGG remains unsupported.
+- Standard `.7z.001` / `.7z.002` and `.cb7.001` / `.cb7.002` split chains are opened as one ordered seekable channel without creating a temporary combined archive.
+- Archive image-preview caching now avoids stale same-path archive previews and internal entry-name collisions.
+- RAR/ALZ/EGG extraction loops use the shared progress/cancel token where supported, batch password preflight runs off the UI thread, overwrite extraction uses backup/restore, and extraction/cache growth has conservative guards.
+- The pending queue can be opened during background work for inspection, while execution/cancel/clear controls stay locked until the active worker finishes.
+- Confirmation dialogs for extraction, paste/copy/move, and delete now sit closer to screen center.
+- File-operation progress shows active item/file progress and folder counters separately, with byte progress reset for each new payload.
+- Custom main-theme and reading-theme color editors now include a lightweight shader-based color palette picker alongside existing HEX/RGB controls.
+- Image viewer opening from the main list and archive preview uses a short fade/scale transition rather than a hard switch.
+- TXT toolbar restoration explicitly shows a hidden toolbar from the menu zone, and TXT page labels use `current / total` at exact page starts or `current (line-in-page) / total` at mid-page positions.
+- Build/runtime/test modules were refreshed while preserving SDK-35 compatibility.
+
+### Known support boundaries
+- Archive creation is plain ZIP only.
+- ZIPX entries using unsupported methods, such as method-95/XZ, remain unsupported for extraction.
+- RAR5 compressed extraction requires the optional unrar5j jar; RAR5 split/multi-volume remains not guaranteed.
+- Encrypted/split/solid EGG and broad legacy ALZ variants remain unsupported.
+- 7z support depends on Apache Commons Compress method coverage; missing/gapped split-volume chains are rejected.
+
 ## 2.2.3
 
 This 2.2.3 package starts the first-party RAR/CBR engine track on top of the 2.2.2 source, with Android metadata `versionCode 2230` and `versionName "2.2.3"`.
@@ -11,15 +42,15 @@ This 2.2.3 package starts the first-party RAR/CBR engine track on top of the 2.2
 - RAR4/RAR3-style headers are also parsed for entry listing and method-0 stored entry extraction, improving odds with older CBR files.
 - RAR4 Unicode filename records are decoded, so non-ASCII paths can be listed and extracted by their real Unicode names when present.
 - RAR5/RAR4 single-entry extraction is available for the archive-preview/image path when the entry is stored.
-- Added Junrar as an extraction-only fallback for compressed RAR4/RAR3 entries. This is deliberately not connected to RAR creation or compression.
-- Compressed RAR5, solid RAR, compressed split RAR, encrypted headers, compressed encrypted data, and encrypted split payloads intentionally fail as unsupported for now so the app does not emit corrupted files.
-- ALZ/EGG names are now recognized by the archive type system and filters. ALZ extraction covers Store/Deflate/BZip2 with CRC verification, and EGG extraction covers Store/Deflate/BZip2/LZMA through the first-party `EggArchiveReader`; unsupported ALZip-family variants fail explicitly instead of writing partial output.
-- RAR encrypted-header archives now enter the password flow instead of failing as a generic unsupported archive. Visible encrypted file entries can still be listed, while actual RAR data decryption remains blocked after password entry until the first-party decryptor exists.
-- RAR volume filenames (`.partN.rar` and `.rNN`) are recognized. Opening a later volume resolves to the first volume for safer metadata listing; entries with split data flags remain unsupported rather than being concatenated into corrupt output.
-- RAR5 file encryption records are parsed and method-0 encrypted stored payloads now take a limited AES/PBKDF2 decrypt path before CRC validation. This does not cover encrypted headers, compressed encrypted data, RAR4 encryption, or split encrypted payloads.
+- Expanded Junrar as an extraction-only fallback for older RAR4/RAR3 compressed, solid, split/multi-volume, and encrypted cases. Added an optional reflection-based unrar5j bridge for RAR5 compressed/solid/encrypted extraction when `app/libs/unrar5j-v1.0.3.jar` is present. These paths are deliberately not connected to RAR creation or compression.
+- Compressed RAR5 intentionally fails as unsupported when the optional unrar5j jar is absent so the app does not emit corrupted files. With the jar present, `Rar5LibraryFallback` delegates RAR5 listing/full extraction/single-entry extraction to unrar5j.
+- ALZ/EGG names are now recognized by the archive type system and filters. ALZ extraction covers Store/Deflate/BZip2 with CRC verification, and EGG extraction covers Store/Deflate/BZip2/AZO/LZMA through `EggArchiveReader`; unsupported ALZip-family variants fail explicitly instead of writing partial output.
+- RAR encrypted-header archives now enter the password flow instead of failing as a generic unsupported archive. Visible encrypted file entries can still be listed, while older encrypted extraction attempts are delegated to Junrar when possible.
+- RAR volume filenames (`.partN.rar` and `.rNN`) are recognized. Opening a later volume resolves to the first volume for safer metadata listing; older split/multi-volume extraction now attempts the Junrar path instead of concatenating manually.
+- RAR5 file encryption records are parsed and method-0 encrypted stored payloads now take a limited AES/PBKDF2 decrypt path before CRC validation. Compressed RAR5 is handled only by the optional unrar5j bridge.
 - Stored split payloads are now supported for method-0 RAR entries. Split chains are collected from sibling volumes and written in order, while compressed/solid/encrypted split chains continue to fail explicitly.
 - CB7 and CBT are recognized as 7z/TAR-backed comic archives.
-- Added unit coverage for RAR/CBR extension detection, RAR5 and RAR4 stored-entry listing/extraction, RAR4 Unicode filename decoding, compressed RAR5 rejection, and compressed RAR3/RAR4 fixture extraction through Junrar.
+- Added unit coverage for RAR/CBR extension detection, RAR5 and RAR4 stored-entry listing/extraction, RAR4 Unicode filename decoding, compressed RAR5 rejection when the optional jar is absent, and compressed RAR3/RAR4 fixture extraction through Junrar.
 - This package bundles Junrar for RAR extraction-only fallback. RAR creation remains unsupported.
 
 ### ZIP / CBZ lightweight path
@@ -575,3 +606,4 @@ This section remains the 2.1.4 release history. It is not folded into later rele
 ### Verification note
 
 ZIP integrity and Markdown structure were checked. Full Gradle verification should be run locally in Android Studio or another network-enabled environment if the Gradle wrapper needs to download Gradle.
+

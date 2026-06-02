@@ -340,7 +340,7 @@ final class MainFileActionDialogController {
         cancelLp.setMargins(0, 0, 0, 0);
         actions.addView(cancel, cancelLp);
 
-        android.app.Dialog dialog = activity.createStableCenterDialog(box, activity.dpToPx(34), 0.22f);
+        android.app.Dialog dialog = activity.createStableCenterDialog(box, 0, 0.22f);
         activity.overrideDialogWidth(dialog, activity.compactDeleteConfirmDialogWidthPx());
         cancel.setOnClickListener(v -> dialog.dismiss());
         delete.setOnClickListener(v -> {

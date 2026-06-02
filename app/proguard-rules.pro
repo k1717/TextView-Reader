@@ -23,3 +23,7 @@
 # Keep stack trace line numbers but anonymize source-file names.
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# Optional RAR5 decoder is loaded reflectively by Rar5LibraryFallback when the local jar is present.
+-keep class be.stef.rar5.** { *; }
+-dontwarn be.stef.rar5.**

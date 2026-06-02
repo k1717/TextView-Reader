@@ -172,6 +172,9 @@ public class ThemeEditorActivity extends AppCompatActivity {
         installHexInput(bgHexInput, COLOR_TARGET_BACKGROUND);
         installHexInput(textHexInput, COLOR_TARGET_TEXT);
         installHexInput(toolbarHexInput, COLOR_TARGET_TOOLBAR);
+        installPaletteButton(R.id.btn_bg_palette, COLOR_TARGET_BACKGROUND);
+        installPaletteButton(R.id.btn_text_palette, COLOR_TARGET_TEXT);
+        installPaletteButton(R.id.btn_toolbar_palette, COLOR_TARGET_TOOLBAR);
 
         findViewById(R.id.btn_pick_bg_image).setOnClickListener(v ->
                 imagePicker.launch(new String[]{"image/*"}));
@@ -257,6 +260,12 @@ public class ThemeEditorActivity extends AppCompatActivity {
         // main file operation rows such as Open / File Info.
         ColorStateList actionButtonBackground = ColorStateList.valueOf(panel);
         ColorStateList actionButtonRipple = ColorStateList.valueOf(accent);
+        applyThemeEditorActionButtonStyle(findViewById(R.id.btn_bg_palette), text,
+                actionButtonBackground, actionButtonRipple);
+        applyThemeEditorActionButtonStyle(findViewById(R.id.btn_text_palette), text,
+                actionButtonBackground, actionButtonRipple);
+        applyThemeEditorActionButtonStyle(findViewById(R.id.btn_toolbar_palette), text,
+                actionButtonBackground, actionButtonRipple);
         applyThemeEditorActionButtonStyle(findViewById(R.id.btn_pick_bg_image), text,
                 actionButtonBackground, actionButtonRipple);
         applyThemeEditorActionButtonStyle(findViewById(R.id.btn_clear_bg_image), text,
@@ -368,6 +377,34 @@ public class ThemeEditorActivity extends AppCompatActivity {
                 renderPreview(false);
             }
         });
+    }
+
+    private void installPaletteButton(int buttonId, int target) {
+        View raw = findViewById(buttonId);
+        if (raw == null) return;
+        raw.setOnClickListener(v -> {
+            int startColor = colorForTarget(target);
+            ColorPaletteDialog.show(this, getString(R.string.choose_from_palette), startColor, color -> {
+                if (target == COLOR_TARGET_BACKGROUND) {
+                    currentBgColor = color;
+                    setSeekBarsFromColor(bgR, bgG, bgB, color);
+                } else if (target == COLOR_TARGET_TEXT) {
+                    currentTextColor = color;
+                    setSeekBarsFromColor(txtR, txtG, txtB, color);
+                } else if (target == COLOR_TARGET_TOOLBAR) {
+                    currentToolbarColor = color;
+                    setSeekBarsFromColor(toolbarR, toolbarG, toolbarB, color);
+                }
+                renderPreview(true);
+            });
+        });
+    }
+
+    private int colorForTarget(int target) {
+        if (target == COLOR_TARGET_BACKGROUND) return currentBgColor;
+        if (target == COLOR_TARGET_TEXT) return currentTextColor;
+        if (target == COLOR_TARGET_TOOLBAR) return currentToolbarColor;
+        return Color.WHITE;
     }
 
     private void setSeekBarsFromColor(SeekBar r, SeekBar g, SeekBar b, int color) {

@@ -127,6 +127,7 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
             return;
         }
         saveHostArchiveRecentState();
+        executor.execute(() -> ArchivePreviewCache.pruneOtherArchiveCaches(getApplicationContext(), archiveFile));
 
         buildUi();
         loadArchiveEntries(null);
@@ -729,9 +730,7 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
 
     @NonNull
     private File buildPreviewOutputFile(@NonNull ArchiveSupport.EntryInfo entry) {
-        File previewDir = new File(getCacheDir(), "archive_preview/" + Math.abs(archiveFile.getAbsolutePath().hashCode()));
-        String safeName = entry.path.replaceAll("[\\\\/:*?\"<>|]", "_");
-        return new File(previewDir, safeName.length() == 0 ? "archive_entry" : safeName);
+        return ArchivePreviewCache.outputFileForEntry(this, archiveFile, entry.path);
     }
 
     private void extractImageSiblingEntriesAndOpen(@NonNull ArchiveSupport.EntryInfo selectedEntry) {
@@ -754,7 +753,8 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
 
     private boolean isComicBookArchiveName(@NonNull String name) {
         String lower = name.toLowerCase(Locale.ROOT);
-        return lower.endsWith(".cbz") || lower.endsWith(".cbr") || lower.endsWith(".cb7") || lower.endsWith(".cbt");
+        return lower.endsWith(".cbz") || lower.endsWith(".cbr") || lower.endsWith(".cb7")
+                || lower.matches(".*\\.cb7\\.\\d{3}$") || lower.endsWith(".cbt");
     }
 
     private void openArchiveImageSequence(@Nullable ArchiveSupport.EntryInfo selectedEntry, boolean useSavedPosition) {
@@ -1003,7 +1003,7 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
         intent.putExtra(ImageReaderActivity.EXTRA_SOURCE_ARCHIVE_PATH, archiveFile.getAbsolutePath());
         intent.putExtra(ImageReaderActivity.EXTRA_ALLOW_FILE_OPS, false);
         startActivity(intent);
-        overridePendingTransition(0, 0);
+        overridePendingTransition(R.anim.image_viewer_enter, R.anim.image_viewer_hold);
         if (finishAfterOpen) finish();
     }
 
@@ -1039,7 +1039,7 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
         startActivity(intent);
         if (intent.getComponent() != null
                 && ImageReaderActivity.class.getName().equals(intent.getComponent().getClassName())) {
-            overridePendingTransition(0, 0);
+            overridePendingTransition(R.anim.image_viewer_enter, R.anim.image_viewer_hold);
         }
     }
 

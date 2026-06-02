@@ -21,7 +21,7 @@ import java.io.File;
 import java.util.ArrayList;
 
 /**
- * Owns the pending copy/move/extract dropdown under the main toolbar.
+ * Owns the pending copy/move/extract/compress dropdown under the main toolbar.
  * The menu now dismisses as soon as the queue becomes empty instead of
  * leaving a blank shell behind.
  */
@@ -35,7 +35,8 @@ final class MainPendingActionDropdownController {
     void show() {
         boolean hasClipboard = activity.fileClipboardController.hasPending();
         boolean hasExtract = !activity.pendingExtractArchives.isEmpty();
-        if ((!hasClipboard && !hasExtract) || activity.mainPendingActionButton == null) return;
+        boolean hasCreate = !activity.pendingArchiveCreations.isEmpty();
+        if ((!hasClipboard && !hasExtract && !hasCreate) || activity.mainPendingActionButton == null) return;
 
         final MainDropdownStyle style = MainDropdownStyle.from(activity);
 
@@ -96,6 +97,17 @@ final class MainPendingActionDropdownController {
             activity.confirmAllPendingArchiveExtractionsToCurrentDirectory();
         });
 
+        TextView runCreateAllView = makeRunAllButton(style);
+        LinearLayout.LayoutParams createAllLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                activity.dpToPx(42));
+        createAllLp.setMargins(activity.dpToPx(6), 0, activity.dpToPx(6), activity.dpToPx(6));
+        box.addView(runCreateAllView, createAllLp);
+        runCreateAllView.setOnClickListener(v -> {
+            popup.dismiss();
+            activity.confirmAllPendingArchiveCreations();
+        });
+
         LinearLayout rowsContainer = new LinearLayout(activity);
         rowsContainer.setOrientation(LinearLayout.VERTICAL);
         box.addView(rowsContainer, new LinearLayout.LayoutParams(
@@ -119,12 +131,21 @@ final class MainPendingActionDropdownController {
         refreshRows[0] = () -> {
             rowsContainer.removeAllViews();
             boolean hasAny = false;
+            boolean queueExecutionBusy = isQueueExecutionBusy();
             int clipboardCount = activity.fileClipboardController.getPendingItems().size();
             int extractCount = activity.pendingExtractArchives.size();
+            int createCount = activity.pendingArchiveCreations.size();
             runClipboardAllView.setText(activity.getString(R.string.paste_all_here));
             runClipboardAllView.setVisibility(clipboardCount > 0 ? View.VISIBLE : View.GONE);
+            setExecutionControlEnabled(runClipboardAllView, clipboardCount > 0 && !queueExecutionBusy);
             runExtractAllView.setText(activity.getString(R.string.extract_all_here));
             runExtractAllView.setVisibility(extractCount > 0 ? View.VISIBLE : View.GONE);
+            setExecutionControlEnabled(runExtractAllView, extractCount > 0 && !queueExecutionBusy);
+            runCreateAllView.setText(activity.getString(R.string.archive_create_all));
+            runCreateAllView.setVisibility(createCount > 0 ? View.VISIBLE : View.GONE);
+            setExecutionControlEnabled(runCreateAllView, createCount > 0 && !queueExecutionBusy);
+            setExecutionControlEnabled(clearView, (clipboardCount > 0 || extractCount > 0 || createCount > 0)
+                    && !queueExecutionBusy);
 
             for (FileClipboardController.PendingItem item : activity.fileClipboardController.getPendingItems()) {
                 hasAny = true;
@@ -135,6 +156,8 @@ final class MainPendingActionDropdownController {
                         ? R.string.pending_copy_action
                         : R.string.pending_move_action, name);
                 addPendingActionDropdownRow(rowsContainer, label, path, style.fg, style.sub, style.danger, style.rowPanel,
+                        !queueExecutionBusy,
+                        !queueExecutionBusy,
                         () -> {
                             popup.dismiss();
                             if (activity.fileClipboardController.setActive(item.getId())) {
@@ -153,6 +176,8 @@ final class MainPendingActionDropdownController {
                 String path = archive != null ? archive.getAbsolutePath() : "";
                 addPendingActionDropdownRow(rowsContainer, activity.getString(R.string.pending_extract_action, name), path,
                         style.fg, style.sub, style.danger, style.rowPanel,
+                        !queueExecutionBusy,
+                        !queueExecutionBusy,
                         () -> {
                             popup.dismiss();
                             if (activity.setActivePendingArchiveExtraction(archive)) {
@@ -165,6 +190,27 @@ final class MainPendingActionDropdownController {
                         });
             }
 
+            for (MainPendingArchiveCreation task : new ArrayList<>(activity.pendingArchiveCreations)) {
+                hasAny = true;
+                String name = task != null ? task.displayName() : "";
+                String path = task != null ? task.destination.getAbsolutePath() : "";
+                int count = task != null ? task.sources.size() : 0;
+                addPendingActionDropdownRow(rowsContainer, activity.getString(R.string.pending_create_action, count, name), path,
+                        style.fg, style.sub, style.danger, style.rowPanel,
+                        !queueExecutionBusy,
+                        !queueExecutionBusy,
+                        () -> {
+                            popup.dismiss();
+                            if (activity.setActivePendingArchiveCreation(task)) {
+                                activity.confirmPendingArchiveCreation();
+                            }
+                        },
+                        () -> {
+                            activity.cancelPendingArchiveCreation(task);
+                            refreshRows[0].run();
+                        });
+            }
+
             activity.updateMainOverflowButtonVisibility();
             if (!hasAny) {
                 popup.dismiss();
@@ -172,6 +218,7 @@ final class MainPendingActionDropdownController {
         };
 
         clearView.setOnClickListener(v -> {
+            if (isQueueExecutionBusy()) return;
             activity.clearPendingActionQueue();
             activity.updateMainOverflowButtonVisibility();
             popup.dismiss();
@@ -194,6 +241,8 @@ final class MainPendingActionDropdownController {
                                              int subTextColor,
                                              int dangerColor,
                                              int rowPanelColor,
+                                             boolean openEnabled,
+                                             boolean cancelEnabled,
                                              @NonNull Runnable openAction,
                                              @NonNull Runnable cancelAction) {
         LinearLayout row = new LinearLayout(activity);
@@ -204,8 +253,12 @@ final class MainPendingActionDropdownController {
         rowBg.setColor(rowPanelColor);
         rowBg.setCornerRadius(activity.dpToPx(10));
         row.setBackground(rowBg);
-        row.setClickable(true);
-        row.setOnClickListener(v -> openAction.run());
+        row.setClickable(openEnabled);
+        row.setEnabled(openEnabled);
+        row.setAlpha(openEnabled ? 1.0f : 0.55f);
+        row.setOnClickListener(v -> {
+            if (openEnabled) openAction.run();
+        });
         row.setMinimumHeight(activity.dpToPx(58));
 
         LinearLayout textBox = new LinearLayout(activity);
@@ -257,7 +310,10 @@ final class MainPendingActionDropdownController {
         cancelView.setGravity(Gravity.CENTER);
         cancelView.setIncludeFontPadding(false);
         cancelView.setContentDescription(activity.getString(R.string.cancel_pending_action));
+        cancelView.setEnabled(cancelEnabled);
+        cancelView.setAlpha(cancelEnabled ? 1.0f : 0.45f);
         cancelView.setOnClickListener(v -> {
+            if (!cancelEnabled) return;
             v.setSelected(true);
             cancelAction.run();
         });
@@ -270,6 +326,18 @@ final class MainPendingActionDropdownController {
                 LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.setMargins(activity.dpToPx(6), 0, activity.dpToPx(6), activity.dpToPx(6));
         box.addView(row, lp);
+    }
+
+    private boolean isQueueExecutionBusy() {
+        return activity.fileClipboardController.isInProgress()
+                || activity.archiveExtractInProgress
+                || activity.archiveCreateInProgress;
+    }
+
+    private void setExecutionControlEnabled(@NonNull View view, boolean enabled) {
+        view.setEnabled(enabled);
+        view.setAlpha(enabled ? 1.0f : 0.45f);
+        view.setClickable(enabled);
     }
 
     @NonNull

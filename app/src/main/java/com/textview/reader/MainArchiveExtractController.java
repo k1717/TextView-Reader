@@ -228,9 +228,9 @@ final class MainArchiveExtractController {
         cancelLp.setMargins(0, activity.dpToPx(4), 0, 0);
         box.addView(cancel, cancelLp);
 
-        android.app.Dialog dialog = activity.createStableBottomDialog(
+        android.app.Dialog dialog = activity.createStableCenterDialog(
                 box,
-                activity.mainFileTypeAlignedDialogYOffsetPx(),
+                0,
                 0.22f);
         ref[0] = dialog;
         cancel.setOnClickListener(v -> dialog.dismiss());
@@ -341,6 +341,8 @@ final class MainArchiveExtractController {
                 activity.getString(R.string.archive_extracting),
                 archive.getName());
         progress.setFolder(destinationDir.getName().length() > 0 ? destinationDir.getName() : destinationDir.getAbsolutePath());
+        progress.setItemProgress(1, 1);
+        progress.setFolderProgress(1, 1);
         activity.executeFolderBackgroundTask(() -> {
             ArchiveSupport.ExtractionResult result = ArchiveSupport.extractArchiveDetailed(
                     archive,
@@ -392,6 +394,9 @@ final class MainArchiveExtractController {
             int failedCount = 0;
             int unsupportedCount = 0;
             int passwordFailedCount = 0;
+            int itemIndex = 0;
+            int folderIndex = 0;
+            final int folderTotal = archives.size();
             for (File archive : archives) {
                 if (progress.isCancelled()) break;
                 if (archive == null || !archive.exists() || !archive.canRead() || !isSupportedArchive(archive)) {
@@ -408,7 +413,9 @@ final class MainArchiveExtractController {
                     continue;
                 }
                 progress.setDetail(archive.getName());
+                progress.setItemProgress(++itemIndex, folderTotal);
                 progress.setFolder(destination.getName());
+                progress.setFolderProgress(++folderIndex, folderTotal);
                 boolean passwordRequired = ArchiveSupport.requiresPasswordForExtraction(archive);
                 char[] password = passwordRequired ? batchPassword : null;
                 ArchiveSupport.ExtractionResult result = password == null && passwordRequired
@@ -479,14 +486,20 @@ final class MainArchiveExtractController {
 
     private void continueAllArchiveExtractionsWithPasswordPreflight(@NonNull ArrayList<File> archives,
                                                                     @NonNull File destinationRoot) {
-        if (hasPasswordProtectedArchive(archives)) {
-            showArchivePasswordDialog(password -> continueAllArchiveExtractions(
-                    archives,
-                    destinationRoot,
-                    password.toCharArray()));
-            return;
-        }
-        continueAllArchiveExtractions(archives, destinationRoot, null);
+        activity.executeFolderBackgroundTask(() -> {
+            boolean needsPassword = hasPasswordProtectedArchive(archives);
+            activity.fileSearchHandler.post(() -> {
+                if (activity.activityDestroyed) return;
+                if (needsPassword) {
+                    showArchivePasswordDialog(password -> continueAllArchiveExtractions(
+                            archives,
+                            destinationRoot,
+                            password.toCharArray()));
+                    return;
+                }
+                continueAllArchiveExtractions(archives, destinationRoot, null);
+            });
+        });
     }
 
     private boolean hasPasswordProtectedArchive(@NonNull List<File> archives) {

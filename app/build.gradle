@@ -20,8 +20,8 @@ android {
         applicationId "com.textview.reader"
         minSdk 24
         targetSdk 35
-        versionCode 2230
-        versionName "2.2.3"
+        versionCode 2240
+        versionName "2.2.4"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -66,18 +66,61 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.material:material:1.12.0'
-    implementation 'androidx.recyclerview:recyclerview:1.3.2'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    implementation 'androidx.activity:activity:1.9.3'
+    // Optional local jars. Used by the reflection-based RAR5 bridge when unrar5j is supplied.
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'com.google.android.material:material:1.14.0'
+    implementation 'androidx.recyclerview:recyclerview:1.4.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
+    implementation 'androidx.activity:activity:1.10.1'
     implementation 'androidx.drawerlayout:drawerlayout:1.2.0'
     implementation 'com.github.albfernandez:juniversalchardet:2.5.0'
     implementation 'org.apache.commons:commons-compress:1.28.0'
-    implementation 'org.tukaani:xz:1.10'
-    implementation 'net.lingala.zip4j:zip4j:2.11.5'
+    implementation 'org.tukaani:xz:1.12'
+    implementation 'net.lingala.zip4j:zip4j:2.11.6'
     implementation 'com.github.junrar:junrar:7.6.0'
     testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test:runner:1.6.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:runner:1.7.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+}
+
+
+// Optional helper for RAR5 support. This task is intentionally manual and is not wired into
+// preBuild, so offline/release builds remain reproducible when the optional jar is absent.
+def unrar5jLibraryVersion = 'v1.0.3'
+def unrar5jJarName = "unrar5j-${unrar5jLibraryVersion}.jar"
+def unrar5jJarFile = layout.projectDirectory.file("libs/${unrar5jJarName}")
+
+tasks.register('fetchUnrar5jJar') {
+    group = 'dependency setup'
+    description = 'Downloads optional RealBurst/unrar5j RAR5 decoder jar into app/libs.'
+    outputs.file(unrar5jJarFile)
+    doLast {
+        def target = unrar5jJarFile.asFile
+        if (target.exists()) {
+            println "${unrar5jJarName} already exists at ${target.absolutePath}"
+            return
+        }
+        target.parentFile.mkdirs()
+        def urls = [
+                "https://github.com/RealBurst/unrar5j/releases/download/${unrar5jLibraryVersion}/${unrar5jJarName}",
+                "https://github.com/RealBurst/unrar5j/releases/download/${unrar5jLibraryVersion}/unrar5j.jar"
+        ]
+        Exception lastError = null
+        for (def url : urls) {
+            try {
+                println "Downloading ${url}"
+                new URL(url).withInputStream { input ->
+                    target.withOutputStream { output -> output << input }
+                }
+                println "Saved ${target.absolutePath}"
+                return
+            } catch (Exception e) {
+                lastError = e
+                if (target.exists()) target.delete()
+                println "Download failed for ${url}: ${e.message}"
+            }
+        }
+        throw new GradleException("Could not download optional unrar5j jar", lastError)
+    }
 }

@@ -64,6 +64,7 @@ import com.textview.reader.util.FontManager;
 import com.textview.reader.util.PrefsManager;
 import com.textview.reader.util.ThemeManager;
 import com.textview.reader.util.LargeTextExactPageIndexState;
+import com.textview.reader.util.LargeTextContinuityMath;
 import com.textview.reader.util.LargeTextPageDirectionState;
 import com.textview.reader.util.LargeTextPartitionSwitchState;
 import com.textview.reader.util.LargeTextPartitionCache;
@@ -729,7 +730,12 @@ public class ReaderActivity extends AppCompatActivity {
     }
 
     String formatPageMoveLabel(int page, int totalPages) {
-        return bottomControls().formatPageMoveLabel(page, totalPages);
+        return bottomControls().formatPageMoveLabel(page, totalPages,
+                getLineOffsetWithinDisplayedPage(page, totalPages));
+    }
+
+    String formatPageMoveLabel(int page, String totalPagesText, int lineOffset) {
+        return bottomControls().formatPageMoveLabel(page, totalPagesText, lineOffset);
     }
 
     void showMoreDialog() {
@@ -1096,6 +1102,26 @@ public class ReaderActivity extends AppCompatActivity {
         return pagePositions().getDisplayedCurrentPageNumber();
     }
 
+    int getLineOffsetWithinDisplayedPage(int page, int totalPages) {
+        if (readerView == null) return 1;
+
+        int total = Math.max(1, totalPages);
+        int target = Math.max(1, Math.min(total, page));
+        int currentPage = Math.max(1, Math.min(total, getDisplayedCurrentPageNumber()));
+
+        // The parenthesized value in the TXT page label is an in-page row offset,
+        // not the document-wide logical line number.  Use the rendered page
+        // anchors from CustomReaderView so large-TXT partitions cannot leak
+        // absolute lines such as 1975/2000 into the UI.  Non-current target
+        // pages in the jump dialog are shown at their page start.
+        if (target != currentPage) return 1;
+        return Math.max(1, readerView.getCurrentLineOffsetWithinPage());
+    }
+
+    int getCurrentVisibleLineNumber() {
+        return Math.max(1, countLinesUntilChar(getCurrentCharPosition()));
+    }
+
     boolean scrollToPageNumber(int page) {
         return pageJumps().scrollToPageNumber(page);
     }
@@ -1312,6 +1338,10 @@ public class ReaderActivity extends AppCompatActivity {
 
     void toggleToolbar() {
         readerShell().toggleToolbar();
+    }
+
+    void showToolbar() {
+        readerShell().showToolbar();
     }
 
     // --- Hardware page-turn keys ---

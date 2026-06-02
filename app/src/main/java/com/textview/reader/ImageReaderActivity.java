@@ -123,7 +123,7 @@ public class ImageReaderActivity extends AppCompatActivity {
         }
         super.onCreate(savedInstanceState);
         dialogStyle = new ImageDialogStyleController(this);
-        overridePendingTransition(0, 0);
+        overridePendingTransition(R.anim.image_viewer_enter, R.anim.image_viewer_hold);
         ViewerRegistry.activate(this);
 
         filePath = getIntent().getStringExtra(EXTRA_FILE_PATH);
@@ -170,7 +170,7 @@ public class ImageReaderActivity extends AppCompatActivity {
     @Override
     public void finish() {
         super.finish();
-        overridePendingTransition(0, 0);
+        overridePendingTransition(R.anim.image_viewer_hold, R.anim.image_viewer_exit);
     }
 
     private void initializeImagePathList() {

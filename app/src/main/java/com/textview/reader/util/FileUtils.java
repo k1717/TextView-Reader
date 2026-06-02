@@ -248,6 +248,9 @@ public class FileUtils {
         if (lower.endsWith(".001") && lower.length() > 4) {
             return isArchiveFile(fileName.substring(0, fileName.length() - 4));
         }
+        if (lower.matches(".*\\.(7z|cb7)\\.\\d{3}$")) {
+            return true;
+        }
         return lower.endsWith(".zip") || lower.endsWith(".cbz")
                 || lower.endsWith(".rar") || lower.endsWith(".cbr")
                 || lower.matches(".*\\.r\\d{2,3}$")

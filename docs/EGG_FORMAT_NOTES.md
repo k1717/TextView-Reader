@@ -56,6 +56,6 @@ Store=0, Deflate=1, bzip=2, azo=3, lzma=4
 - Deflate  -> raw inflate (java.util.zip.Inflater nowrap)
 - bzip     -> commons-compress BZip2CompressorInputStream
 - lzma     -> org.tukaani:xz LZMAInputStream (dependency already present)
-- azo      -> UNSUPPORTED (ESTsoft proprietary; no open decoder)
+- azo      -> AzoDecoder modified Java port of kippler/xunazo; extraction-only; encrypted/split/solid archives still unsupported
 - Encrypted / split / solid -> handled as unsupported/password as appropriate
 - CRC of each block is verified; mismatch deletes output and fails loudly.

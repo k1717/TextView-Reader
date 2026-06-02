@@ -2,18 +2,45 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, Word, image, and archive workflows. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow.
 
-Current version: **2.2.3**
+Current version: **2.2.4**
 
+## 2.2.4 release summary
+
+- Android metadata is `versionCode 2240` and `versionName "2.2.4"`.
+- The first-party project source is licensed under Apache License 2.0 with `Copyright 2026 k1717 aka Delphinium`; include `LICENSE`, `NOTICE`, and `THIRD_PARTY_NOTICES.md` with source releases.
+- Compress actions now add pending ZIP creation tasks instead of running immediately. Pending copy, move, extract, and compress tasks are managed from the same pending-actions menu.
+- RAR/CBR support includes RAR5 and RAR4/RAR3 metadata listing, RAR4 Unicode filename decoding, stored method-0 extraction, stored split-payload assembly, limited RAR5 encrypted stored-data handling, Junrar fallback for older RAR4/RAR3 compressed/solid/split/encrypted extraction, and optional unrar5j fallback for RAR5 compressed/solid/encrypted extraction when `app/libs/unrar5j-v1.0.3.jar` is supplied.
+- ALZ supports Store/Deflate/BZip2 extraction with CRC verification. EGG supports Store/Deflate/BZip2/AZO/LZMA through the first-party `EggArchiveReader`; unsupported encrypted/split/solid variants fail cleanly.
+- Standard 7z/CB7 split volumes (`.7z.001` / `.7z.002`, `.cb7.001` / `.cb7.002`) are resolved to the first part and opened as a concatenated seekable channel for listing, extraction, and image preview.
+- Archive management includes safer preview caching, stricter path sanitization, background password preflight, backup/restore overwrite extraction, conservative extraction/free-space guards, and cache pruning.
+- File-operation progress now keeps item/file progress and folder counters separate, resets byte progress per payload, and supports queue inspection while work is backgrounded.
+- Custom main-theme and reading-theme color editors include a lightweight shader-based color palette picker while keeping HEX/RGB input.
+- Image viewer handoff from the file list and archive previews uses a short fade/scale transition.
+- TXT page labels show `current / total` at exact page-start positions and `current (line-in-page) / total` at mid-page positions; the in-page number is numeric-only and aligned with bookmark restore anchors.
+- Build/runtime/test dependencies were refreshed on the SDK-35 release line: AGP `9.2.0`, Gradle `9.4.1`, AppCompat `1.7.1`, Material Components `1.14.0`, RecyclerView `1.4.0`, ConstraintLayout `2.2.1`, Activity `1.10.1`, XZ for Java `1.12`, Zip4j `2.11.6`, AndroidX Test Runner `1.7.0`, and AndroidX Test Ext JUnit `1.3.0`.
+
+### Archive support status in 2.2.4
+
+| Format family | Current support | Known limits |
+| --- | --- | --- |
+| ZIP / ZIPX / CBZ | Production path through Zip4j for ZIP/CBZ listing, extraction, encrypted ZIP, and standard split ZIP. ZIPX names are recognized and AES/password detection has a raw-header fallback when Zip4j cannot parse the compression method. Experimental first-party stored/deflate ZIP path remains benchmarked but not the production default. | ZIPX entries using unsupported compression methods such as ZIP method 95/XZ can be listed but not extracted yet. ZIP creation is plain ZIP only; encrypted ZIP creation is not implemented. |
+| 7z / CB7 | Listing and extraction through Apache Commons Compress, with password forwarding. Standard split chains (`.7z.001` / `.7z.002` and `.cb7.001` / `.cb7.002`) are opened through a concatenated seekable channel without building a temporary combined file. | Unsupported 7z methods depend on Commons Compress coverage. Missing/gapped volumes and 7z split creation are not supported. |
+| TAR / CBT and TAR.GZ / TAR.BZ2 / TAR.XZ / TAR.LZMA / TAR.Z | Listing, single-entry extraction, and full extraction. | These formats do not have an internal password layer; `.tar.*.gpg` would require a separate OpenPGP decrypt step. |
+| GZ / BZ2 / XZ / LZMA / Z | Single-file decompression paths. | These are compressor streams, not multi-file archives. |
+| RAR / CBR | First-party metadata listing, safe paths, RAR4 Unicode names, stored method-0 extraction, limited RAR5 encrypted stored-data decrypt, stored split-payload assembly, Junrar fallback extraction for older RAR4/RAR3 compressed/solid/split/encrypted cases, and optional unrar5j fallback for RAR5 compressed/solid/encrypted extraction when `app/libs/unrar5j-v1.0.3.jar` is present. | RAR creation is not supported. RAR5 compressed extraction needs the optional local unrar5j jar; split/multi-volume RAR5 remains not guaranteed because upstream marks it partial. |
+| ALZ | First-party local-header parsing with Store/Deflate/BZip2 extraction, including ZipCrypto for covered cases. CRC-verified. | Unusual descriptors, broader split handling, and unverified legacy variants remain unsupported. |
+| EGG | First-party container parser with Store/Deflate/BZip2/AZO/LZMA extraction, per-block CRC32 verification, and path-traversal-safe names. AZO extraction is handled by an extraction-only modified Java port of `kippler/xunazo`. | Encrypted, split, and solid EGG archives are unsupported. EGG creation is not implemented. |
+| Archive creation | Plain ZIP creation through queued pending actions. | RAR/7z/ALZ/EGG creation and encrypted ZIP creation are not implemented. |
 
 ## 2.2.3 release summary
 
 - Updated Android version metadata to `versionCode 2230` and `versionName "2.2.3"`.
 - Added the first pass of a RAR/CBR engine. `.rar` and `.cbr` files are recognized as archives, RAR5 and RAR4/RAR3-style headers can be listed directly, RAR4 Unicode filenames are decoded, and entries stored without compression can be extracted.
-- Added Junrar as a RAR extraction-only fallback for compressed RAR4/RAR3 entries. RAR creation is not supported, and the Junrar/UnRAR code path must not be used for RAR compression.
-- Compressed RAR5, solid RAR, compressed split RAR, encrypted headers, and compressed encrypted RAR remain blocked as unsupported.
-- Added ALZ/EGG archive support. ALZ extracts Store/Deflate/BZip2; EGG is parsed and extracted from a first-party decoder (Store/Deflate/BZip2/LZMA). Proprietary or encrypted/split/solid variants fail cleanly instead of writing partial output, and every block CRC is verified.
-- RAR password and split-volume handling is safer: encrypted headers enter the password flow, visible encrypted entries can still be listed, `.partN.rar` / `.rNN` names resolve through the first volume for listing, and split/encrypted payload extraction remains blocked until verified first-party decoding exists.
-- Added a limited first-party RAR5 encrypted stored-data decrypt attempt for method-0 entries. Compressed encrypted RAR, encrypted headers, RAR4 encryption, and split payloads remain blocked unless future verified decoder work covers them.
+- Expanded Junrar as a RAR extraction-only fallback for older RAR4/RAR3 compressed, solid, split/multi-volume, and encrypted cases. RAR creation is not supported, and the Junrar/UnRAR code path must not be used for RAR compression.
+- Compressed RAR5 remains blocked when the optional jar is absent, but `Rar5LibraryFallback` can now route RAR5 compressed/solid/encrypted extraction through unrar5j when `app/libs/unrar5j-v1.0.3.jar` is present.
+- Added ALZ/EGG archive support. ALZ extracts Store/Deflate/BZip2; EGG is parsed and extracted from a first-party decoder (Store/Deflate/BZip2/AZO/LZMA). Proprietary or encrypted/split/solid variants fail cleanly instead of writing partial output, and every block CRC is verified.
+- RAR password and split-volume handling is safer: encrypted headers enter the password flow, visible encrypted entries can still be listed, `.partN.rar` / `.rNN` names resolve through the first volume for listing, and older split/encrypted extraction now attempts the Junrar fallback instead of being blocked preemptively.
+- Added a limited first-party RAR5 encrypted stored-data decrypt attempt for method-0 entries. Compressed RAR5 is now delegated to the optional unrar5j bridge when the local jar is present; otherwise it still fails cleanly as unsupported.
 - Stored split RAR payloads can now be assembled across `.partN.rar` / `.rNN` volumes when the entry itself is not compressed, solid, or encrypted.
 - Repaired the main drawer gesture split so right swipes can still open the drawer from the main screen, while a real left swipe from the outside area closes an already open or partially open drawer without turning a light tap into a close action.
 - Changed the drawer bottom **Open File / Bookmarks / Settings** actions so the requested action runs immediately and the drawer closes in the background instead of delaying the action until after the close animation.
@@ -25,18 +52,6 @@ Current version: **2.2.3**
 - Settings now include an Archive open mode. Normal mode opens archive contents first, while Comic mode opens image-based generic archives directly like CBZ/CBR and restores the last viewed archive image when possible.
 - Archive long-press and one-file multi-select actions include Archive preview, which forces the internal archive folder list even when Comic mode is enabled.
 - Bundled RAR third-party code is extraction-only. RAR compression/creation is intentionally not implemented.
-
-### Archive support status in 2.2.3
-
-| Format family | Current support | Known limits |
-| --- | --- | --- |
-| ZIP / ZIPX / CBZ | Production path through Zip4j for ZIP/CBZ listing, extraction, encrypted ZIP, and standard split ZIP. ZIPX names are recognized and AES/password detection has a raw-header fallback when Zip4j cannot parse the compression method. Experimental first-party stored/deflate ZIP path remains benchmarked but not the production default. | ZIPX entries using unsupported compression methods such as ZIP method 95/XZ can be listed but not extracted yet. ZIP creation is plain ZIP only; encrypted ZIP creation is not implemented. |
-| 7z / CB7 | Listing and extraction through Apache Commons Compress, with password forwarding. | Unsupported 7z methods depend on Commons Compress coverage. |
-| TAR / CBT and TAR.GZ / TAR.BZ2 / TAR.XZ / TAR.LZMA / TAR.Z | Listing, single-entry extraction, and full extraction are covered by tests. | These formats do not have an internal password layer; `.tar.*.gpg` would require a separate OpenPGP decrypt step. |
-| GZ / BZ2 / XZ / LZMA / Z | Single-file decompression paths are covered by tests. | These are compressor streams, not multi-file archives. |
-| RAR / CBR | First-party metadata listing, safe paths, RAR4 Unicode names, stored method-0 extraction, limited RAR5 encrypted stored-data decrypt, stored split-payload assembly, and Junrar fallback extraction for compressed RAR4/RAR3 entries. | RAR creation is not supported. Compressed RAR5, solid RAR, compressed split RAR, encrypted headers, compressed encrypted data, and encrypted split payloads remain unsupported. |
-| ALZ | First-party local-header parsing with Store/Deflate/BZip2 extraction, including ZipCrypto for the covered cases. CRC-verified. | Unusual descriptors, broader split handling, and unverified legacy variants remain unsupported. |
-| EGG | First-party container parser (header/FILE/FILENAME/BLOCK) with Store/Deflate/BZip2/LZMA extraction, per-block CRC32 verification, and path-traversal-safe names. The implementation is first-party Java code based on public EGG container concepts and interoperability behavior; no ESTsoft/unEGG source files or binary modules are bundled. | ESTsoft proprietary AZO compression, and encrypted/split/solid EGG archives, are unsupported. |
 
 ## 2.2.2 release summary
 
@@ -545,8 +560,10 @@ The instrumentation suite includes optional large-TXT real-file checks. The loca
 - Target SDK: 35
 - Compile SDK: 35
 - Language: Java
-- Android Gradle Plugin: 9.1.1
-- Gradle wrapper: 9.3.1
+- Android Gradle Plugin: 9.2.0
+- Gradle wrapper: 9.4.1
+
+Recent module refresh: AGP 9.2.0 / Gradle 9.4.1, AppCompat 1.7.1, Material Components 1.14.0, RecyclerView 1.4.0, ConstraintLayout 2.2.1, Activity 1.10.1, XZ for Java 1.12, Zip4j 2.11.6, AndroidX Test Runner 1.7.0, and AndroidX Test Ext JUnit 1.3.0.
 
 Main dependencies:
 
@@ -594,3 +611,4 @@ Do not upload duplicate root-level Android folders such as `java/`, `res/`, or r
 ## Release notes
 
 See [`CHANGELOG.md`](CHANGELOG.md) and [`PATCHNOTES.md`](PATCHNOTES.md).
+

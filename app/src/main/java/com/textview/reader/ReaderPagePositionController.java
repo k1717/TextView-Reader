@@ -4,7 +4,6 @@ import androidx.annotation.NonNull;
 
 import com.textview.reader.util.LargeTextPageModelMath;
 
-import java.util.Locale;
 
 final class ReaderPagePositionController {
     private final ReaderActivity activity;
@@ -102,7 +101,11 @@ final class ReaderPagePositionController {
                 && activity.largeTextEstimatedTotalPages > 0)
                 ? "~" + totalPages
                 : String.valueOf(totalPages);
-        String text = String.format(Locale.getDefault(), "%d / %s", currentPage, totalText);
+        int lineOffset = activity.getLineOffsetWithinDisplayedPage(currentPage, totalPages);
+        String text = activity.formatPageMoveLabel(
+                currentPage,
+                totalText,
+                Math.max(1, lineOffset));
         if (activity.positionLabel != null) activity.positionLabel.setText(text);
         if (activity.readerPageStatus != null) activity.readerPageStatus.setText(text);
     }

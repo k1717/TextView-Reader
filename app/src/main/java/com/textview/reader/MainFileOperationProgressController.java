@@ -201,12 +201,27 @@ final class MainFileOperationProgressController {
                                      @NonNull TextView bytes,
                                      @NonNull ProgressBar bar,
                                      @NonNull TextView pause) {
-        detail.setText(snapshot.detail == null || snapshot.detail.length() == 0
+        String detailText = snapshot.detail == null || snapshot.detail.length() == 0
                 ? snapshot.title
-                : snapshot.detail);
-        String folderText = snapshot.folder == null || snapshot.folder.length() == 0
+                : snapshot.detail;
+        if (snapshot.itemTotal > 0) {
+            detailText = activity.getString(R.string.operation_detail_count_format,
+                    detailText,
+                    snapshot.itemIndex,
+                    snapshot.itemTotal);
+        }
+        detail.setText(detailText);
+        String folderName = snapshot.folder == null || snapshot.folder.length() == 0
+                ? "-"
+                : snapshot.folder;
+        String folderText = snapshot.folderTotal > 0
+                ? activity.getString(R.string.operation_folder_count_format,
+                folderName,
+                snapshot.folderIndex,
+                snapshot.folderTotal)
+                : (snapshot.folder == null || snapshot.folder.length() == 0
                 ? activity.getString(R.string.operation_folder_unknown)
-                : activity.getString(R.string.operation_folder_format, snapshot.folder);
+                : activity.getString(R.string.operation_folder_format, snapshot.folder));
         folder.setText(folderText);
         pause.setText(activity.getString(snapshot.paused
                 ? R.string.operation_resume

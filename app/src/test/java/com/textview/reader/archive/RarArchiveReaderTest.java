@@ -213,7 +213,7 @@ public class RarArchiveReaderTest {
     }
 
     @Test
-    public void extractSingleEntry_compressedRar4Entry_failsExplicitly() throws Exception {
+    public void extractSingleEntry_compressedRar4SyntheticPayload_failsCleanlyThroughFallback() throws Exception {
         File archive = buildRar4Archive("page001.jpg", "payload".getBytes(StandardCharsets.UTF_8), 0x31);
         File out = tempFolder.newFile("compressed-rar4.jpg");
 

@@ -60,6 +60,18 @@ public class EggArchiveReaderTest {
         assertEquals("deflate payload", new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8));
     }
 
+
+    @Test
+    public void extractSingleEntry_eggAzoFramedStoredBlock_decodesPayload() throws Exception {
+        byte[] plain = "azo framed payload".getBytes(StandardCharsets.UTF_8);
+        File archive = buildEggArchiveWithStoredPayload("page-azo.txt", plain, 3, buildAzoStoredStream(plain), false);
+        File out = tempFolder.newFile("egg-azo.txt");
+
+        assertTrue(ArchiveSupport.extractSingleEntry(archive, "page-azo.txt", out, null));
+
+        assertEquals("azo framed payload", new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8));
+    }
+
     @Test
     public void encryptedEgg_requestsPasswordThenReportsUnsupportedDecrypt() throws Exception {
         File archive = buildEggArchive("secret.txt", "secret payload".getBytes(StandardCharsets.UTF_8), 0, true);
@@ -87,8 +99,13 @@ public class EggArchiveReaderTest {
     }
 
     private File buildEggArchive(String entryName, byte[] plainPayload, int method, boolean encrypted) throws Exception {
-        File archive = tempFolder.newFile("fixture-" + System.nanoTime() + ".egg");
         byte[] storedPayload = method == 1 ? rawDeflate(plainPayload) : plainPayload;
+        return buildEggArchiveWithStoredPayload(entryName, plainPayload, method, storedPayload, encrypted);
+    }
+
+    private File buildEggArchiveWithStoredPayload(String entryName, byte[] plainPayload, int method,
+                                                  byte[] storedPayload, boolean encrypted) throws Exception {
+        File archive = tempFolder.newFile("fixture-" + System.nanoTime() + ".egg");
         byte[] name = entryName.getBytes(StandardCharsets.UTF_8);
         CRC32 crc = new CRC32();
         crc.update(plainPayload);
@@ -126,6 +143,28 @@ public class EggArchiveReaderTest {
             writeIntLE(out, MAGIC_END);
         }
         return archive;
+    }
+
+
+    private byte[] buildAzoStoredStream(byte[] payload) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write('1');
+        out.write(0);
+        writeIntBE(out, payload.length);
+        writeIntBE(out, payload.length);
+        writeIntBE(out, payload.length ^ payload.length);
+        out.write(payload);
+        writeIntBE(out, 0);
+        writeIntBE(out, 0);
+        writeIntBE(out, 0);
+        return out.toByteArray();
+    }
+
+    private void writeIntBE(ByteArrayOutputStream out, int value) {
+        out.write((value >>> 24) & 0xff);
+        out.write((value >>> 16) & 0xff);
+        out.write((value >>> 8) & 0xff);
+        out.write(value & 0xff);
     }
 
     private byte[] rawDeflate(byte[] payload) throws Exception {

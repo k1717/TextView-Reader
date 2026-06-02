@@ -43,6 +43,12 @@
                 android:maxLength="7"
                 android:maxLines="1" android:singleLine="true"
                 android:layout_marginBottom="6dp" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/btn_bg_palette"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/choose_from_palette"
+                android:textAllCaps="false"
+                android:layout_marginBottom="6dp" />
             <TextView android:text="R" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" />
             <SeekBar android:id="@+id/bg_red" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="255" />
             <TextView android:text="G" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" />
@@ -66,6 +72,12 @@
                 android:maxLength="7"
                 android:maxLines="1" android:singleLine="true"
                 android:layout_marginBottom="6dp" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/btn_toolbar_palette"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/choose_from_palette"
+                android:textAllCaps="false"
+                android:layout_marginBottom="6dp" />
             <TextView android:text="R" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" />
             <SeekBar android:id="@+id/toolbar_red" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="255" />
             <TextView android:text="G" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" />
@@ -88,6 +100,12 @@
                 android:digits="#0123456789abcdefABCDEF"
                 android:maxLength="7"
                 android:maxLines="1" android:singleLine="true"
+                android:layout_marginBottom="6dp" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/btn_text_palette"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/choose_from_palette"
+                android:textAllCaps="false"
                 android:layout_marginBottom="6dp" />
             <TextView android:text="R" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" />
             <SeekBar android:id="@+id/txt_red" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="255" />
