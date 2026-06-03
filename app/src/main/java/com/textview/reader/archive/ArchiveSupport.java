@@ -12,6 +12,7 @@ import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry;
 import org.apache.commons.compress.archivers.sevenz.SevenZFile;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.utils.MultiReadOnlySeekableByteChannel;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
@@ -20,6 +21,7 @@ import org.apache.commons.compress.compressors.xz.XZCompressorInputStream;
 import org.apache.commons.compress.compressors.z.ZCompressorInputStream;
 
 import com.textview.reader.util.FileOperationProgress;
+import com.textview.reader.util.FileTreeProgressTracker;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -513,7 +515,8 @@ public final class ArchiveSupport {
         }
 
         try {
-            long estimatedPayloadBytes = estimateArchivePayloadBytes(archive, password);
+            List<EntryInfo> extractionEntries = listEntries(archive, password);
+            long estimatedPayloadBytes = estimatePayloadBytesFromEntries(extractionEntries);
             if (estimatedPayloadBytes > MAX_EXTRACTION_TOTAL_BYTES) {
                 return ExtractionResult.failed(ExtractionFailure.UNSUPPORTED_FEATURE,
                         "Archive expands beyond the extraction safety limit");
@@ -527,7 +530,8 @@ public final class ArchiveSupport {
 
             if (workDir.exists()) return ExtractionResult.failed(ExtractionFailure.FAILED, null);
             if (!workDir.mkdirs()) return ExtractionResult.failed(ExtractionFailure.FAILED, null);
-            boolean ok = extractArchiveIntoDirectory(archive, workDir, password, progress);
+            ArchiveExtractionProgressTracker entryProgress = ArchiveExtractionProgressTracker.create(progress, extractionEntries);
+            boolean ok = extractArchiveIntoDirectory(archive, workDir, password, progress, entryProgress);
             if (!ok) {
                 deleteFileSystemItem(workDir);
                 return ExtractionResult.failed(ExtractionFailure.FAILED, null);
@@ -638,7 +642,11 @@ public final class ArchiveSupport {
             total = addMeasuredBytes(total, measureSourceBytes(source));
             if (total == Long.MAX_VALUE) break;
         }
-        if (progress != null) progress.setTotalBytes(total);
+        FileTreeProgressTracker treeProgress = null;
+        if (progress != null) {
+            progress.setTotalBytes(total);
+            treeProgress = FileTreeProgressTracker.create(progress, sources);
+        }
 
         boolean ok = false;
         Set<String> usedNames = new HashSet<>();
@@ -648,7 +656,7 @@ public final class ArchiveSupport {
                 if (source == null || !source.exists() || !source.canRead()) return false;
                 if (isSameFile(source, outFile)) return false;
                 if (progress != null && !progress.checkpoint()) return false;
-                addSourceToZip(zip, source, source.getName(), usedNames, buffer, progress);
+                addSourceToZip(zip, source, source.getName(), usedNames, buffer, progress, treeProgress);
             }
             ok = true;
             return true;
@@ -664,33 +672,34 @@ public final class ArchiveSupport {
     private static boolean extractArchiveIntoDirectory(@NonNull File archive,
                                                        @NonNull File targetDir,
                                                        @Nullable char[] password,
-                                                       @Nullable FileOperationProgress progress) throws IOException {
+                                                       @Nullable FileOperationProgress progress,
+                                                       @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
         try (PreparedArchive prepared = prepareArchiveForRead(archive)) {
             if (progress != null) progress.setDetail(archive.getName());
             switch (prepared.type) {
                 case ZIP:
-                    return extractZipIntoDirectory(prepared.file, targetDir, password, progress);
+                    return extractZipIntoDirectory(prepared.file, targetDir, password, progress, entryProgress);
                 case SEVEN_Z:
-                    return extractSevenZIntoDirectory(prepared.file, targetDir, password, progress);
+                    return extractSevenZIntoDirectory(prepared.file, targetDir, password, progress, entryProgress);
                 case RAR:
-                    return extractRarIntoDirectory(prepared.file, targetDir, password, progress);
+                    return extractRarIntoDirectory(prepared.file, targetDir, password, progress, entryProgress);
                 case ALZ:
-                    return AlzipArchiveReader.extractArchiveIntoDirectory(prepared.file, targetDir, password, progress);
+                    return AlzipArchiveReader.extractArchiveIntoDirectory(prepared.file, targetDir, password, progress, entryProgress);
                 case EGG:
-                    return EggArchiveReader.extractArchiveIntoDirectory(prepared.file, targetDir, password, progress);
+                    return EggArchiveReader.extractArchiveIntoDirectory(prepared.file, targetDir, password, progress, entryProgress);
                 case TAR:
                 case TAR_GZ:
                 case TAR_BZ2:
                 case TAR_XZ:
                 case TAR_LZMA:
                 case TAR_Z:
-                    return extractTarIntoDirectory(prepared.file, targetDir, prepared.type, progress);
+                    return extractTarIntoDirectory(prepared.file, targetDir, prepared.type, progress, entryProgress);
                 case SINGLE_GZ:
                 case SINGLE_BZ2:
                 case SINGLE_XZ:
                 case SINGLE_LZMA:
                 case SINGLE_Z:
-                    return extractSingleCompressedIntoDirectory(prepared.file, archive, targetDir, prepared.type, progress);
+                    return extractSingleCompressedIntoDirectory(prepared.file, archive, targetDir, prepared.type, progress, entryProgress);
                 default:
                     return false;
             }
@@ -722,10 +731,12 @@ public final class ArchiveSupport {
                                        @NonNull String entryName,
                                        @NonNull Set<String> usedNames,
                                        @NonNull byte[] buffer,
-                                       @Nullable FileOperationProgress progress) throws IOException {
+                                       @Nullable FileOperationProgress progress,
+                                       @Nullable FileTreeProgressTracker treeProgress) throws IOException {
         String safeEntryName = sanitizeZipEntryName(entryName, source.isDirectory());
         if (safeEntryName == null) return;
         if (source.isDirectory()) {
+            if (treeProgress != null) treeProgress.onDirectory(source);
             String dirName = safeEntryName.endsWith("/") ? safeEntryName : safeEntryName + "/";
             if (usedNames.add(dirName)) {
                 ZipEntry dirEntry = new ZipEntry(dirName);
@@ -737,13 +748,14 @@ public final class ArchiveSupport {
             if (children == null || children.length == 0) return;
             for (File child : children) {
                 if (progress != null && !progress.checkpoint()) throw new IOException("Archive creation cancelled");
-                addSourceToZip(zip, child, dirName + child.getName(), usedNames, buffer, progress);
+                addSourceToZip(zip, child, dirName + child.getName(), usedNames, buffer, progress, treeProgress);
             }
             return;
         }
         if (!source.isFile()) return;
         if (!usedNames.add(safeEntryName)) return;
-        if (progress != null) progress.setDetail(source.getName());
+        if (treeProgress != null) treeProgress.onFile(source);
+        else if (progress != null) progress.setDetail(source.getName());
         ZipEntry entry = new ZipEntry(safeEntryName);
         entry.setTime(Math.max(0L, source.lastModified()));
         zip.putNextEntry(entry);
@@ -1008,10 +1020,12 @@ public final class ArchiveSupport {
                                                                 @NonNull File nameSourceArchive,
                                                                 @NonNull File targetDir,
                                                                 @NonNull Type type,
-                                                                @Nullable FileOperationProgress progress) throws IOException {
+                                                                @Nullable FileOperationProgress progress,
+                                                                @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
         File out = new File(targetDir, getSingleCompressedOutputName(nameSourceArchive));
         if (!isSameOrDescendant(targetDir, out)) return false;
-        if (progress != null) progress.setDetail(out.getName());
+        if (entryProgress != null) entryProgress.onFile(out.getName());
+        else if (progress != null) progress.setDetail(out.getName());
         try (InputStream fileIn = new BufferedInputStream(new FileInputStream(payloadArchive));
              InputStream payloadIn = wrapSingleCompressedInputStream(fileIn, type)) {
             return writeArchiveEntryStream(payloadIn, out, progress);
@@ -1034,7 +1048,8 @@ public final class ArchiveSupport {
     private static boolean extractZipIntoDirectory(@NonNull File archive,
                                                    @NonNull File targetDir,
                                                    @Nullable char[] password,
-                                                   @Nullable FileOperationProgress progress) throws IOException {
+                                                   @Nullable FileOperationProgress progress,
+                                                   @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
         try {
             ZipFile zip = new ZipFile(archive);
             if (zip.isEncrypted()) {
@@ -1052,10 +1067,12 @@ public final class ArchiveSupport {
                 if (out == null) return false;
                 sawEntry = true;
                 if (header.isDirectory() || header.getFileName().replace('\\', '/').endsWith("/")) {
+                    if (entryProgress != null) entryProgress.onDirectory(header.getFileName());
                     if (!out.exists() && !out.mkdirs()) return false;
                     continue;
                 }
-                if (progress != null) progress.setDetail(header.getFileName());
+                if (entryProgress != null) entryProgress.onFile(header.getFileName());
+                else if (progress != null) progress.setDetail(header.getFileName());
                 File outParent = out.getParentFile();
                 if (outParent == null) return false;
                 if (!outParent.exists() && !outParent.mkdirs()) return false;
@@ -1065,8 +1082,86 @@ public final class ArchiveSupport {
             }
             return sawEntry;
         } catch (ZipException e) {
+            // zip4j supports store/deflate (+ AES). For unencrypted archives that
+            // use a method it lacks (notably deflate64 from Windows Explorer on
+            // 2GB+ zips, or bzip2), fall back to commons-compress, which decodes a
+            // wider set. AES-encrypted entries cannot use this path (commons-compress
+            // ZipFile has no AES), so only attempt it when no password is involved.
+            if (isUnknownZipCompression(e) && (password == null || password.length == 0)
+                    && !hasZipEncryptedHeaderSignature(archive)) {
+                return extractZipWithCommonsCompress(archive, targetDir, null, progress, entryProgress);
+            }
             throw new IOException(e);
         }
+    }
+
+    /**
+     * Fallback extraction using commons-compress, which understands ZIP-internal
+     * compression methods that zip4j does not. With the bundled Commons Compress
+     * and bundled codec dependencies, this covers non-encrypted Deflate64, BZip2,
+     * XZ, and ZSTD entries. Methods or codec combinations that the bundled runtime
+     * cannot decode, such as AES-encrypted entries or LZMA/PPMd, still surface as
+     * unsupported-feature failures.
+     * Only valid for non-encrypted archives.
+     */
+    private static boolean extractZipWithCommonsCompress(@NonNull File archive,
+                                                         @NonNull File targetDir,
+                                                         @Nullable String onlyEntryPath,
+                                                         @Nullable FileOperationProgress progress,
+                                                         @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
+        boolean sawEntry = false;
+        boolean extractedAny = false;
+        try (org.apache.commons.compress.archivers.zip.ZipFile zip =
+                     org.apache.commons.compress.archivers.zip.ZipFile.builder()
+                             .setFile(archive)
+                             .get()) {
+            java.util.Enumeration<ZipArchiveEntry> entries = zip.getEntries();
+            while (entries.hasMoreElements()) {
+                ZipArchiveEntry entry = entries.nextElement();
+                if (entry == null) continue;
+                String path = sanitizeEntryPathForList(entry.getName());
+                if (path == null) continue;
+                if (onlyEntryPath != null && !onlyEntryPath.equals(path)) continue;
+
+                File out = resolveArchiveEntryOutput(targetDir, entry.getName());
+                if (out == null) {
+                    if (onlyEntryPath != null) return false;
+                    continue;
+                }
+                sawEntry = true;
+                if (entry.isDirectory() || entry.getName().replace('\\', '/').endsWith("/")) {
+                    if (entryProgress != null) entryProgress.onDirectory(entry.getName());
+                    if (!out.exists() && !out.mkdirs()) return false;
+                    continue;
+                }
+                if (!zip.canReadEntryData(entry)) {
+                    // The bundled extraction paths cannot decode this method or
+                    // method/codec combination. Non-encrypted XZ is handled when
+                    // XZ for Java is present; AES and some legacy/optional codecs
+                    // still fail cleanly here.
+                    throw new UnsupportedArchiveFeatureException(
+                            "ZIP entry uses an unsupported compression method");
+                }
+                File outParent = out.getParentFile();
+                if (outParent == null) return false;
+                if (!outParent.exists() && !outParent.mkdirs()) return false;
+                if (entryProgress != null) entryProgress.onFile(entry.getName());
+                else if (progress != null) progress.setDetail(entry.getName());
+                try (InputStream in = zip.getInputStream(entry)) {
+                    if (!writeArchiveEntryStream(in, out, progress)) return false;
+                } catch (LinkageError missingCodec) {
+                    // Keep a defensive guard for optional/native codec linkage failures.
+                    // ZSTD is normally available because zstd-jni is bundled, but this
+                    // keeps extraction from crashing if an ABI-specific native load fails.
+                    throw new UnsupportedArchiveFeatureException(
+                            "ZIP entry uses a compression codec that is not available");
+                }
+                extractedAny = true;
+                if (onlyEntryPath != null) return true;
+            }
+        }
+        if (onlyEntryPath != null) return extractedAny;
+        return sawEntry;
     }
 
     private static boolean extractSingleZipEntry(@NonNull File archive,
@@ -1091,14 +1186,47 @@ public final class ArchiveSupport {
             }
             return false;
         } catch (ZipException e) {
+            if (isUnknownZipCompression(e) && (password == null || password.length == 0)
+                    && !hasZipEncryptedHeaderSignature(archive)) {
+                return extractSingleZipEntryWithCommonsCompress(archive, entryPath, outFile);
+            }
             throw new IOException(e);
+        }
+    }
+
+    private static boolean extractSingleZipEntryWithCommonsCompress(@NonNull File archive,
+                                                                    @NonNull String entryPath,
+                                                                    @NonNull File outFile) throws IOException {
+        try (org.apache.commons.compress.archivers.zip.ZipFile zip =
+                     org.apache.commons.compress.archivers.zip.ZipFile.builder()
+                             .setFile(archive)
+                             .get()) {
+            java.util.Enumeration<ZipArchiveEntry> entries = zip.getEntries();
+            while (entries.hasMoreElements()) {
+                ZipArchiveEntry entry = entries.nextElement();
+                if (entry == null || entry.isDirectory()) continue;
+                String path = sanitizeEntryPathForList(entry.getName());
+                if (!entryPath.equals(path)) continue;
+                if (!zip.canReadEntryData(entry)) {
+                    throw new UnsupportedArchiveFeatureException(
+                            "ZIP entry uses an unsupported compression method");
+                }
+                try (InputStream in = zip.getInputStream(entry)) {
+                    return writeArchiveEntryStream(in, outFile);
+                } catch (LinkageError missingCodec) {
+                    throw new UnsupportedArchiveFeatureException(
+                            "ZIP entry uses a compression codec that is not available");
+                }
+            }
+            return false;
         }
     }
 
     private static boolean extractTarIntoDirectory(@NonNull File archive,
                                                    @NonNull File targetDir,
                                                    @NonNull Type type,
-                                                   @Nullable FileOperationProgress progress) throws IOException {
+                                                   @Nullable FileOperationProgress progress,
+                                                   @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
         boolean sawEntry = false;
         try (InputStream fileIn = new BufferedInputStream(new FileInputStream(archive));
              InputStream payloadIn = wrapTarPayloadInputStream(fileIn, type);
@@ -1115,10 +1243,12 @@ public final class ArchiveSupport {
                 if (out == null) return false;
                 sawEntry = true;
                 if (entry.isDirectory() || entry.getName().replace('\\', '/').endsWith("/")) {
+                    if (entryProgress != null) entryProgress.onDirectory(entry.getName());
                     if (!out.exists() && !out.mkdirs()) return false;
                     continue;
                 }
-                if (progress != null) progress.setDetail(entry.getName());
+                if (entryProgress != null) entryProgress.onFile(entry.getName());
+                else if (progress != null) progress.setDetail(entry.getName());
                 if (!writeArchiveEntryStream(tar, out, progress)) return false;
             }
             return sawEntry;
@@ -1151,7 +1281,8 @@ public final class ArchiveSupport {
     private static boolean extractSevenZIntoDirectory(@NonNull File archive,
                                                       @NonNull File targetDir,
                                                       @Nullable char[] password,
-                                                      @Nullable FileOperationProgress progress) throws IOException {
+                                                      @Nullable FileOperationProgress progress,
+                                                      @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
         byte[] buffer = new byte[1024 * 64];
         boolean sawEntry = false;
         try (SevenZFile sevenZ = openSevenZFile(archive, password)) {
@@ -1162,10 +1293,12 @@ public final class ArchiveSupport {
                 if (out == null) return false;
                 sawEntry = true;
                 if (entry.isDirectory() || entry.getName().replace('\\', '/').endsWith("/")) {
+                    if (entryProgress != null) entryProgress.onDirectory(entry.getName());
                     if (!out.exists() && !out.mkdirs()) return false;
                     continue;
                 }
-                if (progress != null) progress.setDetail(entry.getName());
+                if (entryProgress != null) entryProgress.onFile(entry.getName());
+                else if (progress != null) progress.setDetail(entry.getName());
                 File outParent = out.getParentFile();
                 if (outParent == null) return false;
                 if (!outParent.exists() && !outParent.mkdirs()) return false;
@@ -1217,8 +1350,9 @@ public final class ArchiveSupport {
     private static boolean extractRarIntoDirectory(@NonNull File archive,
                                                    @NonNull File targetDir,
                                                    @Nullable char[] password,
-                                                   @Nullable FileOperationProgress progress) throws IOException {
-        return RarArchiveReader.extractArchiveIntoDirectory(archive, targetDir, password, progress);
+                                                   @Nullable FileOperationProgress progress,
+                                                   @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
+        return RarArchiveReader.extractArchiveIntoDirectory(archive, targetDir, password, progress, entryProgress);
     }
 
     private static boolean extractSingleRarEntry(@NonNull File archive,
@@ -1408,11 +1542,9 @@ public final class ArchiveSupport {
         return new ArrayList<>(map.values());
     }
 
-    private static long estimateArchivePayloadBytes(@NonNull File archive,
-                                                    @Nullable char[] password) throws IOException {
+    private static long estimatePayloadBytesFromEntries(@NonNull List<EntryInfo> entries) {
         long total = 0L;
         boolean unknown = false;
-        List<EntryInfo> entries = listEntries(archive, password);
         for (EntryInfo entry : entries) {
             if (entry == null || entry.directory) continue;
             if (entry.size < 0L) {

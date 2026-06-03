@@ -193,7 +193,7 @@ final class MainPendingActionDropdownController {
             for (MainPendingArchiveCreation task : new ArrayList<>(activity.pendingArchiveCreations)) {
                 hasAny = true;
                 String name = task != null ? task.displayName() : "";
-                String path = task != null ? task.destination.getAbsolutePath() : "";
+                String path = activity.getString(R.string.pending_create_destination_hint);
                 int count = task != null ? task.sources.size() : 0;
                 addPendingActionDropdownRow(rowsContainer, activity.getString(R.string.pending_create_action, count, name), path,
                         style.fg, style.sub, style.danger, style.rowPanel,

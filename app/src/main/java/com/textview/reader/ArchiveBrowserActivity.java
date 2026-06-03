@@ -45,16 +45,13 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.textview.reader.archive.ArchiveSupport;
 import com.textview.reader.model.ReaderState;
 import com.textview.reader.util.BookmarkManager;
-import com.textview.reader.util.FileSortUtils;
 import com.textview.reader.util.FileUtils;
 import com.textview.reader.util.PrefsManager;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -96,14 +93,14 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
     private final Runnable archiveFilterSnapRunnable = this::snapArchiveFilterToSlot;
     private String archiveSearchQuery = "";
     private int activeArchiveFilter = FILTER_ALL;
-    private static final int FILTER_ALL = 0;
-    private static final int FILTER_GENERAL = 1;
-    private static final int FILTER_TXT = 2;
-    private static final int FILTER_ARCHIVE = 3;
-    private static final int FILTER_PDF = 4;
-    private static final int FILTER_EPUB = 5;
-    private static final int FILTER_WORD = 6;
-    private static final int FILTER_IMAGE = 7;
+    private static final int FILTER_ALL = ArchiveEntryListController.FILTER_ALL;
+    private static final int FILTER_GENERAL = ArchiveEntryListController.FILTER_GENERAL;
+    private static final int FILTER_TXT = ArchiveEntryListController.FILTER_TXT;
+    private static final int FILTER_ARCHIVE = ArchiveEntryListController.FILTER_ARCHIVE;
+    private static final int FILTER_PDF = ArchiveEntryListController.FILTER_PDF;
+    private static final int FILTER_EPUB = ArchiveEntryListController.FILTER_EPUB;
+    private static final int FILTER_WORD = ArchiveEntryListController.FILTER_WORD;
+    private static final int FILTER_IMAGE = ArchiveEntryListController.FILTER_IMAGE;
     private boolean destroyed = false;
     private Dialog imagePreviewLoadingDialog;
 
@@ -471,47 +468,7 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
 
     @NonNull
     private List<ArchiveSupport.EntryInfo> filterArchiveEntries(@NonNull List<ArchiveSupport.EntryInfo> source) {
-        if ((archiveSearchQuery == null || archiveSearchQuery.length() == 0) && activeArchiveFilter == FILTER_ALL) {
-            List<ArchiveSupport.EntryInfo> result = new ArrayList<>(source);
-            sortArchiveEntries(result, archiveSortMode);
-            return result;
-        }
-        List<ArchiveSupport.EntryInfo> result = new ArrayList<>();
-        String query = archiveSearchQuery == null ? "" : archiveSearchQuery;
-        for (ArchiveSupport.EntryInfo entry : source) {
-            String name = entry.name();
-            boolean nameMatch = query.length() == 0 || name.toLowerCase(Locale.ROOT).contains(query);
-            if (!nameMatch) continue;
-            if (entry.directory) {
-                result.add(entry);
-            } else if (matchesArchiveFilter(name, activeArchiveFilter)) {
-                result.add(entry);
-            }
-        }
-        sortArchiveEntries(result, archiveSortMode);
-        return result;
-    }
-
-    private boolean matchesArchiveFilter(@NonNull String name, int filter) {
-        switch (filter) {
-            case FILTER_GENERAL:
-                return FileUtils.isGeneralTextFile(name);
-            case FILTER_TXT:
-                return FileUtils.isTxtFile(name);
-            case FILTER_ARCHIVE:
-                return ArchiveSupport.isSupportedArchiveFileName(name);
-            case FILTER_PDF:
-                return FileUtils.isPdfFile(name);
-            case FILTER_EPUB:
-                return FileUtils.isEpubFile(name);
-            case FILTER_WORD:
-                return FileUtils.isWordFile(name);
-            case FILTER_IMAGE:
-                return FileUtils.isImageFile(name);
-            case FILTER_ALL:
-            default:
-                return true;
-        }
+        return ArchiveEntryListController.filter(source, archiveSearchQuery, activeArchiveFilter, archiveSortMode);
     }
 
     private void loadArchiveEntries(@Nullable char[] password) {
@@ -567,30 +524,11 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
 
     @NonNull
     private List<ArchiveSupport.EntryInfo> buildDirectChildren(@NonNull String prefix) {
-        Map<String, ArchiveSupport.EntryInfo> children = new LinkedHashMap<>();
-        for (ArchiveSupport.EntryInfo entry : allEntries) {
-            String path = entry.path;
-            if (!path.startsWith(prefix)) continue;
-            String rest = path.substring(prefix.length());
-            if (rest.length() == 0) continue;
-            int slash = rest.indexOf('/');
-            if (slash >= 0) {
-                String dirName = rest.substring(0, slash + 1);
-                String childPath = prefix + dirName;
-                if (!children.containsKey(childPath)) {
-                    children.put(childPath, new ArchiveSupport.EntryInfo(childPath, true, -1L, 0L));
-                }
-            } else {
-                children.put(path, entry);
-            }
-        }
-        List<ArchiveSupport.EntryInfo> result = new ArrayList<>(children.values());
-        sortArchiveEntries(result, archiveSortMode);
-        return result;
+        return ArchiveEntryListController.directChildren(allEntries, prefix, archiveSortMode);
     }
 
     private void sortArchiveEntries(@NonNull List<ArchiveSupport.EntryInfo> target, int sortMode) {
-        FileSortUtils.sortArchiveEntries(target, sortMode);
+        ArchiveEntryListController.sort(target, sortMode);
     }
 
     private void showArchiveSortDialog() {
@@ -730,7 +668,7 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
 
     @NonNull
     private File buildPreviewOutputFile(@NonNull ArchiveSupport.EntryInfo entry) {
-        return ArchivePreviewCache.outputFileForEntry(this, archiveFile, entry.path);
+        return ArchiveImageSequenceLoader.outputFileForEntry(this, archiveFile, entry);
     }
 
     private void extractImageSiblingEntriesAndOpen(@NonNull ArchiveSupport.EntryInfo selectedEntry) {
@@ -802,81 +740,16 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
                                               int targetIndex,
                                               boolean finishAfterOpen) {
         executor.execute(() -> {
-            ArrayList<String> imagePaths = new ArrayList<>();
-            ArrayList<String> displayNames = new ArrayList<>();
-            ArrayList<String> entryPaths = new ArrayList<>();
-            for (ArchiveSupport.EntryInfo imageEntry : sequence) {
-                File outFile = buildPreviewOutputFile(imageEntry);
-                imagePaths.add(outFile.getAbsolutePath());
-                displayNames.add(imageEntry.name());
-                entryPaths.add(imageEntry.path);
-            }
-
-            boolean selectedReady = false;
-            ArchiveSupport.ExtractionResult selectedResult = null;
-            if (targetIndex >= 0 && targetIndex < sequence.size()) {
-                ArchiveSupport.EntryInfo targetEntry = sequence.get(targetIndex);
-                File targetFile = buildPreviewOutputFile(targetEntry);
-                if (targetFile.exists() && targetFile.isFile() && targetFile.length() > 0L) {
-                    selectedReady = true;
-                    selectedResult = ArchiveSupport.ExtractionResult.success();
-                } else {
-                    selectedResult = ArchiveSupport.extractSingleEntryDetailed(
-                            archiveFile,
-                            targetEntry.path,
-                            targetFile,
-                            null);
-                    selectedReady = selectedResult.success;
-                }
-            }
-
-            int openIndex = targetIndex;
-            if (!selectedReady && selectedResult != null
-                    && selectedResult.failure == ArchiveSupport.ExtractionFailure.UNSUPPORTED_FEATURE) {
-                for (int i = 0; i < sequence.size(); i++) {
-                    if (i == targetIndex) continue;
-                    ArchiveSupport.EntryInfo imageEntry = sequence.get(i);
-                    File outFile = buildPreviewOutputFile(imageEntry);
-                    if (outFile.exists() && outFile.isFile() && outFile.length() > 0L) {
-                        selectedReady = true;
-                        openIndex = i;
-                        break;
-                    }
-                    ArchiveSupport.ExtractionResult fallbackResult = ArchiveSupport.extractSingleEntryDetailed(
-                            archiveFile,
-                            imageEntry.path,
-                            outFile,
-                            null);
-                    if (fallbackResult.success && outFile.exists() && outFile.isFile() && outFile.length() > 0L) {
-                        selectedReady = true;
-                        openIndex = i;
-                        break;
-                    }
-                }
-            }
-
-            final ArrayList<String> resultPaths = imagePaths;
-            final ArrayList<String> resultNames = displayNames;
-            final ArrayList<String> resultEntryPaths = entryPaths;
-            final boolean currentOk = selectedReady;
-            final ArchiveSupport.ExtractionResult currentResult = selectedResult;
-            final int resultIndex = openIndex;
-            mainHandler.post(() -> {
-                if (destroyed) return;
-                hideImagePreviewLoadingWindow();
-                if (!currentOk || resultPaths.isEmpty()) {
-                    if (shouldAskArchivePassword(currentResult)) {
-                        showPasswordDialog(passwordText -> {
-                            archivePassword = passwordText.toCharArray();
-                            openArchiveImageSequence(selectedEntry, useSavedPosition);
-                        });
-                    } else {
-                        showArchiveEntryExtractionFailure(currentResult);
-                    }
-                    return;
-                }
-                openExtractedImageFiles(resultPaths, resultNames, resultEntryPaths, resultIndex, finishAfterOpen);
-            });
+            ArchiveImageSequenceLoader.Result result = ArchiveImageSequenceLoader.loadLazy(
+                    this,
+                    archiveFile,
+                    sequence,
+                    targetIndex);
+            mainHandler.post(() -> handleArchiveImageSequenceResult(
+                    selectedEntry,
+                    useSavedPosition,
+                    result,
+                    finishAfterOpen));
         });
     }
 
@@ -886,68 +759,43 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
                                                         int targetIndex,
                                                         boolean finishAfterOpen) {
         executor.execute(() -> {
-            ArrayList<String> imagePaths = new ArrayList<>();
-            ArrayList<String> displayNames = new ArrayList<>();
-            ArrayList<String> entryPaths = new ArrayList<>();
-            int extractedSelectedIndex = 0;
-            boolean selectedExtracted = false;
-            ArchiveSupport.ExtractionResult selectedResult = null;
-            for (int i = 0; i < sequence.size(); i++) {
-                ArchiveSupport.EntryInfo imageEntry = sequence.get(i);
-                File outFile = buildPreviewOutputFile(imageEntry);
-                boolean ok;
-                ArchiveSupport.ExtractionResult result;
-                if (outFile.exists() && outFile.isFile() && outFile.length() > 0L) {
-                    ok = true;
-                    result = ArchiveSupport.ExtractionResult.success();
-                } else {
-                    result = ArchiveSupport.extractSingleEntryDetailed(
-                            archiveFile,
-                            imageEntry.path,
-                            outFile,
-                            archivePassword);
-                    ok = result.success;
-                }
-                if (ok && outFile.exists()) {
-                    if (i == targetIndex) {
-                        extractedSelectedIndex = imagePaths.size();
-                        selectedExtracted = true;
-                    }
-                    imagePaths.add(outFile.getAbsolutePath());
-                    displayNames.add(imageEntry.name());
-                    entryPaths.add(imageEntry.path);
-                } else if (i == targetIndex) {
-                    selectedResult = result;
-                }
-            }
-            if (!selectedExtracted && !imagePaths.isEmpty() && selectedResult != null
-                    && selectedResult.failure == ArchiveSupport.ExtractionFailure.UNSUPPORTED_FEATURE) {
-                extractedSelectedIndex = 0;
-                selectedExtracted = true;
-            }
-            final ArrayList<String> resultPaths = imagePaths;
-            final ArrayList<String> resultNames = displayNames;
-            final ArrayList<String> resultEntryPaths = entryPaths;
-            final int resultIndex = extractedSelectedIndex;
-            final boolean currentOk = selectedExtracted;
-            final ArchiveSupport.ExtractionResult currentResult = selectedResult;
-            mainHandler.post(() -> {
-                if (destroyed) return;
-                hideImagePreviewLoadingWindow();
-                if (!currentOk || resultPaths.isEmpty()) {
-                    if (shouldAskArchivePassword(currentResult)) {
-                        showPasswordDialog(passwordText -> {
-                            archivePassword = passwordText.toCharArray();
-                            openArchiveImageSequence(selectedEntry, useSavedPosition);
-                        });
-                    } else {
-                        showArchiveEntryExtractionFailure(currentResult);
-                    }
-                    return;
-                }
-                openExtractedImageFiles(resultPaths, resultNames, resultEntryPaths, resultIndex, finishAfterOpen);
-            });
+            ArchiveImageSequenceLoader.Result result = ArchiveImageSequenceLoader.loadFully(
+                    this,
+                    archiveFile,
+                    sequence,
+                    targetIndex,
+                    archivePassword);
+            mainHandler.post(() -> handleArchiveImageSequenceResult(
+                    selectedEntry,
+                    useSavedPosition,
+                    result,
+                    finishAfterOpen));
         });
+    }
+
+    private void handleArchiveImageSequenceResult(@Nullable ArchiveSupport.EntryInfo selectedEntry,
+                                                  boolean useSavedPosition,
+                                                  @NonNull ArchiveImageSequenceLoader.Result result,
+                                                  boolean finishAfterOpen) {
+        if (destroyed) return;
+        hideImagePreviewLoadingWindow();
+        if (!result.selectedReady || result.imagePaths.isEmpty()) {
+            if (shouldAskArchivePassword(result.extractionResult)) {
+                showPasswordDialog(passwordText -> {
+                    archivePassword = passwordText.toCharArray();
+                    openArchiveImageSequence(selectedEntry, useSavedPosition);
+                });
+            } else {
+                showArchiveEntryExtractionFailure(result.extractionResult);
+            }
+            return;
+        }
+        openExtractedImageFiles(
+                result.imagePaths,
+                result.displayNames,
+                result.entryPaths,
+                result.selectedIndex,
+                finishAfterOpen);
     }
 
     private boolean shouldAskArchivePassword(@Nullable ArchiveSupport.ExtractionResult result) {
@@ -964,24 +812,11 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
 
     @NonNull
     private List<ArchiveSupport.EntryInfo> collectImageEntriesForSequence(@Nullable ArchiveSupport.EntryInfo selectedEntry) {
-        String prefix = currentPrefix == null ? "" : currentPrefix;
-        if (selectedEntry != null && !selectedEntry.path.startsWith(prefix)) {
-            prefix = parentPrefixOf(selectedEntry.path);
-        }
-        List<ArchiveSupport.EntryInfo> result = new ArrayList<>();
-        for (ArchiveSupport.EntryInfo entry : allEntries) {
-            if (entry == null || entry.directory || !FileUtils.isImageFile(entry.name())) continue;
-            if (entry.path.startsWith(prefix)) result.add(entry);
-        }
-        if (result.isEmpty() && selectedEntry != null) result.add(selectedEntry);
-        sortArchiveEntries(result, archiveSortMode);
-        return result;
-    }
-
-    @NonNull
-    private String parentPrefixOf(@NonNull String path) {
-        int slash = path.lastIndexOf('/');
-        return slash >= 0 ? path.substring(0, slash + 1) : "";
+        return ArchiveEntryListController.collectImageSequence(
+                allEntries,
+                currentPrefix == null ? "" : currentPrefix,
+                selectedEntry,
+                archiveSortMode);
     }
 
     private void openExtractedImageFiles(@NonNull ArrayList<String> imagePaths,

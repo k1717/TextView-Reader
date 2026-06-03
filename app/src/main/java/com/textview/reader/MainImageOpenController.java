@@ -142,7 +142,7 @@ final class MainImageOpenController {
         }, 90L);
     }
 
-    private void showImageOpenLoadingWindow() {
+    void showImageOpenLoadingWindow() {
         hideImageOpenLoadingWindow();
         final boolean dark = activity.prefs == null || activity.prefs.shouldUseDarkColors(activity);
         final int bg = activity.prefs != null ? activity.prefs.getMainBgColor(activity) : (dark ? Color.rgb(33, 33, 33) : Color.WHITE);

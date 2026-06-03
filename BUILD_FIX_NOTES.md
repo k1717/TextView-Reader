@@ -24,6 +24,15 @@ This package removes the deprecated AGP compatibility toggles that previously pr
 
 `settings.gradle` applies `org.gradle.toolchains.foojay-resolver-convention` version `1.0.0` so Gradle can resolve Java toolchains during local builds. This is a build-time plugin and is recorded in `THIRD_PARTY_NOTICES.md`.
 
-## 2.2.4 archive/drawer note
+## 2.2.5 archive/browser/progress note
 
-The 2.2.4 source includes archive-support matrix work plus drawer gesture repairs. Build failures in this package should be debugged as normal Java/XML/Gradle errors; drawer behavior changes are implemented in `MainDrawerGestureController` and drawer bottom action routing is in `MainDrawerController`.
+2.2.5 keeps the 2.2.4 archive/drawer baseline and adds the ZIP Commons fallback, direct archive-image opening, folder browse-state preservation, and unified operation-progress windows.
+
+The 2.2.5 source includes archive-support matrix work plus drawer gesture repairs. Build failures in this package should be debugged as normal Java/XML/Gradle errors; drawer behavior changes are implemented in `MainDrawerGestureController`, drawer bottom action routing is in `MainDrawerController`, browse-state caching is in `MainBrowseStateController`, direct archive image routing is in `MainArchiveImageOpenController`, and operation progress UI is in `MainFileOperationProgressController`.
+
+## ZIP Commons fallback and Zstandard note
+
+The ZIP Commons fallback uses `org.apache.commons:commons-compress:1.28.0` for non-encrypted ZIP entries that Zip4j cannot decode. ZSTD ZIP support requires Commons Compress plus `com.github.luben:zstd-jni:1.5.7-9`, which is now bundled, so release minification no longer needs a missing-class suppression for Commons Compress Zstandard classes. Runtime extraction still catches `LinkageError` so ABI-specific native-load failures are reported as unsupported instead of crashing.
+
+Update `THIRD_PARTY_NOTICES.md` whenever changing archive-engine usage descriptions or bundled archive codec dependencies.
+

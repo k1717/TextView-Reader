@@ -410,7 +410,12 @@ final class MainFileActionDialogController {
         infoList.setPadding(0, 0, 0, activity.dpToPx(4));
         addFileInfoRow(infoList, activity.getString(R.string.file_info_name), file.getName(), fg, sub, panel);
         addFileInfoRow(infoList, activity.getString(R.string.file_info_path), file.getAbsolutePath(), fg, sub, panel);
-        addFileInfoRow(infoList, activity.getString(R.string.file_info_size), FileUtils.formatFileSize(file.length()), fg, sub, panel);
+        final TextView sizeValueView = addFileInfoRow(infoList,
+                activity.getString(R.string.file_info_size),
+                file.isDirectory()
+                        ? activity.getString(R.string.file_info_size_calculating)
+                        : FileUtils.formatFileSize(file.length()),
+                fg, sub, panel);
         addFileInfoRow(infoList, activity.getString(R.string.file_info_modified),
                 new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
                         .format(new java.util.Date(file.lastModified())), fg, sub, panel);
@@ -445,10 +450,20 @@ final class MainFileActionDialogController {
         android.app.Dialog dialog = activity.createStableBottomDialog(box, activity.mainFileTypeAlignedDialogYOffsetPx(), 0.22f);
         close.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
+        if (file.isDirectory()) {
+            activity.executeFolderBackgroundTask(() -> {
+                long folderSize = FileSystemOps.measureBytes(file);
+                activity.fileSearchHandler.post(() -> {
+                    if (!activity.activityDestroyed && dialog.isShowing()) {
+                        sizeValueView.setText(FileUtils.formatFileSize(folderSize));
+                    }
+                });
+            });
+        }
     }
 
     @SuppressLint("WrongConstant")
-    private void addFileInfoRow(@NonNull LinearLayout box, @NonNull String label, String value, int fg, int sub, int panelColor) {
+    private TextView addFileInfoRow(@NonNull LinearLayout box, @NonNull String label, String value, int fg, int sub, int panelColor) {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding(activity.dpToPx(14), activity.dpToPx(9), activity.dpToPx(14), activity.dpToPx(10));
@@ -475,6 +490,7 @@ final class MainFileActionDialogController {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.setMargins(0, 0, 0, activity.dpToPx(8));
         box.addView(row, lp);
+        return valueView;
     }
 
     void showNewFolderDialog() {

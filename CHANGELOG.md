@@ -1,3 +1,51 @@
+## 2.2.5 - 2026-06-02
+This package uses Android metadata `versionCode 2250` and `versionName "2.2.5"`.
+
+### Archive handling
+- ZIP extraction now falls back to Apache Commons Compress when Zip4j reports an unknown compression method on a non-encrypted entry. This broadens extraction for ZIP-internal methods Commons Compress can decode with the bundled runtime, notably Deflate64, BZip2, XZ through XZ for Java, and ZSTD through zstd-jni. The fallback covers both whole-archive and single-entry extraction, uses `canReadEntryData()` to detect methods no available library can decode, and guards against native codec linkage failures, so unsupported entries surface as clean unsupported-feature results instead of crashing.
+- Encrypted ZIP entries continue to use Zip4j. AES entries combined with non-Zip4j methods such as AES+XZ remain unsupported because no single bundled path provides both AES handling and that codec.
+- Bundled `com.github.luben:zstd-jni:1.5.7-9` so Commons Compress Zstandard support is available in release builds without a missing-class suppression and non-encrypted ZSTD ZIP fallback can be attempted.
+- Clarified archive validation boundaries for TAR-family formats, single-compressor streams, ALZ, and EGG. ALZ unsupported paths now say `Unsupported ALZ feature or archive variant` instead of the old `decoding is not available yet` wording.
+- Fixed pending ZIP creation so the destination is resolved from the folder where the pending action is executed, not from the original source folder.
+
+### Direct archive image opening
+- Added a direct main-list archive-image handoff path for comic/image archives. The app can prepare the archive image sequence in the background and open `ImageReaderActivity` directly, avoiding the visible intermediate archive-preview flash.
+- Kept the existing archive preview as the fallback for archives without readable images, archives that require password/unsupported handling, or explicit archive-preview navigation.
+
+### Main file-list touch and browse state
+- Reduced the main file/folder action short-hold delay from the platform long-press timeout, usually about 500 ms, to 200 ms. This only affects the regular main-list file/folder action popup; the separate multi-select hold path now enters after 800 ms.
+- Preserved the current folder list state when returning from an internal viewer, avoiding the previous full folder reload/flicker when the user simply opens a file and comes back. The preservation uses a direct-child folder signature, so the folder still reloads if any file is added, deleted, renamed, moved, or modified while the viewer is open.
+- Added an in-memory browse-state cache for already fully loaded folders. When the user goes into a subfolder and then returns to the previous folder, the app restores the previous adapter list and RecyclerView scroll state instead of reloading, as long as the folder signature, sort mode, and hidden-file setting are unchanged.
+- Re-enabled bidirectional folder-state reuse for already loaded folders. A -> B -> A and A -> B -> A -> B navigation can restore cached adapter lists and RecyclerView scroll state when folder signature, sort mode, and hidden-file setting still match.
+- Improved drawer shortcut folder navigation responsiveness: shortcut taps now save the outgoing folder snapshot without a synchronous directory rescan, restore cached target folders optimistically, validate the folder signature in the background, and publish the first uncached folder-load snapshot earlier.
+- Preserved the visible browse folder across ordinary Activity resumes such as screen off/on or Home/app-switcher returns. The folder is not rescanned when unchanged, but still reloads if files are added, deleted, renamed, moved, or modified while away.
+- Kept cache restoration when clearing a current-folder type filter back to **All**, so `General` / `Archive` / other filter views can return to the full folder list without a rescan when the folder did not change.
+- Added a small right-side inset for long main-list file/folder names so ellipsized text no longer presses directly against the row edge or the reading-progress badge area.
+
+### File-operation progress
+- Fixed multi-select delete progress re-entry after pause/background: delete now exits multi-select mode as soon as the user confirms, because the worker already uses a stable selected-file snapshot. This keeps the normal toolbar active so the background operation-progress button is immediately available.
+- Refreshed the main toolbar progress/pending visibility on `MainActivity.onResume()` so paused/backgrounded operations re-expose their progress entry without requiring folder navigation.
+- Unified extraction, copy, move/cut, delete, and ZIP creation progress windows around the delete-style interface. File and folder names are separated from fixed right-side `(current/total)` count columns, reducing horizontal jitter when names or counts update.
+- File counts now use the relevant recursive regular-file total for the active operation. Archive extraction uses the current archive's regular-file total, while copy/move/delete/ZIP creation use recursive file totals for the selected workload.
+- Folder counts now stay visible for extraction, copy, and move/cut and use the relevant recursive folder/top-level workload total instead of falling back to `(1/1)` during multi-selection.
+- Progress rows reserve their height before the first update, so the operation popup no longer grows vertically as file/folder rows are added or switch between one and multiple lines.
+- Replaced text pause/resume labels with a fixed-size monochrome pause/resume icon button. The pause and resume states keep the same popup dimensions and avoid emoji-colored glyph rendering.
+- Folder information dialogs now compute recursive folder size asynchronously instead of showing the unreliable directory `File.length()` value.
+
+### UI polish
+- Color palette dialogs now use the app's rounded themed button style for **Cancel** and **OK**, instead of Android's default gray button tint.
+- Progress-count colors, count sizing, and fixed count columns were aligned so file and folder counters look consistent.
+
+### Refactoring
+- Extracted the browse-folder state preservation/cache logic from `MainActivity` into `MainBrowseStateController`. Viewer-return preservation, Activity-resume preservation, filter-return cache restore, drawer shortcut optimistic restore, folder signatures, and LRU folder snapshots now live behind one controller instead of being embedded directly in the activity.
+- Split archive browser list shaping into `ArchiveEntryListController`, moving archive folder-tree expansion, search/filter matching, sort policy, parent-prefix handling, and image-sequence entry collection out of `ArchiveBrowserActivity`.
+- Split archive image sequence extraction/cache preparation into `ArchiveImageSequenceLoader`, so lazy/full archive image sequence preparation is separated from the archive browser UI flow.
+- Moved archive creation and extraction validation/naming policy into `MainArchiveCreationPlanner` and `MainArchiveExtractionPlanner`, keeping queue controllers focused on user confirmation, worker dispatch, and progress handling.
+- Added `MainArchiveImageOpenController` for direct main-list archive-to-image-reader routing.
+
+### Release metadata
+- Bumped Android version metadata from `versionCode 2240` / `versionName "2.2.4"` to `versionCode 2250` / `versionName "2.2.5"`.
+
 ## 2.2.4 - 2026-06-02
 This package uses Android metadata `versionCode 2240` and `versionName "2.2.4"`.
 
@@ -86,7 +134,7 @@ This package uses Android metadata `versionCode 2230` and `versionName "2.2.3"`.
 - Archive extraction now reports password-required, unsupported-feature, and generic failure states separately across single extraction, batch extraction, archive preview item opening, and archive image preview paths.
 - Unsupported RAR, ALZ, and EGG extraction cases now use format-specific messages, making compressed/solid/encrypted RAR limits, ALZ variant limits, and unsupported EGG variants clearer to users.
 - Documented the 2.2.3 archive support matrix in `README.md`, including tested Unix archive/compressor paths and the fact that `.tar.*.gpg` would need a separate OpenPGP decrypt layer.
-- Added `.zipx` archive recognition, raw ZIP AES/password header detection fallback, and raw central-directory listing fallback for ZIPX samples that Zip4j rejects with unknown compression methods. ZIPX method-95/XZ extraction remains unsupported and is reported as such.
+- Added `.zipx` archive recognition, raw ZIP AES/password header detection fallback, and raw central-directory listing fallback for ZIPX samples that Zip4j rejects with unknown compression methods. At the time this still reported method-95/XZ extraction as unsupported; 2.2.5 later added a non-encrypted Commons Compress fallback, while AES+XZ remains unsupported.
 - Added an optional external archive fixture smoke test gated by `TEXTVIEW_EXTERNAL_ARCHIVE_FIXTURE_DIR`, covering the provided password ZIP, password 7z, password ZIPX, and `rar-test-files-master.zip` samples, including compressed RAR4/RAR3 extraction and compressed RAR5 unsupported classification when the optional unrar5j jar is absent. Added EGG synthetic fixture tests for Store/Deflate extraction and encrypted-entry password/unsupported classification.
 
 ### Drawer gesture and bottom actions

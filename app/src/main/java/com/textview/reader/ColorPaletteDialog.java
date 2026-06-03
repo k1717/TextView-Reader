@@ -151,12 +151,15 @@ final class ColorPaletteDialog {
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         buttons.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
         buttons.setPadding(0, dp(context, 10), 0, 0);
+        int actionButtonBg = resolveActionButtonColor(context, panelBg, textColor);
         Button cancel = new Button(context);
         cancel.setText(android.R.string.cancel);
+        stylePaletteActionButton(context, cancel, subColor, actionButtonBg);
         Button apply = new Button(context);
         apply.setText(android.R.string.ok);
-        buttons.addView(cancel, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        LinearLayout.LayoutParams applyLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        stylePaletteActionButton(context, apply, textColor, actionButtonBg);
+        buttons.addView(cancel, new LinearLayout.LayoutParams(0, dp(context, 44), 1f));
+        LinearLayout.LayoutParams applyLp = new LinearLayout.LayoutParams(0, dp(context, 44), 1f);
         applyLp.setMargins(dp(context, 8), 0, 0, 0);
         buttons.addView(apply, applyLp);
         root.addView(buttons, new LinearLayout.LayoutParams(
@@ -257,6 +260,42 @@ final class ColorPaletteDialog {
 
         syncAllFromSelected.run();
         dialog.show();
+    }
+
+
+    private static void stylePaletteActionButton(@NonNull Context context,
+                                                 @NonNull Button button,
+                                                 int textColor,
+                                                 int buttonBg) {
+        button.setAllCaps(false);
+        button.setTextColor(textColor);
+        button.setTextSize(14f);
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setGravity(Gravity.CENTER);
+        button.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        button.setIncludeFontPadding(false);
+        button.setMinHeight(dp(context, 44));
+        button.setMinimumHeight(dp(context, 44));
+        button.setMinimumWidth(0);
+        button.setMinWidth(0);
+        button.setPadding(dp(context, 8), 0, dp(context, 8), 0);
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(buttonBg);
+        bg.setCornerRadius(dp(context, 10));
+        bg.setStroke(0, Color.TRANSPARENT);
+        button.setBackground(bg);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            button.setStateListAnimator(null);
+            button.setElevation(0f);
+            button.setTranslationZ(0f);
+        }
+    }
+
+    private static int resolveActionButtonColor(@NonNull Context context, int panelBg, int textColor) {
+        PrefsManager prefs = PrefsManager.getInstance(context);
+        if (prefs != null) return prefs.getMainElevatedPanelColor(context);
+        return UiColorUtils.blendColors(panelBg, textColor, isLight(panelBg) ? 0.06f : 0.10f);
     }
 
     private static void addSliderRow(@NonNull Context context,

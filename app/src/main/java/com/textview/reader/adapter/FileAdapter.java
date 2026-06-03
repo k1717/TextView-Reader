@@ -39,7 +39,9 @@ import java.util.Set;
 
 public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
 
-    private static final int MULTI_SELECT_LONG_PRESS_MS = 1200;
+    private static final int MAIN_ACTION_SHORT_HOLD_MS = 200;
+    private static final int MULTI_SELECT_LONG_PRESS_MS = 800;
+    private static final int MAIN_ROW_TEXT_END_PADDING_DP = 10;
     private static final Object SELECTION_PAYLOAD = "selection_payload";
 
     public interface OnFileClickListener {
@@ -332,7 +334,7 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
                                 }
                             }
                         };
-                        touchHandler.postDelayed(pendingLongPress, ViewConfiguration.getLongPressTimeout());
+                        touchHandler.postDelayed(pendingLongPress, MAIN_ACTION_SHORT_HOLD_MS);
                         touchHandler.postDelayed(pendingMultiSelectPress, MULTI_SELECT_LONG_PRESS_MS);
                         return true;
 
@@ -500,11 +502,13 @@ public class FileAdapter extends RecyclerView.Adapter<FileAdapter.ViewHolder> {
         }
 
         private void setTextReserveEnd(int reservePx) {
+            int baseEndPadding = dpToPx(MAIN_ROW_TEXT_END_PADDING_DP);
+            int endPadding = baseEndPadding + Math.max(0, reservePx);
             if (textContainer != null) {
                 textContainer.setPadding(
                         textContainer.getPaddingLeft(),
                         textContainer.getPaddingTop(),
-                        reservePx,
+                        endPadding,
                         textContainer.getPaddingBottom());
             }
             name.setPadding(name.getPaddingLeft(), name.getPaddingTop(), 0, name.getPaddingBottom());

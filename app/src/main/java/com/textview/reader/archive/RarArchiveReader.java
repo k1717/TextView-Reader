@@ -148,30 +148,41 @@ final class RarArchiveReader {
                                                @NonNull File targetDir,
                                                @Nullable char[] password,
                                                @Nullable FileOperationProgress progress) throws IOException {
+        return extractArchiveIntoDirectory(archive, targetDir, password, progress, null);
+    }
+
+    static boolean extractArchiveIntoDirectory(@NonNull File archive,
+                                               @NonNull File targetDir,
+                                               @Nullable char[] password,
+                                               @Nullable FileOperationProgress progress,
+                                               @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
         List<RarEntry> entries;
         try {
             entries = readEntries(archive, password);
         } catch (UnsupportedRarFeatureException e) {
             if (isRar4OrOlderArchive(archive)) {
-                return RarJunrarFallback.extractArchiveIntoDirectory(archive, targetDir, password, progress);
+                return RarJunrarFallback.extractArchiveIntoDirectory(archive, targetDir, password, progress, entryProgress);
             }
             if (isRar5Archive(archive)) {
-                return Rar5LibraryFallback.extractArchiveIntoDirectory(archive, targetDir, password, progress);
+                return Rar5LibraryFallback.extractArchiveIntoDirectory(archive, targetDir, password, progress, entryProgress);
             }
             throw e;
         }
         if (shouldUseJunrarForWholeArchive(entries)) {
-            return RarJunrarFallback.extractArchiveIntoDirectory(firstRar4Source(entries, archive), targetDir, password, progress);
+            return RarJunrarFallback.extractArchiveIntoDirectory(firstRar4Source(entries, archive), targetDir, password, progress, entryProgress);
         }
         if (shouldUseRar5LibraryForWholeArchive(entries)) {
-            return Rar5LibraryFallback.extractArchiveIntoDirectory(firstRar5Source(entries, archive), targetDir, password, progress);
+            return Rar5LibraryFallback.extractArchiveIntoDirectory(firstRar5Source(entries, archive), targetDir, password, progress, entryProgress);
         }
         if (progress != null) progress.setTotalBytes(sumUnpackedBytes(entries));
         boolean sawEntry = false;
         for (RarEntry entry : entries) {
             if (progress != null && !progress.checkpoint()) return false;
             if (entry.splitBefore) continue;
-            if (progress != null) progress.setDetail(entry.path);
+            if (entryProgress != null) {
+                if (entry.directory || entry.path.endsWith("/")) entryProgress.onDirectory(entry.path);
+                else entryProgress.onFile(entry.path);
+            } else if (progress != null) progress.setDetail(entry.path);
             File out = resolveOutput(targetDir, entry.path);
             if (out == null) return false;
             sawEntry = true;

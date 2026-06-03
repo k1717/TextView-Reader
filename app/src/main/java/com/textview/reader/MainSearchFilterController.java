@@ -326,6 +326,10 @@ final class MainSearchFilterController {
                 && visibleFolder.isDirectory()
                 && visibleFolder.canRead()
                 && (!activity.searchReturnToHome || activity.searchMode || !activity.homeMode)) {
+            if (activity.restoreCachedBrowseFolderStateForFilterReturn(visibleFolder)) {
+                activity.rebuildDrawerStorageEntries();
+                return;
+            }
             activity.searchMode = false;
             activity.homeMode = false;
             activity.recentSection.setVisibility(View.GONE);

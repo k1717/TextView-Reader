@@ -11,7 +11,6 @@ import com.textview.reader.util.FileOperationProgress;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 final class MainArchiveCreateController {
     private final MainActivity activity;
@@ -27,28 +26,31 @@ final class MainArchiveCreateController {
     }
 
     void startArchiveCreation(@NonNull List<File> sources) {
-        ArrayList<File> ready = collectReadySources(sources);
+        ArrayList<File> ready = MainArchiveCreationPlanner.collectReadySources(sources);
         if (ready.isEmpty()) {
             ShortToast.show(activity, R.string.archive_create_failed);
             return;
         }
-        File parent = ready.get(0).getParentFile();
-        if (parent == null || !parent.exists() || !parent.isDirectory() || !parent.canWrite()) {
-            ShortToast.show(activity, R.string.file_move_destination_unavailable);
-            return;
-        }
-        File destination = buildArchiveDestination(parent, ready);
-        if (destination == null) {
+        File sourceParent = ready.get(0).getParentFile();
+        if (sourceParent == null || !sourceParent.exists() || !sourceParent.isDirectory()) {
             ShortToast.show(activity, R.string.archive_create_failed);
             return;
         }
-        addPendingArchiveCreation(new MainPendingArchiveCreation(ready, destination, parent));
+        File placeholderDestination = MainArchiveCreationPlanner.buildArchiveDestination(
+                sourceParent,
+                ready,
+                activity.getString(R.string.archive_create_default_name));
+        if (placeholderDestination == null) {
+            ShortToast.show(activity, R.string.archive_create_failed);
+            return;
+        }
+        addPendingArchiveCreation(new MainPendingArchiveCreation(ready, placeholderDestination, sourceParent));
         activity.archiveCreateInProgress = false;
         activity.updateMainOverflowButtonVisibility();
         Toast.makeText(activity, R.string.archive_create_queued, Toast.LENGTH_LONG).show();
 
-        if (parent.exists() && parent.isDirectory() && parent.canRead()) {
-            activity.resetMainBrowseFiltersAndShow(parent, null);
+        if (sourceParent.exists() && sourceParent.isDirectory() && sourceParent.canRead()) {
+            activity.resetMainBrowseFiltersAndShow(sourceParent, null);
         }
     }
 
@@ -73,14 +75,24 @@ final class MainArchiveCreateController {
     void confirmPendingArchiveCreation() {
         MainPendingArchiveCreation task = activity.pendingArchiveCreation;
         if (task == null) return;
-        ArrayList<File> ready = collectReadySources(task.sources);
-        if (ready.isEmpty() || !isWritableParent(task.parent)) {
+        ArrayList<File> ready = MainArchiveCreationPlanner.collectReadySources(task.sources);
+        if (ready.isEmpty()) {
             removePendingArchiveCreation(task);
             activity.updateMainOverflowButtonVisibility();
             ShortToast.show(activity, R.string.archive_create_failed);
             return;
         }
-        File destination = freshDestinationFor(task.parent, ready, task.destination);
+        File destinationDir = activity.currentDirectory;
+        if (!MainArchiveCreationPlanner.isWritableParent(destinationDir)) {
+            ShortToast.show(activity, R.string.file_move_destination_unavailable);
+            return;
+        }
+        File preferredDestination = new File(destinationDir, task.destination.getName());
+        File destination = MainArchiveCreationPlanner.freshDestinationFor(
+                destinationDir,
+                ready,
+                preferredDestination,
+                activity.getString(R.string.archive_create_default_name));
         if (destination == null) {
             ShortToast.show(activity, R.string.archive_create_failed);
             return;
@@ -89,20 +101,28 @@ final class MainArchiveCreateController {
                 activity.getString(R.string.archive_create_title),
                 activity.getString(R.string.archive_create_message,
                         ready.size(),
-                        destination.getName()),
+                        destination.getName(),
+                        destinationDir.getName().length() > 0 ? destinationDir.getName() : destinationDir.getAbsolutePath()),
                 activity.getString(R.string.archive_create),
-                () -> createArchive(task, ready, destination, task.parent));
+                () -> createArchive(task, ready, destination, destinationDir));
     }
 
     void confirmAllPendingArchiveCreations() {
         if (activity.archiveCreateInProgress) return;
         ArrayList<MainPendingArchiveCreation> tasks = new ArrayList<>(activity.pendingArchiveCreations);
         if (tasks.isEmpty()) return;
+        File destinationRoot = activity.currentDirectory;
+        if (!MainArchiveCreationPlanner.isWritableParent(destinationRoot)) {
+            ShortToast.show(activity, R.string.file_move_destination_unavailable);
+            return;
+        }
         activity.showSimpleConfirmDialog(
                 activity.getString(R.string.archive_create_all_title),
-                activity.getString(R.string.archive_create_all_message, tasks.size()),
+                activity.getString(R.string.archive_create_all_message,
+                        tasks.size(),
+                        destinationRoot.getName().length() > 0 ? destinationRoot.getName() : destinationRoot.getAbsolutePath()),
                 activity.getString(R.string.archive_create_all),
-                () -> continueAllArchiveCreations(tasks));
+                () -> continueAllArchiveCreations(tasks, destinationRoot));
     }
 
     private void addPendingArchiveCreation(@NonNull MainPendingArchiveCreation task) {
@@ -137,41 +157,17 @@ final class MainArchiveCreateController {
         }
     }
 
-    @NonNull
-    private ArrayList<File> collectReadySources(@NonNull List<File> sources) {
-        ArrayList<File> ready = new ArrayList<>();
-        for (File source : sources) {
-            if (source == null || !source.exists() || !source.canRead()) continue;
-            if (!source.isFile() && !source.isDirectory()) continue;
-            ready.add(source);
-        }
-        return ready;
-    }
-
-    private boolean isWritableParent(@Nullable File parent) {
-        return parent != null && parent.exists() && parent.isDirectory() && parent.canWrite();
-    }
-
-    @Nullable
-    private File freshDestinationFor(@NonNull File parent,
-                                     @NonNull List<File> sources,
-                                     @NonNull File preferred) {
-        if (!preferred.exists()) return preferred;
-        return buildArchiveDestination(parent, sources);
-    }
-
     private void createArchive(@NonNull MainPendingArchiveCreation task,
                                @NonNull ArrayList<File> sources,
                                @NonNull File destination,
-                               @NonNull File parent) {
+                               @NonNull File destinationDir) {
         if (activity.archiveCreateInProgress) return;
         activity.archiveCreateInProgress = true;
         activity.updateMainOverflowButtonVisibility();
         FileOperationProgress progress = activity.showFileOperationProgress(
                 activity.getString(R.string.archive_creating),
                 destination.getName());
-        progress.setFolder(parent.getName().length() > 0 ? parent.getName() : parent.getAbsolutePath());
-        progress.setItemProgress(1, 1);
+        progress.setFolder(destinationDir.getName().length() > 0 ? destinationDir.getName() : destinationDir.getAbsolutePath());
         activity.executeFolderBackgroundTask(() -> {
             boolean done = ArchiveSupport.createZipArchive(sources, destination, progress);
             activity.fileSearchHandler.post(() -> {
@@ -189,8 +185,8 @@ final class MainArchiveCreateController {
                     return;
                 }
                 removePendingArchiveCreation(task);
-                if (activity.prefs != null) activity.prefs.addRecentFolder(parent.getAbsolutePath());
-                activity.resetMainBrowseFiltersAndShow(parent, destination.getAbsolutePath());
+                if (activity.prefs != null) activity.prefs.addRecentFolder(destinationDir.getAbsolutePath());
+                activity.resetMainBrowseFiltersAndShow(destinationDir, destination.getAbsolutePath());
                 activity.rebuildDrawerStorageEntries();
                 activity.updateMainOverflowButtonVisibility();
                 ShortToast.show(activity, R.string.archive_created);
@@ -198,34 +194,33 @@ final class MainArchiveCreateController {
         });
     }
 
-    private void continueAllArchiveCreations(@NonNull ArrayList<MainPendingArchiveCreation> tasks) {
+    private void continueAllArchiveCreations(@NonNull ArrayList<MainPendingArchiveCreation> tasks,
+                                             @NonNull File destinationRoot) {
         if (activity.archiveCreateInProgress) return;
         activity.archiveCreateInProgress = true;
         activity.updateMainOverflowButtonVisibility();
         FileOperationProgress progress = activity.showFileOperationProgress(
                 activity.getString(R.string.archive_creating),
                 activity.getString(R.string.archive_create_all));
-        progress.setFolder(activity.getString(R.string.pending_actions_title));
+        progress.setFolder(destinationRoot.getName().length() > 0 ? destinationRoot.getName() : destinationRoot.getAbsolutePath());
         activity.executeFolderBackgroundTask(() -> {
             int doneCount = 0;
             File lastParent = null;
             File lastDestination = null;
             ArrayList<MainPendingArchiveCreation> succeededTasks = new ArrayList<>();
-            int itemIndex = 0;
-            final int itemTotal = tasks.size();
             for (MainPendingArchiveCreation task : tasks) {
                 if (progress.isCancelled()) break;
-                ArrayList<File> ready = collectReadySources(task.sources);
-                if (ready.isEmpty() || !isWritableParent(task.parent)) continue;
-                File destination = freshDestinationFor(task.parent, ready, task.destination);
+                ArrayList<File> ready = MainArchiveCreationPlanner.collectReadySources(task.sources);
+                if (ready.isEmpty()) continue;
+                File preferredDestination = new File(destinationRoot, task.destination.getName());
+                File destination = MainArchiveCreationPlanner.freshDestinationFor(destinationRoot, ready, preferredDestination, activity.getString(R.string.archive_create_default_name));
                 if (destination == null) continue;
                 progress.setDetail(destination.getName());
-                progress.setItemProgress(++itemIndex, itemTotal);
                 boolean done = ArchiveSupport.createZipArchive(ready, destination, progress);
                 if (done) {
                     doneCount++;
                     succeededTasks.add(task);
-                    lastParent = task.parent;
+                    lastParent = destinationRoot;
                     lastDestination = destination;
                 }
             }
@@ -258,32 +253,5 @@ final class MainArchiveCreateController {
         });
     }
 
-    @Nullable
-    private File buildArchiveDestination(@NonNull File parent, @NonNull List<File> sources) {
-        String base = sources.size() == 1 ? stripExtension(sources.get(0).getName()) : activity.getString(R.string.archive_create_default_name);
-        base = sanitizeBaseName(base);
-        if (base.length() == 0) base = activity.getString(R.string.archive_create_default_name);
-        for (int i = 0; i < 10000; i++) {
-            String name = i == 0 ? base + ".zip" : base + " (" + i + ").zip";
-            File candidate = new File(parent, name);
-            if (!candidate.exists()) return candidate;
-        }
-        return null;
-    }
 
-    @NonNull
-    private static String stripExtension(@NonNull String name) {
-        int dot = name.lastIndexOf('.');
-        if (dot <= 0) return name;
-        return name.substring(0, dot);
-    }
-
-    @NonNull
-    private static String sanitizeBaseName(@NonNull String raw) {
-        String value = raw.trim();
-        value = value.replaceAll("[\\\\/:*?\"<>|]", "_");
-        String lower = value.toLowerCase(Locale.ROOT);
-        if (lower.equals(".") || lower.equals("..")) return "";
-        return value;
-    }
 }

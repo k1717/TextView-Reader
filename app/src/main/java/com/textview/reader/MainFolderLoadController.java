@@ -20,7 +20,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 final class MainFolderLoadController {
+    private static final int FOLDER_LOAD_INITIAL_PROGRESS_BATCH = 32;
     private static final int FOLDER_LOAD_PROGRESS_BATCH = 192;
+    private static final long FOLDER_LOAD_INITIAL_PROGRESS_MIN_INTERVAL_MS = 80L;
     private static final long FOLDER_LOAD_PROGRESS_MIN_INTERVAL_MS = 280L;
 
     private final MainActivity activity;
@@ -160,6 +162,7 @@ final class MainFolderLoadController {
 
     private void prepareBrowseTarget(@NonNull File targetDir, int sortMode, boolean clearList) {
         activity.currentDirectory = targetDir;
+        activity.markCurrentBrowseFolderLoadStarted(targetDir);
         if (activity.prefs != null) {
             activity.prefs.setLastDirectory(targetDir.getAbsolutePath());
             activity.prefs.addRecentFolder(targetDir.getAbsolutePath());
@@ -196,8 +199,14 @@ final class MainFolderLoadController {
                                                 @NonNull List<File> files) {
         int size = folders.size() + files.size();
         long now = SystemClock.uptimeMillis();
-        if (size - progress.lastPublishedCount < FOLDER_LOAD_PROGRESS_BATCH
-                && now - progress.lastPublishedAt < FOLDER_LOAD_PROGRESS_MIN_INTERVAL_MS) {
+        int batchThreshold = progress.lastPublishedCount <= 0
+                ? FOLDER_LOAD_INITIAL_PROGRESS_BATCH
+                : FOLDER_LOAD_PROGRESS_BATCH;
+        long intervalThreshold = progress.lastPublishedCount <= 0
+                ? FOLDER_LOAD_INITIAL_PROGRESS_MIN_INTERVAL_MS
+                : FOLDER_LOAD_PROGRESS_MIN_INTERVAL_MS;
+        if (size - progress.lastPublishedCount < batchThreshold
+                && now - progress.lastPublishedAt < intervalThreshold) {
             return;
         }
         progress.lastPublishedCount = size;
@@ -239,6 +248,7 @@ final class MainFolderLoadController {
             activity.scrollListToTop(activity.fileRecyclerView);
         }
         updateEmptyState(fileList.isEmpty());
+        activity.markCurrentBrowseFolderLoadComplete(targetDir, fileList, sortMode);
         if (activity.fileSearchProgress != null) activity.fileSearchProgress.setVisibility(View.GONE);
         activity.rebuildDrawerStorageEntries();
     }
@@ -252,6 +262,7 @@ final class MainFolderLoadController {
             activity.fileAdapter.setFilesFastPresorted(new ArrayList<>());
         }
         updateEmptyState(true);
+        activity.markCurrentBrowseFolderLoadFailed(targetDir);
         if (activity.fileSearchProgress != null) activity.fileSearchProgress.setVisibility(View.GONE);
     }
 
@@ -268,6 +279,7 @@ final class MainFolderLoadController {
             activity.fileAdapter.setFiles(fileList);
         }
         updateEmptyState(fileList.isEmpty());
+        activity.markCurrentBrowseFolderLoadComplete(targetDir, fileList, sortMode);
         if (activity.fileSearchProgress != null) activity.fileSearchProgress.setVisibility(View.GONE);
     }
 

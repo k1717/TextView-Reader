@@ -1,7 +1,10 @@
 package com.textview.reader;
 
 import android.content.res.ColorStateList;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -92,17 +95,40 @@ final class MainFileOperationProgressController {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
+        LinearLayout detailRow = makeMetaRow();
         TextView detail = makeMetaText(fg, 14f, true);
-        detail.setPadding(activity.dpToPx(2), 0, activity.dpToPx(2), activity.dpToPx(5));
-        box.addView(detail, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
+        detail.setPadding(activity.dpToPx(2), 0, activity.dpToPx(6), activity.dpToPx(5));
+        TextView detailCount = makeCountText(sub, 12.5f);
+        detailRow.addView(detail, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f));
+        detailRow.addView(detailCount, new LinearLayout.LayoutParams(
+                activity.dpToPx(74),
                 LinearLayout.LayoutParams.WRAP_CONTENT));
+        box.addView(detailRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                activity.dpToPx(42)));
 
+        LinearLayout folderRow = makeMetaRow();
         TextView folder = makeMetaText(sub, 12.5f, true);
-        folder.setPadding(activity.dpToPx(2), 0, activity.dpToPx(2), activity.dpToPx(8));
-        box.addView(folder, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
+        folder.setMaxLines(3);
+        folder.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        folder.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        folder.setIncludeFontPadding(true);
+        folder.setLineSpacing(0f, 1.0f);
+        folder.setPadding(activity.dpToPx(2), activity.dpToPx(2), activity.dpToPx(6), activity.dpToPx(2));
+        TextView folderCount = makeCountText(sub, 12.5f);
+        folderRow.addView(folder, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f));
+        folderRow.addView(folderCount, new LinearLayout.LayoutParams(
+                activity.dpToPx(74),
                 LinearLayout.LayoutParams.WRAP_CONTENT));
+        box.addView(folderRow, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                activity.dpToPx(72)));
 
         LinearLayout progressRow = new LinearLayout(activity);
         progressRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -123,19 +149,19 @@ final class MainFileOperationProgressController {
         barLp.setMargins(activity.dpToPx(2), 0, activity.dpToPx(10), 0);
         progressRow.addView(bar, barLp);
 
-        TextView pause = makeActionButton(activity.getString(R.string.operation_pause), fg, panel);
+        PauseResumeIconButton pause = makeIconActionButton(fg, panel);
         pause.setContentDescription(activity.getString(R.string.operation_pause));
         progressRow.addView(pause, new LinearLayout.LayoutParams(
-                activity.dpToPx(86),
+                activity.dpToPx(38),
                 activity.dpToPx(34)));
 
         LinearLayout stats = new LinearLayout(activity);
         stats.setOrientation(LinearLayout.HORIZONTAL);
         stats.setGravity(Gravity.CENTER_VERTICAL);
-        stats.setPadding(activity.dpToPx(2), activity.dpToPx(6), activity.dpToPx(2), activity.dpToPx(12));
+        stats.setPadding(activity.dpToPx(2), activity.dpToPx(6), activity.dpToPx(2), activity.dpToPx(8));
         box.addView(stats, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
+                activity.dpToPx(40)));
 
         TextView percent = makeMetaText(fg, 13f, false);
         percent.setTypeface(Typeface.DEFAULT_BOLD);
@@ -167,7 +193,7 @@ final class MainFileOperationProgressController {
         progress.setListener(snapshot ->
                 activity.fileSearchHandler.post(() -> {
                     if (activity.activityDestroyed) return;
-                    updateProgressViews(snapshot, detail, folder, percent, bytes, bar, pause);
+                    updateProgressViews(snapshot, detail, detailCount, folder, folderCount, percent, bytes, bar, pause);
                 }));
 
         pause.setOnClickListener(v -> progress.setPaused(!progress.isPaused()));
@@ -181,9 +207,15 @@ final class MainFileOperationProgressController {
             activity.updateMainOverflowButtonVisibility();
         });
 
+        updateProgressViews(progress.snapshot(), detail, detailCount, folder, folderCount, percent, bytes, bar, pause);
+
         dialog = activity.createStableCenterDialog(box, 0, 0.18f);
         int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
-        activity.overrideDialogWidth(dialog, Math.max(activity.dpToPx(290), Math.min(Math.round(screenWidth * 0.88f), activity.dpToPx(540))));
+        int dialogWidth = Math.max(activity.dpToPx(290), Math.min(Math.round(screenWidth * 0.88f), activity.dpToPx(540)));
+        box.setMinimumWidth(dialogWidth);
+        activity.overrideDialogWidth(dialog, dialogWidth);
+        android.view.Window preShowWindow = dialog.getWindow();
+        if (preShowWindow != null) preShowWindow.setWindowAnimations(0);
         dialog.setCanceledOnTouchOutside(false);
         dialog.setOnCancelListener(d -> {
             dismissActiveDialogOnly();
@@ -191,41 +223,45 @@ final class MainFileOperationProgressController {
         });
         dialog.setOnDismissListener(d -> activity.updateMainOverflowButtonVisibility());
         dialog.show();
-        updateProgressViews(progress.snapshot(), detail, folder, percent, bytes, bar, pause);
+        android.view.Window postShowWindow = dialog.getWindow();
+        if (postShowWindow != null) {
+            postShowWindow.setWindowAnimations(0);
+            activity.overrideDialogWidth(dialog, dialogWidth);
+        }
+        updateProgressViews(progress.snapshot(), detail, detailCount, folder, folderCount, percent, bytes, bar, pause);
     }
 
     private void updateProgressViews(@NonNull FileOperationProgress.Snapshot snapshot,
                                      @NonNull TextView detail,
+                                     @NonNull TextView detailCount,
                                      @NonNull TextView folder,
+                                     @NonNull TextView folderCount,
                                      @NonNull TextView percent,
                                      @NonNull TextView bytes,
                                      @NonNull ProgressBar bar,
-                                     @NonNull TextView pause) {
+                                     @NonNull PauseResumeIconButton pause) {
         String detailText = snapshot.detail == null || snapshot.detail.length() == 0
                 ? snapshot.title
                 : snapshot.detail;
-        if (snapshot.itemTotal > 0) {
-            detailText = activity.getString(R.string.operation_detail_count_format,
-                    detailText,
-                    snapshot.itemIndex,
-                    snapshot.itemTotal);
-        }
         detail.setText(detailText);
+        detailCount.setText(formatProgressCount(snapshot.itemIndex, snapshot.itemTotal));
+
         String folderName = snapshot.folder == null || snapshot.folder.length() == 0
                 ? "-"
                 : snapshot.folder;
-        String folderText = snapshot.folderTotal > 0
-                ? activity.getString(R.string.operation_folder_count_format,
-                folderName,
-                snapshot.folderIndex,
-                snapshot.folderTotal)
-                : (snapshot.folder == null || snapshot.folder.length() == 0
+        String folderText = snapshot.folder == null || snapshot.folder.length() == 0
                 ? activity.getString(R.string.operation_folder_unknown)
-                : activity.getString(R.string.operation_folder_format, snapshot.folder));
+                : activity.getString(R.string.operation_folder_format, folderName);
         folder.setText(folderText);
-        pause.setText(activity.getString(snapshot.paused
-                ? R.string.operation_resume
-                : R.string.operation_pause));
+        String folderCounter = formatProgressCount(snapshot.folderIndex, snapshot.folderTotal);
+        if (folderCounter.length() == 0
+                && snapshot.itemTotal > 0
+                && snapshot.folder != null
+                && snapshot.folder.length() > 0) {
+            folderCounter = formatProgressCount(1, 1);
+        }
+        folderCount.setText(folderCounter);
+        pause.setPausedState(snapshot.paused);
         pause.setContentDescription(activity.getString(snapshot.paused
                 ? R.string.operation_resume
                 : R.string.operation_pause));
@@ -249,6 +285,13 @@ final class MainFileOperationProgressController {
                 FileUtils.formatFileSize(snapshot.totalBytes)));
     }
 
+    private LinearLayout makeMetaRow() {
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        return row;
+    }
+
     private TextView makeMetaText(int textColor, float textSize, boolean twoLines) {
         TextView view = new TextView(activity);
         view.setTextColor(textColor);
@@ -257,11 +300,37 @@ final class MainFileOperationProgressController {
         view.setTextAlignment(View.TEXT_ALIGNMENT_GRAVITY);
         view.setSingleLine(!twoLines);
         view.setMaxLines(twoLines ? 2 : 1);
-        view.setEllipsize(twoLines
-                ? android.text.TextUtils.TruncateAt.MIDDLE
-                : android.text.TextUtils.TruncateAt.END);
+        view.setEllipsize(android.text.TextUtils.TruncateAt.END);
         view.setIncludeFontPadding(false);
         return view;
+    }
+
+    private TextView makeCountText(int textColor, float textSize) {
+        TextView view = makeMetaText(textColor, textSize, false);
+        view.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        view.setTextAlignment(View.TEXT_ALIGNMENT_GRAVITY);
+        view.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        view.setSingleLine(true);
+        view.setIncludeFontPadding(false);
+        return view;
+    }
+
+    @NonNull
+    private String formatProgressCount(int index, int total) {
+        if (total <= 0) return "";
+        int safeIndex = Math.max(1, Math.min(index, total));
+        return "(" + safeIndex + "/" + total + ")";
+    }
+
+    private PauseResumeIconButton makeIconActionButton(int textColor, int panelColor) {
+        PauseResumeIconButton button = new PauseResumeIconButton(activity, textColor);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(panelColor);
+        bg.setCornerRadius(activity.dpToPx(6));
+        button.setBackground(bg);
+        button.setPadding(0, 0, 0, 0);
+        button.setPausedState(false);
+        return button;
     }
 
     private TextView makeActionButton(@NonNull String label, int textColor, int panelColor) {
@@ -285,6 +354,58 @@ final class MainFileOperationProgressController {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
         lp.setMargins(activity.dpToPx(4), 0, 0, 0);
         actions.addView(button, lp);
+    }
+
+    private static final class PauseResumeIconButton extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path playPath = new Path();
+        private final int iconColor;
+        private boolean pausedState;
+
+        PauseResumeIconButton(@NonNull android.content.Context context, int iconColor) {
+            super(context);
+            this.iconColor = iconColor;
+            paint.setColor(iconColor);
+            paint.setStyle(Paint.Style.FILL);
+            setClickable(true);
+            setFocusable(true);
+        }
+
+        void setPausedState(boolean pausedState) {
+            if (this.pausedState == pausedState) return;
+            this.pausedState = pausedState;
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            paint.setColor(iconColor);
+            float density = getResources().getDisplayMetrics().density;
+            float cx = getWidth() * 0.5f;
+            float cy = getHeight() * 0.5f;
+            if (pausedState) {
+                float height = 12.0f * density;
+                float width = 10.0f * density;
+                float left = cx - width * 0.38f;
+                playPath.reset();
+                playPath.moveTo(left, cy - height * 0.5f);
+                playPath.lineTo(left, cy + height * 0.5f);
+                playPath.lineTo(left + width, cy);
+                playPath.close();
+                canvas.drawPath(playPath, paint);
+            } else {
+                float barWidth = 3.2f * density;
+                float gap = 3.6f * density;
+                float height = 13.0f * density;
+                float top = cy - height * 0.5f;
+                float bottom = cy + height * 0.5f;
+                float left1 = cx - gap * 0.5f - barWidth;
+                float left2 = cx + gap * 0.5f;
+                canvas.drawRoundRect(left1, top, left1 + barWidth, bottom, barWidth * 0.45f, barWidth * 0.45f, paint);
+                canvas.drawRoundRect(left2, top, left2 + barWidth, bottom, barWidth * 0.45f, barWidth * 0.45f, paint);
+            }
+        }
     }
 
     private void dismissActiveDialogOnly() {

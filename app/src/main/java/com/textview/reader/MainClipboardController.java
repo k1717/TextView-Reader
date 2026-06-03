@@ -14,6 +14,7 @@ import androidx.annotation.NonNull;
 import com.textview.reader.util.FileClipboardController;
 import com.textview.reader.util.FileOperationProgress;
 import com.textview.reader.util.FileSystemOps;
+import com.textview.reader.util.FileTreeProgressTracker;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -320,21 +321,24 @@ final class MainClipboardController {
                 if (progress.isCancelled()) break;
             }
             progress.setTotalBytes(totalBytes);
+            int totalOperations = operations.size();
+            if (totalOperations > 1) {
+                progress.setFolder(displayName(destinationDir));
+                progress.setFolderProgress(1, totalOperations);
+            }
+            FileTreeProgressTracker treeProgress = FileTreeProgressTracker.create(progress, sourcesForOperations(operations));
 
             ArrayList<BatchClipboardOperation> succeeded = new ArrayList<>();
             int failedCount = 0;
-            int itemIndex = 0;
-            int itemTotal = operations.size();
-            int folderIndex = 0;
-            int folderTotal = countFolderOperations(operations);
-            if (folderTotal <= 0) progress.clearFolderProgress();
+            int operationIndex = 0;
             for (BatchClipboardOperation op : operations) {
                 if (progress.isCancelled()) break;
-                progress.setDetail(op.source.getName());
-                progress.setItemProgress(++itemIndex, itemTotal);
-                if (op.sourceWasDirectory) progress.setFolderProgress(++folderIndex, folderTotal);
-                else if (folderTotal > 0) progress.clearFolderProgress();
-                boolean done = activity.fileClipboardController.performOperation(op.item, op.destination, false, progress, false);
+                operationIndex++;
+                if (totalOperations > 1) {
+                    progress.setFolder(operationFolderDisplayName(op, destinationDir));
+                    progress.setFolderProgress(operationIndex, totalOperations);
+                }
+                boolean done = activity.fileClipboardController.performOperation(op.item, op.destination, false, progress, false, treeProgress);
                 if (done) {
                     succeeded.add(op);
                 } else if (!progress.isCancelled()) {
@@ -382,12 +386,25 @@ final class MainClipboardController {
         });
     }
 
-    private int countFolderOperations(@NonNull List<BatchClipboardOperation> operations) {
-        int count = 0;
+    @NonNull
+    private ArrayList<File> sourcesForOperations(@NonNull List<BatchClipboardOperation> operations) {
+        ArrayList<File> sources = new ArrayList<>();
         for (BatchClipboardOperation operation : operations) {
-            if (operation != null && operation.sourceWasDirectory) count++;
+            if (operation != null && operation.source != null) sources.add(operation.source);
         }
-        return count;
+        return sources;
+    }
+
+    @NonNull
+    private String operationFolderDisplayName(@NonNull BatchClipboardOperation op, @NonNull File destinationDir) {
+        if (op.sourceWasDirectory && op.destination != null) return displayName(op.destination);
+        return displayName(destinationDir);
+    }
+
+    @NonNull
+    private String displayName(@NonNull File file) {
+        String name = file.getName();
+        return name == null || name.length() == 0 ? file.getAbsolutePath() : name;
     }
 
     private long safeAddBytes(long total, long next) {

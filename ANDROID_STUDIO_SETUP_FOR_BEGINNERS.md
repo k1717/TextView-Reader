@@ -86,13 +86,16 @@ Copy the exact first red error line and send it back. Common first failures are:
 Do not randomly change files before capturing the first error.
 
 
-## 2.2.4 quick manual QA
+## 2.2.5 quick manual QA
 
+- Multi-select delete progress: select multiple files/folders, delete, pause, send the progress window to Background, and confirm the toolbar progress button immediately reopens it.
+- Progress windows: try extract, copy, move/cut, delete, and ZIP creation with multiple files/folders. Confirm file/folder counters stay in fixed right-side columns, folder counters do not collapse to `(1/1)` for multi-folder work, pause/resume uses a monochrome icon, and the popup height does not grow while rows update.
+- Direct comic archive opening: open a CBZ/CBR/CB7/CBT or image-heavy archive from the main list and confirm the image reader opens directly without flashing the archive-preview list.
 - Open and close the left drawer with gestures: right-swipe should open it from the main browser area, and left-swipe from the outside area should close it only when the drawer is open or partially open. A light outside tap should not close it.
 - Tap the drawer bottom **Open File**, **Bookmarks**, and **Settings** actions and confirm each action starts immediately while the drawer closes behind it.
-- Open RAR/CBR, ALZ, EGG, ZIP/CBZ, ZIPX, and standard `.7z.001` / `.7z.002` split fixtures that match the documented support matrix and confirm unsupported variants show clear unsupported-feature messages instead of partial output.
+- Open RAR/CBR, ALZ, EGG, ZIP/CBZ, ZIPX, Deflate64/BZip2/XZ/ZSTD ZIP fallback fixtures, and standard `.7z.001` / `.7z.002` split fixtures that match the documented support matrix. Confirm unsupported variants show clear unsupported-feature messages instead of partial output.
 - Verify pending copy/move/extract/compress tasks can be inspected while an operation is backgrounded, without allowing a second active worker to start.
-- In Settings, open a custom main-theme or reading-theme color field and confirm the shader-based palette changes preview color and saves the selected HEX value.
+- In Settings, open a custom main-theme or reading-theme color field and confirm the shader-based palette changes preview color, uses app-themed buttons, and saves the selected HEX value.
 - In the TXT viewer, confirm the page label remains `current / total` at exact page starts and becomes `current (line-in-page) / total` only when the visible position is mid-page.
 - Run optional external archive fixture tests with `TEXTVIEW_EXTERNAL_ARCHIVE_FIXTURE_DIR` when sample archives are available.
 

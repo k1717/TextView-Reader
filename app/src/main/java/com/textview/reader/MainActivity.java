@@ -180,6 +180,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     boolean drawerDismissTracking = false;
     int drawerSwipeTouchSlop;
     float drawerSlideOffset = 0f;
+    float drawerDismissStartOffset = 1f;
     boolean drawerForceSettling = false;
     boolean drawerClosePartialOnRelease = false;
     Method drawerMoveToOffsetMethod;
@@ -210,6 +211,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     boolean archiveCreateInProgress = false;
     private DrawerEntry pendingDrawerNavigationEntry;
     private boolean drawerNavigationPending = false;
+    private MainBrowseStateController mainBrowseStateController;
     /**
      * Cached SD card detection. The previous code re-scanned /storage and called
      * getExternalFilesDirs() once per recent-folder candidate (up to 50 times per
@@ -225,6 +227,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     private MainShareController mainShareController;
     private MainConfirmDialogController mainConfirmDialogController;
     private MainImageOpenController mainImageOpenController;
+    private MainArchiveImageOpenController mainArchiveImageOpenController;
     private MainDrawerGestureController mainDrawerGestureController;
     private MainActivityStartupController mainActivityStartupController;
     private MainRecentFilesController mainRecentFilesController;
@@ -320,11 +323,18 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         return mainConfirmDialogController;
     }
 
-    private MainImageOpenController mainImageOpen() {
+    MainImageOpenController mainImageOpen() {
         if (mainImageOpenController == null) {
             mainImageOpenController = new MainImageOpenController(this);
         }
         return mainImageOpenController;
+    }
+
+    private MainArchiveImageOpenController mainArchiveImageOpen() {
+        if (mainArchiveImageOpenController == null) {
+            mainArchiveImageOpenController = new MainArchiveImageOpenController(this);
+        }
+        return mainArchiveImageOpenController;
     }
 
     private MainRecentFilesController mainRecentFiles() {
@@ -346,6 +356,13 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             mainFileOperationProgressController = new MainFileOperationProgressController(this);
         }
         return mainFileOperationProgressController;
+    }
+
+    private MainBrowseStateController browseState() {
+        if (mainBrowseStateController == null) {
+            mainBrowseStateController = new MainBrowseStateController(this);
+        }
+        return mainBrowseStateController;
     }
 
     final ActivityResultLauncher<String[]> openFileLauncher =
@@ -436,9 +453,81 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             mainSearchFilterController.updateFileTypeChips();
         }
 
+        final boolean restoreViewerBrowseState = shouldPreserveBrowseStateOnResume();
+        final boolean keepVisibleBrowseState = !restoreViewerBrowseState && shouldKeepCurrentBrowseStateOnResume();
         loadRecentFiles();
         rebuildDrawerStorageEntries();
-        if (!homeMode && !searchMode && currentDirectory != null) loadDirectory(currentDirectory);
+        if (!homeMode && !searchMode && currentDirectory != null) {
+            if (restoreViewerBrowseState || keepVisibleBrowseState) {
+                refreshVisibleBrowseStateWithoutReload();
+            } else {
+                loadDirectory(currentDirectory);
+            }
+        }
+        clearPreservedBrowseStateAfterResume();
+        updateMainOverflowButtonVisibility();
+    }
+
+    void markPreserveBrowseStateForViewerReturn(@Nullable File openedFile) {
+        browseState().markPreserveForViewerReturn(openedFile);
+    }
+
+    private boolean shouldPreserveBrowseStateOnResume() {
+        return browseState().shouldPreserveViewerStateOnResume();
+    }
+
+    private boolean shouldKeepCurrentBrowseStateOnResume() {
+        return browseState().shouldKeepCurrentStateOnResume();
+    }
+
+    private void refreshVisibleBrowseStateWithoutReload() {
+        browseState().refreshVisibleStateWithoutReload();
+    }
+
+    private void clearPreservedBrowseStateAfterResume() {
+        browseState().clearPreservedResumeState();
+    }
+
+    void markCurrentBrowseFolderLoadStarted(@Nullable File directory) {
+        browseState().markLoadStarted(directory);
+    }
+
+    void markCurrentBrowseFolderLoadComplete(@NonNull File directory,
+                                             @NonNull List<File> files,
+                                             int sortMode) {
+        browseState().markLoadComplete(directory, files, sortMode);
+    }
+
+    void markCurrentBrowseFolderLoadFailed(@Nullable File directory) {
+        browseState().markLoadFailed(directory);
+    }
+
+    private void saveCurrentBrowseFolderStateIfComplete() {
+        browseState().saveCurrentIfComplete();
+    }
+
+    private void saveCurrentBrowseFolderStateFastIfComplete() {
+        browseState().saveCurrentFastIfComplete();
+    }
+
+    boolean restoreCachedBrowseFolderStateForFilterReturn(@NonNull File directory) {
+        return browseState().restoreForFilterReturn(directory);
+    }
+
+    private boolean restoreCachedBrowseFolderState(@NonNull File directory) {
+        return browseState().restore(directory);
+    }
+
+    private boolean restoreCachedBrowseFolderStateOptimisticForDrawer(@NonNull File directory) {
+        return browseState().restoreOptimisticForDrawer(directory);
+    }
+
+    private void loadDirectoryWithoutOutgoingStateSave(@NonNull File dir) {
+        mainFolderLoad().loadDirectory(dir);
+    }
+
+    private boolean isSameBrowseDirectory(@Nullable File left, @Nullable File right) {
+        return browseState().sameDirectory(left, right);
     }
 
     @Override
@@ -903,7 +992,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         // animation to finish before changing the main screen underneath.
         pendingDrawerNavigationEntry = null;
         drawerNavigationPending = false;
-        handleDrawerEntryClick(entry);
+        handleDrawerEntryClick(entry, true);
 
         closeDrawerAfterSelection();
     }
@@ -916,11 +1005,15 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         drawerNavigationPending = false;
 
         if (entry != null && !activityDestroyed) {
-            handleDrawerEntryClick(entry);
+            handleDrawerEntryClick(entry, true);
         }
     }
 
     private void handleDrawerEntryClick(@NonNull DrawerEntry entry) {
+        handleDrawerEntryClick(entry, false);
+    }
+
+    private void handleDrawerEntryClick(@NonNull DrawerEntry entry, boolean fromDrawerShortcut) {
         switch (entry.getActionType()) {
             case DrawerEntry.ACTION_RECENT:
                 resetFileFilterForNavigation();
@@ -936,7 +1029,8 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
                     File target = new File(entry.getPath());
                     if (target.exists() && target.canRead()) {
                         resetFileFilterForNavigation();
-                        showBrowseMode(target);
+                        if (fromDrawerShortcut) showBrowseModeFromDrawerShortcut(target);
+                        else showBrowseMode(target);
                     } else {
                         ShortToast.show(this, R.string.containing_folder_unavailable);
                     }
@@ -1185,6 +1279,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     // -------------------------------------------------------------------------
 
     void showHomeMode() {
+        // Save the visible browse folder before leaving Browse mode so returning
+        // to it can reuse the adapter list and RecyclerView position when the
+        // folder contents are unchanged.
+        saveCurrentBrowseFolderStateIfComplete();
         exitFileSelectionMode(false);
         cancelPendingFolderLoad();
         if (fileSearchProgress != null) fileSearchProgress.setVisibility(View.GONE);
@@ -1206,6 +1304,9 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     }
 
     void showBrowseMode(@NonNull File dir) {
+        // Capture the current browse folder even when switching through Home or
+        // drawer shortcuts. This enables A -> B -> A -> B folder-state reuse.
+        saveCurrentBrowseFolderStateIfComplete();
         exitFileSelectionMode(false);
         searchMode = false;
         searchReturnToHome = false;
@@ -1217,7 +1318,32 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         setPathBarVisible(true);
         updateFileSearchClearButtonVisibility();
         if (prefs != null) prefs.addRecentFolder(dir.getAbsolutePath());
-        loadDirectory(dir);
+        if (!restoreCachedBrowseFolderState(dir)) {
+            loadDirectory(dir);
+        }
+        updateMainOverflowButtonVisibility();
+        invalidateOptionsMenu();
+    }
+
+    void showBrowseModeFromDrawerShortcut(@NonNull File dir) {
+        // Drawer shortcut taps should never block on a full directory signature scan.
+        // Save the outgoing visible list with the already-known load signature, then
+        // restore the target cache optimistically and validate it in the background.
+        saveCurrentBrowseFolderStateFastIfComplete();
+        exitFileSelectionMode(false);
+        searchMode = false;
+        searchReturnToHome = false;
+        searchReturnDirectory = dir;
+        homeMode = false;
+        updateFileTypeChips();
+        recentSection.setVisibility(View.GONE);
+        browserSection.setVisibility(View.VISIBLE);
+        setPathBarVisible(true);
+        updateFileSearchClearButtonVisibility();
+        if (prefs != null) prefs.addRecentFolder(dir.getAbsolutePath());
+        if (!restoreCachedBrowseFolderStateOptimisticForDrawer(dir)) {
+            loadDirectoryWithoutOutgoingStateSave(dir);
+        }
         updateMainOverflowButtonVisibility();
         invalidateOptionsMenu();
     }
@@ -1315,6 +1441,18 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
     }
 
     void loadDirectory(File dir) {
+        if (dir == null) return;
+
+        boolean activelyBrowsingSameDirectory = !homeMode
+                && !searchMode
+                && isSameBrowseDirectory(currentDirectory, dir);
+        if (!activelyBrowsingSameDirectory) {
+            saveCurrentBrowseFolderStateIfComplete();
+            if (restoreCachedBrowseFolderState(dir)) {
+                return;
+            }
+        }
+
         mainFolderLoad().loadDirectory(dir);
     }
 
@@ -1507,6 +1645,9 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         boolean image = false;
         if (ArchiveSupport.isSupportedArchive(file)) {
             saveArchiveRecentState(file);
+            if (mainArchiveImageOpen().openDirectImageViewerIfComicArchive(file)) {
+                return;
+            }
             intent = new Intent(this, ArchiveBrowserActivity.class);
             intent.putExtra(ArchiveBrowserActivity.EXTRA_ARCHIVE_PATH, file.getAbsolutePath());
         } else if (FileUtils.isPdfFile(file.getName())) {
@@ -1530,6 +1671,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             intent.putExtra(ReaderActivity.EXTRA_FILE_PATH, file.getAbsolutePath());
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        markPreserveBrowseStateForViewerReturn(file);
         if (image) {
             mainImageOpen().startWithLoading(intent);
             return;
@@ -1549,14 +1691,17 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             Intent view = new Intent(Intent.ACTION_VIEW);
             view.setDataAndType(uri, externalMimeTypeFor(file));
             view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            markPreserveBrowseStateForViewerReturn(file);
             if (FileUtils.isApkFile(file.getName())) {
                 startActivity(view);
             } else {
                 startActivity(Intent.createChooser(view, getString(R.string.open)));
             }
         } catch (ActivityNotFoundException e) {
+            clearPreservedBrowseStateAfterResume();
             ShortToast.show(this, R.string.external_open_failed);
         } catch (Exception e) {
+            clearPreservedBrowseStateAfterResume();
             ShortToast.show(this, R.string.external_open_failed);
         }
     }
@@ -1649,6 +1794,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
         Intent intent = new Intent(this, ArchiveBrowserActivity.class);
         intent.putExtra(ArchiveBrowserActivity.EXTRA_ARCHIVE_PATH, file.getAbsolutePath());
         intent.putExtra(ArchiveBrowserActivity.EXTRA_FORCE_FOLDER_PREVIEW, true);
+        markPreserveBrowseStateForViewerReturn(file);
         startActivity(intent);
     }
 

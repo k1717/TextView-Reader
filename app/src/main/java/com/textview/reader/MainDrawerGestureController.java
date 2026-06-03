@@ -161,6 +161,16 @@ final class MainDrawerGestureController {
                 activity.drawerDismissTracking = true;
                 activity.drawerManualDragging = false;
                 activity.drawerSwipeOpened = false;
+                // Take over from any in-progress DrawerLayout settling so the
+                // finger starts tracking from the drawer's current position
+                // instead of fighting an automatic animation.
+                activity.drawerForceSettling = true;
+                // Capture the offset the drawer is sitting at when the gesture
+                // starts (normally fully open = 1f) so the drag is measured
+                // relative to it. This makes a left-slide subtract distance
+                // proportionally from wherever the drawer currently is.
+                activity.drawerDismissStartOffset =
+                        activity.drawerSlideOffset > 0f ? activity.drawerSlideOffset : 1f;
                 return true;
 
             case MotionEvent.ACTION_MOVE:
@@ -170,33 +180,80 @@ final class MainDrawerGestureController {
                 float dy = event.getY() - activity.drawerSwipeStartY;
                 float absDx = Math.abs(dx);
                 float absDy = Math.abs(dy);
-                float closeThreshold = Math.max(activity.dpToPx(32), activity.drawerSwipeTouchSlop * 1.8f);
 
-                if (absDy > activity.drawerSwipeTouchSlop * 2.2f && absDy > absDx * 1.25f) {
-                    // Vertical scrolling/touch noise outside the open drawer should
-                    // not dismiss it. Keep consuming while the drawer is open so the
-                    // underlying list does not receive a stray click.
-                    activity.drawerManualDragging = false;
-                    return true;
-                }
-
-                if (dx < -closeThreshold && absDx > absDy * 1.10f) {
+                if (!activity.drawerManualDragging) {
+                    // Ignore mostly-vertical noise so list scrolling near an open
+                    // drawer does not start a dismiss, but keep consuming the event
+                    // (return true) so the underlying list gets no stray input.
+                    if (absDy > activity.drawerSwipeTouchSlop * 2.2f && absDy > absDx * 1.25f) {
+                        return true;
+                    }
+                    // Begin proportional dragging once there is a clear leftward
+                    // intent past the touch slop.
+                    float startThreshold = Math.max(activity.dpToPx(2), activity.drawerSwipeTouchSlop * 0.45f);
+                    if (dx >= -startThreshold || absDx <= absDy * 1.00f) {
+                        return true;
+                    }
                     activity.drawerManualDragging = true;
-                    closeDrawerReliably(drawerView);
-                    resetDrawerSwipeState();
+                    cancelMainListPendingPresses();
+                    activity.drawerForceSettling = false;
                 }
+
+                // Track the finger: leftward travel (dx < 0) reduces the offset in
+                // direct proportion to the distance, mirroring the open gesture's
+                // dragGain so open and close feel identical.
+                final float dragGain = 1.18f;
+                float offset = activity.drawerDismissStartOffset
+                        + (dx * dragGain) / Math.max(1f, drawerView.getWidth());
+                offset = Math.max(0f, Math.min(1f, offset));
+                applyDrawerManualOffset(drawerView, offset);
                 return true;
 
             case MotionEvent.ACTION_UP:
-                if (!activity.drawerDismissTracking || !activity.drawerSwipeTracking) return false;
-                // Do not close on a simple tap. The requested behavior is
-                // anywhere-left-swipe close; a tiny touch outside the drawer must
-                // leave it open.
+                if (!activity.drawerDismissTracking || !activity.drawerSwipeTracking) {
+                    resetDrawerSwipeState();
+                    return true;
+                }
+                if (!activity.drawerManualDragging) {
+                    // A tap outside the drawer (no real drag) must leave it open;
+                    // the requested behavior is anywhere-left-swipe close only.
+                    // We claimed settling on DOWN, so release it here since no
+                    // manual animation is in flight.
+                    activity.drawerForceSettling = false;
+                    resetDrawerSwipeState();
+                    return true;
+                }
+                // Release decides open vs close from where the drawer ended up.
+                // Anything dragged in past ~65% snaps back open; otherwise it
+                // finishes closing from its current position.
+                boolean keepOpen = activity.drawerSlideOffset >= 0.65f;
                 resetDrawerSwipeState();
+                if (keepOpen) {
+                    openDrawerReliably(drawerView);
+                } else {
+                    // Let DrawerLayout animate from the current offset down to 0.
+                    // Mark settling so the idle-state safety net does not snap it
+                    // shut mid-animation and kill the smoothness.
+                    activity.drawerForceSettling = true;
+                    activity.drawerLayout.closeDrawer(GravityCompat.START);
+                }
                 return true;
 
             case MotionEvent.ACTION_CANCEL:
+                if (activity.drawerManualDragging) {
+                    // Settle to the nearest end so we never strand a half state.
+                    boolean keepOpenOnCancel = activity.drawerSlideOffset >= 0.65f;
+                    resetDrawerSwipeState();
+                    if (keepOpenOnCancel) {
+                        openDrawerReliably(drawerView);
+                    } else {
+                        activity.drawerForceSettling = true;
+                        activity.drawerLayout.closeDrawer(GravityCompat.START);
+                    }
+                    return true;
+                }
                 resetDrawerSwipeState();
+                activity.drawerForceSettling = false;
                 return false;
 
             default:

@@ -13,6 +13,13 @@ TXT text-to-speech in 2.2.2 uses Android platform TTS, foreground-service notifi
 
 The RAR/CBR reader parses RAR5 and RAR4/RAR3-style archive metadata in this source tree, decodes RAR4 Unicode filename records, extracts entries stored without compression, assembles stored split payloads, and includes a limited first-party RAR5 encrypted stored-data decrypt attempt. Junrar is additionally bundled as a RAR extraction-only fallback for older RAR4/RAR3 compressed, solid, split/multi-volume, and encrypted cases. RAR5 compressed/solid/encrypted extraction can be enabled by adding the optional RealBurst/unrar5j jar to `app/libs`; without that jar, compressed RAR5 remains unsupported in the bundled decoder.
 
+
+
+### zstd-jni
+- Artifact: `com.github.luben:zstd-jni:1.5.7-9`
+- License: BSD 2-Clause for the JNI binding artifact. Upstream also notes that the bundled/native Zstandard library is available under BSD 3-Clause or GPL-2.0; this project relies on the permissive BSD licensing path for binary distribution.
+- Purpose: Provides the native Zstandard codec used by Apache Commons Compress for non-encrypted ZIP method 93 fallback and Zstandard stream support.
+
 ### Junrar
 
 Artifact: `com.github.junrar:junrar:7.6.0`
@@ -37,9 +44,9 @@ The ALZ path parses local headers and extracts Store, Deflate, and BZip2 entries
 
 The EGG container reader (`EggArchiveReader`) is first-party Java code. It implements publicly documented EGG container concepts and interoperability behavior for read/extraction use only. No ESTsoft source files, unEGG source files, or UnEGG binary module are copied or bundled in this repository. The decoder handles Store/Deflate/BZip2/AZO/LZMA, verifies each extracted block's CRC32, and sanitizes entry paths against directory traversal. Encrypted, split, and solid EGG archives are reported as unsupported. The decoder is not used to create EGG archives.
 
-### First-party lightweight ZIP / CBZ path
+### ZIP / CBZ routing boundary
 
-Plain non-encrypted ZIP/CBZ archives can be listed and extracted by the experimental source code path in this project using Android/JDK ZIP primitives. Production ZIP/CBZ routing remains on Zip4j until the first-party path consistently outperforms it. Encrypted ZIP and standard split ZIP remain routed through Zip4j for compatibility.
+Production ZIP/CBZ routing uses Zip4j as the primary path for listing, extraction, encrypted ZIP handling, and standard split ZIP compatibility. When Zip4j rejects a non-encrypted entry because of an unsupported compression method, extraction can fall back to Apache Commons Compress for methods Commons can decode with bundled dependencies, such as Deflate64, BZip2, XZ through XZ for Java, and ZSTD through zstd-jni. Encrypted ZIP entries remain on Zip4j and do not use the Commons fallback, so AES plus a non-Zip4j method such as AES+XZ remains unsupported. ZSTD ZIP entries are enabled through the bundled zstd-jni dependency. The older first-party lightweight ZIP reader remains experimental/benchmark-oriented and is not the default production route.
 
 ### AZO decoder notice
 
@@ -82,7 +89,7 @@ Material Symbols / Material Icons are distributed by Google under the Apache Lic
 
 Artifact: `org.apache.commons:commons-compress:1.28.0`
 
-Use in this project: archive extraction support for 7z, standard 7z/CB7 split-volume chains through a concatenated seekable channel, TAR-family formats, numeric split archives that are reassembled before extraction where appropriate, and single-file compressor streams such as GZ/BZ2/XZ/LZMA/Z.
+Use in this project: archive extraction support for 7z, standard 7z/CB7 split-volume chains through a concatenated seekable channel, TAR-family formats, numeric split archives that are reassembled before extraction where appropriate, single-file compressor streams such as GZ/BZ2/XZ/LZMA/Z, ALZ/EGG BZip2 payloads, and the non-encrypted ZIP fallback path for ZIP-internal compression methods Zip4j cannot decode but Commons Compress can read, including Deflate64, BZip2, XZ through XZ for Java, and ZSTD through zstd-jni.
 
 License: Apache License 2.0.
 
@@ -90,7 +97,7 @@ License: Apache License 2.0.
 
 Artifact: `org.tukaani:xz:1.12`
 
-Use in this project: XZ/LZMA2 decompression support used by 7z and `.tar.xz` / `.txz` extraction.
+Use in this project: XZ/LZMA2 decompression support used by 7z, `.tar.xz` / `.txz` extraction, `.xz` single-stream extraction, and non-encrypted ZIP-internal XZ fallback through Apache Commons Compress.
 
 License: 0BSD.
 
@@ -99,7 +106,7 @@ License: 0BSD.
 
 Artifact: `net.lingala.zip4j:zip4j:2.11.6`
 
-Use in this project: ZIP/CBZ extraction, encrypted ZIP handling, and standard split ZIP archive handling.
+Use in this project: primary ZIP/CBZ listing and extraction path, encrypted ZIP handling, and standard split ZIP archive handling. Non-encrypted entries with Zip4j-unsupported methods can fall back to Apache Commons Compress; encrypted entries remain on Zip4j.
 
 License: Apache License 2.0.
 

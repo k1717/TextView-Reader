@@ -143,14 +143,26 @@ final class EggArchiveReader {
                                                @NonNull File targetDir,
                                                @Nullable char[] password,
                                                @Nullable FileOperationProgress progress) throws IOException {
+        return extractArchiveIntoDirectory(archive, targetDir, password, progress, null);
+    }
+
+    static boolean extractArchiveIntoDirectory(@NonNull File archive,
+                                               @NonNull File targetDir,
+                                               @Nullable char[] password,
+                                               @Nullable FileOperationProgress progress,
+                                               @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
         boolean any = false;
         try (RandomAccessFile raf = new RandomAccessFile(archive, "r")) {
             List<EggEntry> entries = readEntries(archive, raf);
             if (progress != null) progress.setTotalBytes(sumUncompressedBytes(entries));
             for (EggEntry entry : entries) {
                 if (progress != null && !progress.checkpoint()) return false;
-                if (entry.directory) continue;
-                if (progress != null) progress.setDetail(entry.path);
+                if (entry.directory) {
+                    if (entryProgress != null) entryProgress.onDirectory(entry.path);
+                    continue;
+                }
+                if (entryProgress != null) entryProgress.onFile(entry.path);
+                else if (progress != null) progress.setDetail(entry.path);
                 File outFile = resolveOutput(targetDir, entry.path);
                 if (outFile == null) continue;
                 writeEntry(raf, entry, outFile, password, progress);

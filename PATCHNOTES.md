@@ -1,4 +1,51 @@
-# Patch Notes
+# TextView Reader Patch Notes
+
+## 2.2.5
+
+### Archive handling
+- ZIP extraction now uses Zip4j as the primary path and Apache Commons Compress as a non-encrypted fallback when Zip4j rejects an unsupported compression method. The fallback covers whole-archive and single-entry extraction for methods Commons Compress can decode with the bundled runtime, notably Deflate64, BZip2, XZ through XZ for Java, and ZSTD through zstd-jni. Methods that neither bundled path can decode, plus ABI/native codec load failures, fail as unsupported instead of crashing.
+- Bundled `com.github.luben:zstd-jni:1.5.7-9`, so release R8 no longer reports Commons Compress Zstandard support as a missing class and non-encrypted ZSTD ZIP entries can be attempted by the Commons fallback.
+- Archive-format notes now distinguish verified synthetic/code-mapping coverage from broad real-fixture compatibility. ALZ unsupported errors now identify unsupported features or variants instead of saying ALZ decoding is unavailable.
+- Encrypted ZIP entries remain on Zip4j. AES-encrypted entries combined with a non-Zip4j compression method are still unsupported because no single bundled path provides both AES handling and that codec.
+- Fixed pending ZIP creation so the destination is resolved from the folder where the pending action is executed, not from the original source folder. Queued compression now behaves like extraction/copy/move queue actions: add the task, open the destination folder, then run the pending action there.
+
+### Direct archive image opening
+- Main-list comic/image archive opening can now prepare the image sequence in the background and launch the image reader directly.
+- The direct path avoids the previous intermediate archive-preview screen flash during archive-to-image-reader handoff.
+- The existing archive-preview screen remains the fallback for no-image archives, password/unsupported cases, and explicit preview navigation.
+
+### Browse-state and folder navigation
+- Added bidirectional browse-state cache: fully loaded folders keep their adapter snapshot and RecyclerView scroll state, so A -> B -> A and A -> B -> A -> B navigation can restore instantly when the folders have not changed.
+- Improved drawer shortcut folder loading response by using fast outgoing-state capture, optimistic cached restore with background signature validation, and earlier first-progress publishing for uncached folders.
+- Returning from TXT/PDF/EPUB/Word/image/archive viewers now keeps the existing main folder adapter and RecyclerView state when the same folder is still visible. If the folder changed while in the viewer, the folder reloads to show added/generated files and clear stale rows.
+- Screen off/on and Home/app-switcher returns now keep the visible browse-folder adapter instead of rescanning when the folder signature, sort mode, and hidden-file setting still match.
+- Current-folder type filters can return to the cached All-file list without a rescan when the folder did not change.
+- Long main-list file/folder names keep a small right-side inset so ellipsized text does not press directly against the row edge or reading-progress badge.
+- Refactored browse-folder state preservation into `MainBrowseStateController`, keeping viewer-return, resume, filter-return, drawer shortcut, folder-signature, and folder-snapshot logic out of `MainActivity` while preserving behavior.
+
+### Main file-list touch
+- Reduced the regular main file/folder action short-hold delay from about 500 ms to 200 ms so the normal action popup opens faster.
+- Reduced the separate multi-select hold path from 1200 ms to 800 ms.
+
+### File-operation progress
+- Fixed a multi-select delete progress-window re-entry bug. Multi-delete now exits selection mode immediately after deletion is confirmed, before the worker starts, so the active progress button is available right away.
+- `MainActivity.onResume()` refreshes main toolbar progress/pending visibility so paused or backgrounded file operations can be reopened after returning to the app.
+- Progress windows for extraction, copy, move/cut, delete, and ZIP creation now follow the delete-style interface: active file/folder names on the left, fixed right-side `(current/total)` count columns, and stable row heights.
+- File counts use the active operation's recursive regular-file total. Archive extraction uses the current archive's full regular-file count, while copy/move/delete/ZIP creation use recursive selected-workload totals.
+- Folder counts remain visible for extraction, copy, and move/cut and no longer collapse to `(1/1)` during multi-selection when multiple folders/top-level workloads are involved.
+- Progress popups reserve file/folder row height from the start, preventing the dialog from growing vertically as rows appear or as folder names wrap.
+- Pause/resume now uses a fixed-size monochrome icon button instead of text or emoji glyphs, so pause and resume states keep the same popup size.
+- Folder information now calculates recursive folder size in the background instead of showing an inaccurate raw directory size.
+
+### UI polish
+- Color-palette dialog buttons now use the same rounded themed button color as the app's other popups instead of default gray Android buttons.
+- File and folder progress counter colors/sizing were aligned for a consistent visual weight.
+
+### Refactoring
+- Split archive browser list shaping into `ArchiveEntryListController`, archive image-sequence preparation into `ArchiveImageSequenceLoader`, direct archive image routing into `MainArchiveImageOpenController`, and archive create/extract validation and naming policy into `MainArchiveCreationPlanner` / `MainArchiveExtractionPlanner`.
+
+### Release metadata
+- Android metadata: `versionCode 2250`, `versionName "2.2.5"`.
 
 ## 2.2.4
 
@@ -26,7 +73,7 @@
 
 ### Known support boundaries
 - Archive creation is plain ZIP only.
-- ZIPX entries using unsupported methods, such as method-95/XZ, remain unsupported for extraction.
+- Non-encrypted ZIPX entries using method-95/XZ can use the Commons Compress fallback when the bundled XZ codec is available. AES+XZ remains unsupported because encrypted ZIP entries stay on the Zip4j path and Commons Compress cannot provide AES decryption for that combination.
 - RAR5 compressed extraction requires the optional unrar5j jar; RAR5 split/multi-volume remains not guaranteed.
 - Encrypted/split/solid EGG and broad legacy ALZ variants remain unsupported.
 - 7z support depends on Apache Commons Compress method coverage; missing/gapped split-volume chains are rejected.
@@ -84,7 +131,7 @@ This 2.2.3 package starts the first-party RAR/CBR engine track on top of the 2.2
 - Single archive extraction, batch extraction, archive preview item opening, and archive image preview now use the same failure classification instead of collapsing every case into a generic failure toast.
 - Unsupported RAR, ALZ, and EGG cases now show format-specific messages so users can distinguish a damaged file from a format variant outside the current verified decoder boundary.
 - Documented the 2.2.3 archive support matrix in `README.md`, including the current limits for compressed RAR5, solid/encrypted RAR, ALZ variants, EGG, Unix compressor streams, and OpenPGP-wrapped `.tar.*.gpg` files.
-- Added `.zipx` recognition as a ZIP-family archive. ZIPX AES/password detection now falls back to raw ZIP header scanning when Zip4j cannot parse the compression method, and ZIPX central-directory listing can still show entries for unsupported method-95/XZ samples while extraction remains explicitly unsupported.
+- Added `.zipx` recognition as a ZIP-family archive. ZIPX AES/password detection falls back to raw ZIP header scanning when Zip4j cannot parse the compression method. 2.2.5 adds non-encrypted Commons Compress extraction fallback for supported methods such as XZ, while AES+XZ remains explicitly unsupported.
 - Added an optional external fixture smoke test, enabled with `TEXTVIEW_EXTERNAL_ARCHIVE_FIXTURE_DIR`, covering the provided password ZIP, password 7z, password ZIPX, and `rar-test-files-master.zip` samples. Added EGG synthetic fixture tests for Store/Deflate extraction and encrypted-entry failure classification.
 
 ### Drawer gesture and bottom actions

@@ -39,12 +39,7 @@ final class MainArchiveExtractController {
     }
 
     void startArchiveExtractions(@NonNull List<File> archives) {
-        ArrayList<File> ready = new ArrayList<>();
-        for (File archive : archives) {
-            if (archive != null && isSupportedArchive(archive) && archive.exists() && archive.isFile() && archive.canRead()) {
-                ready.add(archive);
-            }
-        }
+        ArrayList<File> ready = MainArchiveExtractionPlanner.collectReadyArchives(archives);
         if (ready.isEmpty()) {
             ShortToast.show(activity, R.string.archive_extract_failed);
             return;
@@ -137,7 +132,7 @@ final class MainArchiveExtractController {
     }
 
     private String getArchiveOutputBaseName(@NonNull File archive) {
-        return ArchiveSupport.getArchiveOutputBaseName(
+        return MainArchiveExtractionPlanner.archiveOutputBaseName(
                 archive,
                 activity.getString(R.string.extracted_folder_fallback));
     }
@@ -208,7 +203,7 @@ final class MainArchiveExtractController {
         });
         activity.addFileOpsRow(box, activity.getString(R.string.create_copy), fg, panel, () -> {
             if (ref[0] != null) ref[0].dismiss();
-            File copyDestination = buildNumberedDirectoryDestination(parentDir, existingTarget.getName());
+            File copyDestination = MainArchiveExtractionPlanner.numberedDirectoryDestination(parentDir, existingTarget.getName(), activity.getString(R.string.extracted_folder_fallback));
             if (copyDestination == null) {
                 ShortToast.show(activity, R.string.archive_extract_failed);
                 return;
@@ -341,8 +336,8 @@ final class MainArchiveExtractController {
                 activity.getString(R.string.archive_extracting),
                 archive.getName());
         progress.setFolder(destinationDir.getName().length() > 0 ? destinationDir.getName() : destinationDir.getAbsolutePath());
-        progress.setItemProgress(1, 1);
-        progress.setFolderProgress(1, 1);
+        progress.clearItemProgress();
+        progress.clearFolderProgress();
         activity.executeFolderBackgroundTask(() -> {
             ArchiveSupport.ExtractionResult result = ArchiveSupport.extractArchiveDetailed(
                     archive,
@@ -394,10 +389,10 @@ final class MainArchiveExtractController {
             int failedCount = 0;
             int unsupportedCount = 0;
             int passwordFailedCount = 0;
-            int itemIndex = 0;
-            int folderIndex = 0;
-            final int folderTotal = archives.size();
+            final int totalArchives = archives.size();
+            int archiveIndex = 0;
             for (File archive : archives) {
+                archiveIndex++;
                 if (progress.isCancelled()) break;
                 if (archive == null || !archive.exists() || !archive.canRead() || !isSupportedArchive(archive)) {
                     failedCount++;
@@ -406,16 +401,20 @@ final class MainArchiveExtractController {
                 String baseName = getArchiveOutputBaseName(archive);
                 File destination = new File(destinationRoot, baseName);
                 if (destination.exists()) {
-                    destination = buildNumberedDirectoryDestination(destinationRoot, baseName);
+                    destination = MainArchiveExtractionPlanner.numberedDirectoryDestination(destinationRoot, baseName, activity.getString(R.string.extracted_folder_fallback));
                 }
                 if (destination == null) {
                     failedCount++;
                     continue;
                 }
                 progress.setDetail(archive.getName());
-                progress.setItemProgress(++itemIndex, folderTotal);
+                progress.clearItemProgress();
                 progress.setFolder(destination.getName());
-                progress.setFolderProgress(++folderIndex, folderTotal);
+                if (totalArchives > 1) {
+                    progress.setFolderProgress(archiveIndex, totalArchives);
+                } else {
+                    progress.clearFolderProgress();
+                }
                 boolean passwordRequired = ArchiveSupport.requiresPasswordForExtraction(archive);
                 char[] password = passwordRequired ? batchPassword : null;
                 ArchiveSupport.ExtractionResult result = password == null && passwordRequired
@@ -487,7 +486,7 @@ final class MainArchiveExtractController {
     private void continueAllArchiveExtractionsWithPasswordPreflight(@NonNull ArrayList<File> archives,
                                                                     @NonNull File destinationRoot) {
         activity.executeFolderBackgroundTask(() -> {
-            boolean needsPassword = hasPasswordProtectedArchive(archives);
+            boolean needsPassword = MainArchiveExtractionPlanner.hasPasswordProtectedArchive(archives);
             activity.fileSearchHandler.post(() -> {
                 if (activity.activityDestroyed) return;
                 if (needsPassword) {
@@ -502,22 +501,5 @@ final class MainArchiveExtractController {
         });
     }
 
-    private boolean hasPasswordProtectedArchive(@NonNull List<File> archives) {
-        for (File archive : archives) {
-            if (archive == null || !archive.exists() || !archive.canRead() || !isSupportedArchive(archive)) continue;
-            if (ArchiveSupport.requiresPasswordForExtraction(archive)) return true;
-        }
-        return false;
-    }
 
-    @Nullable
-    private File buildNumberedDirectoryDestination(@NonNull File parentDir, @NonNull String baseName) {
-        String cleanBase = baseName.trim();
-        if (cleanBase.length() == 0) cleanBase = activity.getString(R.string.extracted_folder_fallback);
-        for (int i = 1; i < 10000; i++) {
-            File candidate = new File(parentDir, cleanBase + " (" + i + ")");
-            if (!candidate.exists()) return candidate;
-        }
-        return null;
-    }
 }

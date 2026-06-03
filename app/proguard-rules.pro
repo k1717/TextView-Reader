@@ -27,3 +27,5 @@
 # Optional RAR5 decoder is loaded reflectively by Rar5LibraryFallback when the local jar is present.
 -keep class be.stef.rar5.** { *; }
 -dontwarn be.stef.rar5.**
+
+# Zstandard support is bundled through com.github.luben:zstd-jni for Commons Compress ZIP fallback.

@@ -74,6 +74,14 @@ final class RarJunrarFallback {
                                                @NonNull File targetDir,
                                                @Nullable char[] password,
                                                @Nullable FileOperationProgress progress) throws IOException {
+        return extractArchiveIntoDirectory(archiveFile, targetDir, password, progress, null);
+    }
+
+    static boolean extractArchiveIntoDirectory(@NonNull File archiveFile,
+                                               @NonNull File targetDir,
+                                               @Nullable char[] password,
+                                               @Nullable FileOperationProgress progress,
+                                               @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
         boolean sawEntry = false;
         try (Archive archive = openArchive(archiveFile, password)) {
             ensurePasswordAvailable(archive, password);
@@ -85,7 +93,10 @@ final class RarJunrarFallback {
                 if (path == null) continue;
                 boolean directory = header.isDirectory() || path.endsWith("/");
                 if (directory && !path.endsWith("/")) path += "/";
-                if (progress != null) progress.setDetail(path);
+                if (entryProgress != null) {
+                    if (directory) entryProgress.onDirectory(path);
+                    else entryProgress.onFile(path);
+                } else if (progress != null) progress.setDetail(path);
                 File out = resolveOutput(targetDir, path);
                 if (out == null) return false;
                 sawEntry = true;

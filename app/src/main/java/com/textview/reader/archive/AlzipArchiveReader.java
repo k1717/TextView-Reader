@@ -82,6 +82,14 @@ final class AlzipArchiveReader {
                                                @NonNull File targetDir,
                                                @Nullable char[] password,
                                                @Nullable FileOperationProgress progress) throws IOException {
+        return extractArchiveIntoDirectory(archive, targetDir, password, progress, null);
+    }
+
+    static boolean extractArchiveIntoDirectory(@NonNull File archive,
+                                               @NonNull File targetDir,
+                                               @Nullable char[] password,
+                                               @Nullable FileOperationProgress progress,
+                                               @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
         if (detectFamily(archive) == Family.EGG) {
             requirePasswordThenFailUnsupported(archive, password);
             throw unsupported(archive);
@@ -91,7 +99,10 @@ final class AlzipArchiveReader {
         boolean sawEntry = false;
         for (AlzEntry entry : entries) {
             if (progress != null && !progress.checkpoint()) return false;
-            if (progress != null) progress.setDetail(entry.path);
+            if (entryProgress != null) {
+                if (entry.directory || entry.path.endsWith("/")) entryProgress.onDirectory(entry.path);
+                else entryProgress.onFile(entry.path);
+            } else if (progress != null) progress.setDetail(entry.path);
             File out = resolveOutput(targetDir, entry.path);
             if (out == null) return false;
             sawEntry = true;
@@ -423,7 +434,7 @@ final class AlzipArchiveReader {
     private static IOException unsupported(@NonNull File archive) {
         Family family = detectFamily(archive);
         String label = family == Family.ALZ ? "ALZ" : family == Family.EGG ? "EGG" : "ALZ/EGG";
-        return new ArchiveSupport.UnsupportedArchiveFeatureException(label + " decoding is not available yet: " + archive.getName());
+        return new ArchiveSupport.UnsupportedArchiveFeatureException("Unsupported " + label + " feature or archive variant: " + archive.getName());
     }
 
     @NonNull

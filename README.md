@@ -2,7 +2,28 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, Word, image, and archive workflows. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow.
 
-Current version: **2.2.4**
+Current version: **2.2.5**
+
+## 2.2.5 release summary
+- ZIP extraction uses Zip4j as the primary path and Apache Commons Compress as a non-encrypted fallback when Zip4j rejects an unsupported compression method. With Commons Compress plus the bundled XZ for Java and zstd-jni dependencies, this broadens extraction for non-encrypted Deflate64, BZip2, XZ, and ZSTD ZIP entries. Encrypted ZIP entries stay on Zip4j, so AES combined with a non-Zip4j method such as AES+XZ still fails cleanly as unsupported.
+- Comic/image archives can open directly from the main file list into the image reader without briefly showing the archive-preview screen. If the archive has no image entry, requires password handling, or cannot be handled by the direct path, the app falls back to the existing archive preview flow.
+- Archive validation notes separate code-mapping/synthetic-fixture coverage from broad real-world compatibility claims for TAR, single-compressor streams, ALZ, and EGG; ALZ unsupported errors now report an unsupported variant rather than saying decoding is unavailable.
+- Pending ZIP creation uses the current folder at execution time, so queued compression can be run from the intended destination folder.
+- Main file/folder action short-hold on the main list now opens after 200 ms instead of the previous roughly 500 ms delay. The separate multi-select hold now enters after 800 ms.
+- Returning from an internal viewer preserves the current main-folder list and scroll state only when the original folder is unchanged; if a file is added, deleted, renamed, moved, or modified while the viewer is open, the folder is reloaded.
+- Returning to already loaded folders restores cached adapter lists and scroll state in both directions. A -> B -> A and A -> B -> A -> B can reuse cached state when the folder contents, sort mode, and hidden-file setting are unchanged.
+- Drawer shortcut and recent-folder navigation use a faster path: cached target folders are shown immediately, then validated in the background; uncached large folders publish their first visible list earlier.
+- Screen off/on and Home/app-switcher returns keep the visible browse folder without a rescan when the folder did not change.
+- Clearing a current-folder type filter back to All restores the cached full-folder list when possible instead of rescanning the folder.
+- File-operation progress windows are unified around the delete-style interface for extraction, copy, move/cut, delete, and ZIP creation. File counts and folder counts use stable right-side count columns, recursive file/folder totals, fixed-height rows, and a monochrome pause/resume icon so the popup does not resize or shift while work runs.
+- Folder information now computes recursive folder size in the background instead of displaying the unreliable directory `File.length()` value.
+- Color-palette confirmation buttons now use the app's rounded themed button style instead of Android's default gray button tint.
+- Very long main-list file and folder names keep a small right-side inset so text no longer presses directly against the row edge or progress badge area.
+- Updated Android metadata to `versionCode 2250` and `versionName "2.2.5"`.
+- Refactored browse-folder state/cache handling into `MainBrowseStateController`, reducing `MainActivity` size while preserving viewer-return, resume, drawer shortcut, filter-return, and A/B/A/B folder state behavior.
+- Refactored archive UI/planning code into `ArchiveEntryListController`, `ArchiveImageSequenceLoader`, `MainArchiveCreationPlanner`, `MainArchiveExtractionPlanner`, and `MainArchiveImageOpenController`.
+- Fixed multi-select delete progress re-entry after pause/background by leaving selection mode immediately after delete confirmation and refreshing progress-toolbar visibility on resume.
+- 2.2.5 keeps the 2.2.4 palette, TXT page-label, dependency, Apache-2.0, and archive-management baseline while adding the ZIP Commons fallback, direct archive-image handoff, browse-state cache, and progress-window polish.
 
 ## 2.2.4 release summary
 
@@ -19,17 +40,17 @@ Current version: **2.2.4**
 - TXT page labels show `current / total` at exact page-start positions and `current (line-in-page) / total` at mid-page positions; the in-page number is numeric-only and aligned with bookmark restore anchors.
 - Build/runtime/test dependencies were refreshed on the SDK-35 release line: AGP `9.2.0`, Gradle `9.4.1`, AppCompat `1.7.1`, Material Components `1.14.0`, RecyclerView `1.4.0`, ConstraintLayout `2.2.1`, Activity `1.10.1`, XZ for Java `1.12`, Zip4j `2.11.6`, AndroidX Test Runner `1.7.0`, and AndroidX Test Ext JUnit `1.3.0`.
 
-### Archive support status in 2.2.4
+### Archive support status in 2.2.5
 
 | Format family | Current support | Known limits |
 | --- | --- | --- |
-| ZIP / ZIPX / CBZ | Production path through Zip4j for ZIP/CBZ listing, extraction, encrypted ZIP, and standard split ZIP. ZIPX names are recognized and AES/password detection has a raw-header fallback when Zip4j cannot parse the compression method. Experimental first-party stored/deflate ZIP path remains benchmarked but not the production default. | ZIPX entries using unsupported compression methods such as ZIP method 95/XZ can be listed but not extracted yet. ZIP creation is plain ZIP only; encrypted ZIP creation is not implemented. |
+| ZIP / ZIPX / CBZ | Primary production path through Zip4j for ZIP/CBZ listing, extraction, encrypted ZIP, and standard split ZIP. If Zip4j rejects a non-encrypted entry because of an unsupported compression method, extraction falls back to Apache Commons Compress for methods Commons can decode, notably Deflate64, BZip2, XZ through XZ for Java, and ZSTD through zstd-jni. ZIPX names are recognized and AES/password detection has a raw-header fallback when Zip4j cannot parse the compression method. | Encrypted entries stay on Zip4j and cannot use the Commons fallback. AES combined with a non-Zip4j method such as AES+XZ, LZMA/PPMd, and ABI/native codec load failures are not guaranteed and fail cleanly as unsupported. ZIP creation is plain ZIP only; encrypted ZIP creation is not implemented. |
 | 7z / CB7 | Listing and extraction through Apache Commons Compress, with password forwarding. Standard split chains (`.7z.001` / `.7z.002` and `.cb7.001` / `.cb7.002`) are opened through a concatenated seekable channel without building a temporary combined file. | Unsupported 7z methods depend on Commons Compress coverage. Missing/gapped volumes and 7z split creation are not supported. |
-| TAR / CBT and TAR.GZ / TAR.BZ2 / TAR.XZ / TAR.LZMA / TAR.Z | Listing, single-entry extraction, and full extraction. | These formats do not have an internal password layer; `.tar.*.gpg` would require a separate OpenPGP decrypt step. |
-| GZ / BZ2 / XZ / LZMA / Z | Single-file decompression paths. | These are compressor streams, not multi-file archives. |
+| TAR / CBT and TAR.GZ / TAR.BZ2 / TAR.XZ / TAR.LZMA / TAR.Z | Listing, single-entry extraction, and full extraction through Commons Compress stream wrappers. Sample magic/header mapping has been checked for the five TAR variants; Android Java end-to-end fixtures remain part of release QA. | These formats do not have an internal password layer; `.tar.*.gpg` would require a separate OpenPGP decrypt step. |
+| GZ / BZ2 / XZ / LZMA / Z | Single-file decompression paths. `.gz`, `.bz2`, `.xz`, and `.lzma` sample payloads have been checked against the expected decoder mapping. | These are compressor streams, not multi-file archives. `.Z` is mapped to Commons Compress `ZCompressorInputStream` but still needs a real compress-format fixture in release QA. |
 | RAR / CBR | First-party metadata listing, safe paths, RAR4 Unicode names, stored method-0 extraction, limited RAR5 encrypted stored-data decrypt, stored split-payload assembly, Junrar fallback extraction for older RAR4/RAR3 compressed/solid/split/encrypted cases, and optional unrar5j fallback for RAR5 compressed/solid/encrypted extraction when `app/libs/unrar5j-v1.0.3.jar` is present. | RAR creation is not supported. RAR5 compressed extraction needs the optional local unrar5j jar; split/multi-volume RAR5 remains not guaranteed because upstream marks it partial. |
-| ALZ | First-party local-header parsing with Store/Deflate/BZip2 extraction, including ZipCrypto for covered cases. CRC-verified. | Unusual descriptors, broader split handling, and unverified legacy variants remain unsupported. |
-| EGG | First-party container parser with Store/Deflate/BZip2/AZO/LZMA extraction, per-block CRC32 verification, and path-traversal-safe names. AZO extraction is handled by an extraction-only modified Java port of `kippler/xunazo`. | Encrypted, split, and solid EGG archives are unsupported. EGG creation is not implemented. |
+| ALZ | First-party local-header parsing with Store/Deflate/BZip2 extraction, including ZipCrypto for covered cases. Store/Deflate synthetic fixtures have been run through the Java reader with CRC verification and corrupt-output cleanup. | Real ESTsoft-created ALZ fixtures, BZip2 payloads on Android, unusual descriptors, broader split handling, and unverified legacy variants remain release-QA items. |
+| EGG | First-party container parser with Store/Deflate/BZip2/AZO/LZMA extraction, per-block CRC32 verification, and path-traversal-safe names. AZO extraction is handled by an extraction-only modified Java port of `kippler/xunazo`. | Encrypted, split, and solid EGG archives are unsupported. Real ESTsoft-created EGG fixtures should remain in release QA before claiming broad compatibility. EGG creation is not implemented. |
 | Archive creation | Plain ZIP creation through queued pending actions. | RAR/7z/ALZ/EGG creation and encrypted ZIP creation are not implemented. |
 
 ## 2.2.3 release summary
@@ -69,6 +90,7 @@ Current version: **2.2.4**
 - The All file filter now also shows APK and common video files, including MPEG transport stream `.ts`; tapping them opens the Android package installer or an external video app instead of trying to load them in TextView.
 - Main file search now has a compact icon scope toggle beside the search field, shows parent-folder paths in search results, uses a centered spinner instead of occupying the sort-button row, and the main/recent lists have right-edge drag fast scrolling for large result sets. The All-folders search icon was redrawn to avoid darker edge seams caused by overlapping vector layers.
 - Current-folder type filters keep folders visible above matching files, so IMG/PDF/etc. filtering still allows folder navigation while showing matching files below.
+- Already loaded folders can restore their adapter list and scroll position in both directions, and unchanged folders are kept across viewer returns, filter clearing, and ordinary app resumes.
 - Filtered folder navigation now remembers where the filter was turned on: Back keeps the filter while returning from subfolders entered under that filter, but clears the filter and returns to the parent when pressed at the activation folder.
 - Switching from current-folder search to the wider folder scope now searches downward from the current folder instead of jumping up to storage roots, avoiding unexpectedly huge parent/sibling scans.
 - Current-folder typed searches also publish partial results progressively during recursive scanning, matching the wider folder search feedback.

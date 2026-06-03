@@ -263,10 +263,19 @@ public final class FileClipboardController {
                                     boolean overwrite,
                                     @Nullable FileOperationProgress progress,
                                     boolean assignTotalBytes) {
+        return performOperation(item, destination, overwrite, progress, assignTotalBytes, null);
+    }
+
+    public boolean performOperation(@Nullable PendingItem item,
+                                    @NonNull File destination,
+                                    boolean overwrite,
+                                    @Nullable FileOperationProgress progress,
+                                    boolean assignTotalBytes,
+                                    @Nullable FileTreeProgressTracker tracker) {
         if (item == null || !isValidSource(item.source)) return false;
         return item.copy
-                ? FileSystemOps.copy(item.source, destination, overwrite, progress, assignTotalBytes)
-                : FileSystemOps.move(item.source, destination, overwrite, progress, assignTotalBytes);
+                ? FileSystemOps.copy(item.source, destination, overwrite, progress, assignTotalBytes, tracker)
+                : FileSystemOps.move(item.source, destination, overwrite, progress, assignTotalBytes, tracker);
     }
 
     @Nullable

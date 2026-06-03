@@ -113,6 +113,14 @@ final class Rar5LibraryFallback {
                                                @NonNull File targetDir,
                                                @Nullable char[] password,
                                                @Nullable FileOperationProgress progress) throws IOException {
+        return extractArchiveIntoDirectory(archive, targetDir, password, progress, null);
+    }
+
+    static boolean extractArchiveIntoDirectory(@NonNull File archive,
+                                               @NonNull File targetDir,
+                                               @Nullable char[] password,
+                                               @Nullable FileOperationProgress progress,
+                                               @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
         ensureAvailable();
         if (progress != null) {
             progress.setDetail(archive.getName());

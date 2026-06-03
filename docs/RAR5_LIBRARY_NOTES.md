@@ -2,7 +2,7 @@
 
 ## Current bundled boundary
 
-TextView Reader 2.2.4 now has two RAR5 paths:
+TextView Reader 2.2.5 now has two RAR5 paths:
 
 - The first-party reader still handles metadata listing, safe paths, stored method-0 extraction, stored split assembly for supported stored entries, and the limited RAR5 encrypted stored-data decrypt attempt.
 - A new reflection-based `Rar5LibraryFallback` can delegate compressed RAR5 listing and extraction to RealBurst/unrar5j when `app/libs/unrar5j-v1.0.3.jar` is present at build/runtime.

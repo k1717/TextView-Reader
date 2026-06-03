@@ -20,8 +20,8 @@ android {
         applicationId "com.textview.reader"
         minSdk 24
         targetSdk 35
-        versionCode 2240
-        versionName "2.2.4"
+        versionCode 2250
+        versionName "2.2.5"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -77,6 +77,8 @@ dependencies {
     implementation 'com.github.albfernandez:juniversalchardet:2.5.0'
     implementation 'org.apache.commons:commons-compress:1.28.0'
     implementation 'org.tukaani:xz:1.12'
+    // Enables Apache Commons Compress Zstandard streams and ZIP method 93 fallback.
+    implementation 'com.github.luben:zstd-jni:1.5.7-9'
     implementation 'net.lingala.zip4j:zip4j:2.11.6'
     implementation 'com.github.junrar:junrar:7.6.0'
     testImplementation 'junit:junit:4.13.2'

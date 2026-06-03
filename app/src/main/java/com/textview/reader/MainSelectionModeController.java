@@ -14,6 +14,7 @@ import com.textview.reader.adapter.FileAdapter;
 import com.textview.reader.util.FileClipboardController;
 import com.textview.reader.util.FileOperationProgress;
 import com.textview.reader.util.FileSystemOps;
+import com.textview.reader.util.FileTreeProgressTracker;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -223,6 +224,14 @@ final class MainSelectionModeController {
 
     private void deleteSelectedFiles(@NonNull ArrayList<File> selected) {
         if (selected.isEmpty()) return;
+        // The delete worker uses a snapshot of the selected files, so the UI no
+        // longer needs to remain in multi-select mode after the user confirms.
+        // Leaving selection mode active hides the background operation-progress
+        // toolbar button; if the user pauses the delete job and backgrounds the
+        // dialog, there is no immediate way to reopen it until another folder
+        // navigation refreshes the toolbar. Exit selection mode up front so the
+        // normal toolbar can expose the active progress button immediately.
+        exitFileSelectionMode(true);
         ArrayList<String> deletedPaths = new ArrayList<>();
         FileOperationProgress progress = activity.showFileOperationProgress(
                 activity.getString(R.string.file_deleting),
@@ -243,20 +252,13 @@ final class MainSelectionModeController {
                 }
             }
             progress.setTotalBytes(totalBytes);
+            FileTreeProgressTracker treeProgress = FileTreeProgressTracker.create(progress, selected);
             int deletedCount = 0;
-            int itemIndex = 0;
-            int itemTotal = countExistingSelectedItems(selected);
-            int folderIndex = 0;
-            int folderTotal = countSelectedFolders(selected);
-            if (folderTotal <= 0) progress.clearFolderProgress();
             for (File file : selected) {
                 if (file == null || !file.exists()) continue;
                 String path = file.getAbsolutePath();
                 boolean wasDirectory = file.isDirectory();
-                progress.setItemProgress(++itemIndex, itemTotal);
-                if (wasDirectory) progress.setFolderProgress(++folderIndex, folderTotal);
-                else if (folderTotal > 0) progress.clearFolderProgress();
-                if (FileSystemOps.delete(file, progress, false)) {
+                if (FileSystemOps.delete(file, progress, false, treeProgress)) {
                     deletedCount++;
                     deletedPaths.add(path);
                     if (activity.bookmarkManager != null) activity.bookmarkManager.deleteReadingState(path);
@@ -268,12 +270,10 @@ final class MainSelectionModeController {
             activity.fileSearchHandler.post(() -> {
                 activity.finishFileOperationProgress(progress);
                 if (progress.isCancelled()) {
-                    exitFileSelectionMode(true);
                     activity.refreshVisibleFileListAfterDelete();
                     ShortToast.show(activity, R.string.file_operation_cancelled);
                     return;
                 }
-                exitFileSelectionMode(true);
                 if (activity.currentDirectory != null && activity.currentDirectory.exists() && activity.currentDirectory.isDirectory() && !activity.homeMode) {
                     activity.loadDirectory(activity.currentDirectory);
                 } else {
