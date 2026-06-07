@@ -125,6 +125,12 @@ final class MainSelectionActionDropdownController {
                 activity.startSelectedArchiveExtraction();
             }));
         }
+        if (activity.isRecentFileSelectionContext()) {
+            actions.add(new Action(activity.getString(R.string.remove_selected_from_recent_list), fg, () -> {
+                dismiss(popupRef);
+                activity.removeSelectedFilesFromRecentList();
+            }));
+        }
         actions.add(new Action(activity.getString(R.string.archive_create), fg, () -> {
             dismiss(popupRef);
             activity.startSelectedArchiveCreation();

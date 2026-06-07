@@ -193,6 +193,29 @@ final class MainSelectionModeController {
         activity.startArchiveExtractions(archives);
     }
 
+    boolean isRecentFileSelectionContext() {
+        return activity.homeMode && !activity.searchMode;
+    }
+
+    void removeSelectedFilesFromRecentList() {
+        ArrayList<File> selected = getSelectedFilesSnapshot();
+        if (selected.isEmpty() || activity.bookmarkManager == null) {
+            exitFileSelectionMode(true);
+            return;
+        }
+        int removed = 0;
+        for (File file : selected) {
+            if (file == null) continue;
+            activity.bookmarkManager.deleteReadingState(file.getAbsolutePath());
+            removed++;
+        }
+        exitFileSelectionMode(true);
+        activity.loadRecentFiles();
+        ShortToast.show(activity, removed > 0
+                ? activity.getString(R.string.selected_recent_files_cleared, removed)
+                : activity.getString(R.string.no_recent_files_to_clear));
+    }
+
     void showSelectedDeleteConfirm() {
         ArrayList<File> selected = getSelectedFilesSnapshot();
         if (selected.isEmpty()) {

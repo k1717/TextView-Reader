@@ -1577,6 +1577,10 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     void startSelectedArchiveExtraction() { mainSelectionMode().startSelectedArchiveExtraction(); }
 
+    boolean isRecentFileSelectionContext() { return mainSelectionMode().isRecentFileSelectionContext(); }
+
+    void removeSelectedFilesFromRecentList() { mainSelectionMode().removeSelectedFilesFromRecentList(); }
+
     void startSelectedArchiveCreation() {
         ArrayList<File> selected = getSelectedFilesSnapshot();
         exitFileSelectionMode(true);
@@ -1692,11 +1696,7 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
             view.setDataAndType(uri, externalMimeTypeFor(file));
             view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             markPreserveBrowseStateForViewerReturn(file);
-            if (FileUtils.isApkFile(file.getName())) {
-                startActivity(view);
-            } else {
-                startActivity(Intent.createChooser(view, getString(R.string.open)));
-            }
+            startActivity(Intent.createChooser(view, getString(R.string.open)));
         } catch (ActivityNotFoundException e) {
             clearPreservedBrowseStateAfterResume();
             ShortToast.show(this, R.string.external_open_failed);
@@ -1708,7 +1708,6 @@ public class MainActivity extends AppCompatActivity implements FileAdapter.OnFil
 
     @NonNull
     private String externalMimeTypeFor(@NonNull File file) {
-        if (FileUtils.isApkFile(file.getName())) return "application/vnd.android.package-archive";
         if (FileUtils.isVideoFile(file.getName())) return mimeTypeFromExtension(file, "video/*");
         return mimeTypeFromExtension(file, "application/octet-stream");
     }

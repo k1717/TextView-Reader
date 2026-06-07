@@ -89,14 +89,19 @@
     <string name="archive_password_title">비밀번호 필요</string>
     <string name="archive_password_message">압축파일 비밀번호를 입력하세요.</string>
     <string name="archive_password_hint">비밀번호</string>
+    <string name="archive_password_show">비밀번호 표시</string>
+    <string name="archive_password_hide">비밀번호 숨기기</string>
     <string name="archive_password_failed">비밀번호 확인에 실패했습니다</string>
     <string name="extract_archive">압축 해제</string>
     <string name="archive_folder_preview">압축파일 미리보기</string>
     <string name="archive_extracting">압축 해제 중…</string>
     <string name="archive_extracted">압축 해제했습니다</string>
+    <string name="archive_failure_detail_title">압축 해제 실패 상세 정보</string>
+    <string name="archive_failure_detail_message">토스트에는 짧은 문구만 표시합니다. libarchive/native 실패 원인은 아래 상세 내용을 확인하세요.</string>
+    <string name="archive_failure_detail_copied">실패 상세 정보를 복사했습니다</string>
     <string name="archive_extract_failed">압축 해제 실패</string>
     <string name="archive_extract_unsupported_feature">아직 지원하지 않는 압축 기능입니다</string>
-    <string name="archive_extract_unsupported_rar">이 RAR은 RAR5 압축 또는 아직 지원하지 않는 RAR 기능을 사용합니다</string>
+    <string name="archive_extract_unsupported_rar">이 RAR은 압축, solid 모드, 암호화 또는 아직 지원하지 않는 RAR 기능을 사용합니다</string>
     <string name="archive_extract_unsupported_alz">아직 지원하지 않는 ALZ 변형입니다</string>
     <string name="archive_extract_unsupported_egg">지원하지 않는 EGG 압축파일 변형입니다</string>
     <string name="archive_extract_conflict_title">압축 해제 폴더가 이미 있습니다</string>
@@ -202,7 +207,7 @@
     <string name="folder_name">폴더 이름</string>
     <string name="follow_system">시스템 설정 따르기</string>
     <string name="font">글꼴</string>
-    <string name="font_size_default">글자 크기: 18sp</string>
+    <string name="font_size_default">글자 크기: 16sp</string>
     <string name="font_size_format">글자 크기: %.0fsp</string>
     <string name="found_at_position">%1$d 위치에서 찾았습니다</string>
     <string name="go">이동</string>
@@ -240,7 +245,7 @@
     <string name="language_vietnamese">베트남어</string>
     <string name="language_thai">태국어</string>
     <string name="light">밝은 테마</string>
-    <string name="line_spacing_default">줄 간격: 1.5</string>
+    <string name="line_spacing_default">줄 간격: 1.4</string>
     <string name="line_spacing_format">줄 간격: %.1f</string>
     <string name="lines">줄 수</string>
     <string name="loading">로딩 중...</string>
@@ -312,9 +317,9 @@
     <string name="txt_top_offset_format">TXT 상단 경계: %1$dpx</string>
     <string name="txt_bottom_offset_default">TXT 하단 경계: 0px</string>
     <string name="txt_bottom_offset_format">TXT 하단 경계: %1$dpx</string>
-    <string name="txt_left_inset_default">TXT 좌측 경계: 0px</string>
+    <string name="txt_left_inset_default">TXT 좌측 경계: 68px</string>
     <string name="txt_left_inset_format">TXT 좌측 경계: %1$dpx</string>
-    <string name="txt_right_inset_default">TXT 우측 경계: 0px</string>
+    <string name="txt_right_inset_default">TXT 우측 경계: 68px</string>
     <string name="txt_right_inset_format">TXT 우측 경계: %1$dpx</string>
     <string name="large_txt_partition_mode">대용량 TXT 파티션 모드</string>
     <string name="large_txt_partition_mode_standard">기본 — 4,000 / 400줄</string>
@@ -429,8 +434,14 @@
     <string name="recent_folder_cleared">최근 폴더를 지웠습니다</string>
     <string name="clear_from_recently_viewed">최근 본 파일에서 지우기</string>
     <string name="recent_file_cleared">최근 파일을 지웠습니다</string>
+    <string name="remove_selected_from_recent_list">최근 목록에서 지우기</string>
+    <string name="selected_recent_files_cleared">최근 항목 %1$d개를 지웠습니다</string>
     <string name="settings_section_updates">업데이트</string>
     <string name="update_check_description">Check updates at https://github.com/k1717/TextView-Reader/releases</string>
+    <string name="contact_developer">개발자에게 문의 보내기</string>
+    <string name="contact_developer_chooser">개발자에게 문의 보내기</string>
+    <string name="contact_developer_subject">TextView Reader 문의</string>
+    <string name="contact_developer_address_copied">개발자 문의 주소를 복사했습니다</string>
 
 <string name="add">추가</string>
     <string name="edit">수정</string>

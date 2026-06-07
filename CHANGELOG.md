@@ -1,47 +1,65 @@
+# Changelog
+
+## 2.2.6 - 2026-06-07
+
+This package uses Android metadata `versionCode 2260` and `versionName "2.2.6"`.
+
+### Privacy and public-release cleanup
+- Disabled Android app-data Auto Backup with `android:allowBackup="false"` so app-private settings, reading metadata, recent-file metadata, bookmarks, display rules, cache bookkeeping, and optional PIN state are not opted into Android Auto Backup by the app.
+- Replaced new PIN storage with salted PBKDF2 verifier strings and added legacy plain-PIN migration on first successful PIN verification.
+- Updated `PRIVACY.md` to distinguish local app behavior from user-triggered export/share/open-with flows, external mail-app contact, and external video-viewer handling.
+- Kept the default manifest without the `INTERNET` permission and removed `REQUEST_INSTALL_PACKAGES` from the default build. The Settings update line remains a copyable static GitHub releases URL; it is not an in-app network update check or APK installer flow.
+- Changed the Settings developer contact address to `textview.ahnyb@addy.io`. The button opens the user's mail app through `mailto:` or copies the address if no mail app is available.
+- Removed pass-by-pass internal RAR notes from the public documentation set and replaced them with consolidated release-facing archive/RAR status documents.
+
+### License and FOSS boundary
+- Removed Junrar/UnRAR-license fallback code from the default dependency path.
+- Documented the default source/APK as the FOSS-friendly line: Apache-2.0 first-party source, no bundled optional decoder jar, and runtime dependency notices in `THIRD_PARTY_NOTICES.md` plus `docs/FOSS_STATUS.md`.
+- Kept `app/libs/*.jar` as a local custom-build hook only; any jar added there must be audited separately before the resulting APK is described as FOSS.
+- Reviewed `junrar/commons-vfs-rar` and did not adopt it because it depends on `com.github.junrar:junrar`.
+
+### Archive handling
+- Kept ZIP/CBZ on Zip4j as the primary path, with Apache Commons Compress fallback for non-encrypted unsupported ZIP methods where the bundled codecs can read them.
+- Kept TAR-family and single-compressor streams on Commons Compress, 7z/CB7 on the Java 7z path, and ALZ/EGG on the limited first-party paths documented in the support matrix.
+- Added the Apache-2.0 `me.zhanghai.android.libarchive:library:1.1.6` AAR as the bundled default backend for common RAR3/RAR4 compressed extraction attempts.
+- Kept first-party RAR metadata parsing, safe path handling, RAR4 Unicode filename decoding, stored method-0/0x30 extraction, covered stored split handling, partial-output cleanup, and covered RAR5 stored-entry handling.
+- RAR/CBR support remains limited. Split/multi-volume RAR and encrypted RAR are documented as best-effort/unverified for this package, and RAR5 compressed/solid/encrypted-header extraction is backend-dependent rather than first-party complete.
+- Added failure-detail dialogs for long archive/libarchive errors so unsupported or backend-specific failures are no longer truncated into long toasts.
+
+### Viewer and UI adjustments
+- Archive password dialogs now use compact action buttons and include an eye toggle for showing or hiding the typed password.
+- Image viewer now follows the hardware page-turn key preference: Volume Down/Page Down moves to the next image and Volume Up/Page Up moves to the previous image.
+- Changed the default TXT font size from 18sp to 16sp and default TXT line spacing from 1.5 to 1.4. Existing user preferences remain unchanged unless reset.
+- Limited release native ABI packaging to ARM (`armeabi-v7a`, `arm64-v8a`) and excluded unnecessary desktop native resource payloads from normal Android packaging.
+
 ## 2.2.5 - 2026-06-02
+- Fixed ZIP Commons fallback build error by collapsing the optional-codec catch to LinkageError only.
+- Fixed pending ZIP creation so the destination is resolved from the folder where the pending action is executed, not from the original source folder.
 This package uses Android metadata `versionCode 2250` and `versionName "2.2.5"`.
 
 ### Archive handling
-- ZIP extraction now falls back to Apache Commons Compress when Zip4j reports an unknown compression method on a non-encrypted entry. This broadens extraction for ZIP-internal methods Commons Compress can decode with the bundled runtime, notably Deflate64, BZip2, XZ through XZ for Java, and ZSTD through zstd-jni. The fallback covers both whole-archive and single-entry extraction, uses `canReadEntryData()` to detect methods no available library can decode, and guards against native codec linkage failures, so unsupported entries surface as clean unsupported-feature results instead of crashing.
-- Encrypted ZIP entries continue to use Zip4j. AES entries combined with non-Zip4j methods such as AES+XZ remain unsupported because no single bundled path provides both AES handling and that codec.
-- Bundled `com.github.luben:zstd-jni:1.5.7-9` so Commons Compress Zstandard support is available in release builds without a missing-class suppression and non-encrypted ZSTD ZIP fallback can be attempted.
+- ZIP extraction now falls back to Apache Commons Compress when Zip4j reports an unknown compression method on a non-encrypted entry. This broadens extraction for ZIP-internal methods Commons Compress can decode with the bundled runtime, notably Deflate64, BZip2, XZ through XZ for Java, and ZSTD through zstd-jni. The fallback covers both whole-archive and single-entry extraction, uses `canReadEntryData()` to detect methods no available library can decode, and guards against native codec linkage failures, so those entries surface as clean unsupported-feature results instead of crashing. Encrypted entries continue to use Zip4j; an AES entry that also uses a non-Zip4j method such as AES+XZ cannot be extracted because no single bundled library provides both paths.
 - Clarified archive validation boundaries for TAR-family formats, single-compressor streams, ALZ, and EGG. ALZ unsupported paths now say `Unsupported ALZ feature or archive variant` instead of the old `decoding is not available yet` wording.
-- Fixed pending ZIP creation so the destination is resolved from the folder where the pending action is executed, not from the original source folder.
-
-### Direct archive image opening
-- Added a direct main-list archive-image handoff path for comic/image archives. The app can prepare the archive image sequence in the background and open `ImageReaderActivity` directly, avoiding the visible intermediate archive-preview flash.
-- Kept the existing archive preview as the fallback for archives without readable images, archives that require password/unsupported handling, or explicit archive-preview navigation.
-
-### Main file-list touch and browse state
+- The ZIP Commons fallback does not add a new Maven dependency; it expands the existing `org.apache.commons:commons-compress:1.28.0` runtime use already listed in `THIRD_PARTY_NOTICES.md`.
+### Main file-list touch
 - Reduced the main file/folder action short-hold delay from the platform long-press timeout, usually about 500 ms, to 200 ms. This only affects the regular main-list file/folder action popup; the separate multi-select hold path now enters after 800 ms.
-- Preserved the current folder list state when returning from an internal viewer, avoiding the previous full folder reload/flicker when the user simply opens a file and comes back. The preservation uses a direct-child folder signature, so the folder still reloads if any file is added, deleted, renamed, moved, or modified while the viewer is open.
+- Preserved the current folder list state when returning from an internal viewer, avoiding the previous full folder reload/flicker when the user simply opens a file and comes back. The preservation now uses a direct-child folder signature, so the folder still reloads if any file is added, deleted, renamed, moved, or modified while the viewer is open.
 - Added an in-memory browse-state cache for already fully loaded folders. When the user goes into a subfolder and then returns to the previous folder, the app restores the previous adapter list and RecyclerView scroll state instead of reloading, as long as the folder signature, sort mode, and hidden-file setting are unchanged.
-- Re-enabled bidirectional folder-state reuse for already loaded folders. A -> B -> A and A -> B -> A -> B navigation can restore cached adapter lists and RecyclerView scroll state when folder signature, sort mode, and hidden-file setting still match.
+- Re-enabled bidirectional folder-state reuse for already loaded folders. A -> B -> A and A -> B -> A -> B navigation can now restore cached adapter lists and RecyclerView scroll state when folder signature, sort mode, and hidden-file setting still match.
 - Improved drawer shortcut folder navigation responsiveness: shortcut taps now save the outgoing folder snapshot without a synchronous directory rescan, restore cached target folders optimistically, validate the folder signature in the background, and publish the first uncached folder-load snapshot earlier.
 - Preserved the visible browse folder across ordinary Activity resumes such as screen off/on or Home/app-switcher returns. The folder is not rescanned when unchanged, but still reloads if files are added, deleted, renamed, moved, or modified while away.
 - Kept cache restoration when clearing a current-folder type filter back to **All**, so `General` / `Archive` / other filter views can return to the full folder list without a rescan when the folder did not change.
-- Added a small right-side inset for long main-list file/folder names so ellipsized text no longer presses directly against the row edge or the reading-progress badge area.
+
+### Refactoring
+- Extracted the browse-folder state preservation/cache logic from `MainActivity` into `MainBrowseStateController`. Viewer-return preservation, Activity-resume preservation, filter-return cache restore, drawer shortcut optimistic restore, folder signatures, and LRU folder snapshots now live behind one controller instead of being embedded directly in the activity.
+- Reduced `MainActivity` by roughly 250 lines while preserving the existing A/B/A/B folder-cache behavior, drawer shortcut validation, and change-detection reload semantics.
+- Split archive browser list shaping into `ArchiveEntryListController`, moving archive folder-tree expansion, search/filter matching, sort policy, parent-prefix handling, and image-sequence entry collection out of `ArchiveBrowserActivity`.
+- Split archive image sequence extraction/cache preparation into `ArchiveImageSequenceLoader`, so lazy/full archive image sequence preparation is separated from the archive browser UI flow.
+- Moved archive creation and extraction validation/naming policy into `MainArchiveCreationPlanner` and `MainArchiveExtractionPlanner`, keeping queue controllers focused on user confirmation, worker dispatch, and progress handling.
 
 ### File-operation progress
 - Fixed multi-select delete progress re-entry after pause/background: delete now exits multi-select mode as soon as the user confirms, because the worker already uses a stable selected-file snapshot. This keeps the normal toolbar active so the background operation-progress button is immediately available.
 - Refreshed the main toolbar progress/pending visibility on `MainActivity.onResume()` so paused/backgrounded operations re-expose their progress entry without requiring folder navigation.
-- Unified extraction, copy, move/cut, delete, and ZIP creation progress windows around the delete-style interface. File and folder names are separated from fixed right-side `(current/total)` count columns, reducing horizontal jitter when names or counts update.
-- File counts now use the relevant recursive regular-file total for the active operation. Archive extraction uses the current archive's regular-file total, while copy/move/delete/ZIP creation use recursive file totals for the selected workload.
-- Folder counts now stay visible for extraction, copy, and move/cut and use the relevant recursive folder/top-level workload total instead of falling back to `(1/1)` during multi-selection.
-- Progress rows reserve their height before the first update, so the operation popup no longer grows vertically as file/folder rows are added or switch between one and multiple lines.
-- Replaced text pause/resume labels with a fixed-size monochrome pause/resume icon button. The pause and resume states keep the same popup dimensions and avoid emoji-colored glyph rendering.
-- Folder information dialogs now compute recursive folder size asynchronously instead of showing the unreliable directory `File.length()` value.
-
-### UI polish
-- Color palette dialogs now use the app's rounded themed button style for **Cancel** and **OK**, instead of Android's default gray button tint.
-- Progress-count colors, count sizing, and fixed count columns were aligned so file and folder counters look consistent.
-
-### Refactoring
-- Extracted the browse-folder state preservation/cache logic from `MainActivity` into `MainBrowseStateController`. Viewer-return preservation, Activity-resume preservation, filter-return cache restore, drawer shortcut optimistic restore, folder signatures, and LRU folder snapshots now live behind one controller instead of being embedded directly in the activity.
-- Split archive browser list shaping into `ArchiveEntryListController`, moving archive folder-tree expansion, search/filter matching, sort policy, parent-prefix handling, and image-sequence entry collection out of `ArchiveBrowserActivity`.
-- Split archive image sequence extraction/cache preparation into `ArchiveImageSequenceLoader`, so lazy/full archive image sequence preparation is separated from the archive browser UI flow.
-- Moved archive creation and extraction validation/naming policy into `MainArchiveCreationPlanner` and `MainArchiveExtractionPlanner`, keeping queue controllers focused on user confirmation, worker dispatch, and progress handling.
-- Added `MainArchiveImageOpenController` for direct main-list archive-to-image-reader routing.
 
 ### Release metadata
 - Bumped Android version metadata from `versionCode 2240` / `versionName "2.2.4"` to `versionCode 2250` / `versionName "2.2.5"`.
@@ -184,8 +202,8 @@ This package uses Android metadata `versionCode 2220` and `versionName "2.2.2"`.
 
 ### File browser
 
-- The All file filter now includes APK and common video files, including MPEG transport stream `.ts` files, in addition to TextView-readable files.
-- Short-tapping an APK opens it through Android's package installer path, and short-tapping a video opens it through an external video-capable app.
+- The All file filter includes common video files, including MPEG transport stream `.ts` files, in addition to TextView-readable files.
+- Short-tapping a video opens it through an external video-capable app. APK installer delegation is disabled in the default build.
 - Main file search now includes an icon scope toggle beside the search field so searches can stay within the current folder or expand across available storage roots.
 - Redrew the All-folders search-scope icon to avoid darker edge seams from overlapping vector layers, and added a short scope-change toast.
 - Current-folder type filters now keep folders above matching files, preserving normal folder navigation while filtering IMG/PDF/TXT/etc. files.
@@ -1108,3 +1126,16 @@ This entry lists the functional difference from **2.0.7** only. The full 2.0.7 U
 ### 2.1.0 import dialog compact width
 - Made the Backup Import / 가져오기 confirmation dialog use the compact ~70% dialog width.
 
+- Build fix: bundled `com.github.luben:zstd-jni` so release R8 no longer sees Commons Compress Zstandard support as a missing class, and non-encrypted ZSTD ZIP fallback can be attempted.
+
+### 2.2.6 RAR3/RAR4 libarchive backend work
+
+- Removed Junrar from the default dependency line.
+- Added bundled libarchive-android path for compressed RAR3/RAR4 fallback.
+- Scoped the libarchive-android backend to libarchive RAR handling instead of generic archive routing.
+- Added progress byte callbacks and cancellation checkpoints for native RAR extraction.
+- Added Android libarchive prebuilt layout notes and helper scripts.
+### 2.2.6 APK packaging cleanup
+
+- Kept ARM ABIs while excluding x86/x86_64 native payloads from the release APK.
+- Excluded zstd-jni desktop native resource folders from APK packaging to reduce APK size.

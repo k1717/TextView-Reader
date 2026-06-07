@@ -18,6 +18,7 @@ import android.os.Looper;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
@@ -56,6 +57,7 @@ import com.textview.reader.util.FileSortUtils;
 import com.textview.reader.util.FileClipboardController;
 import com.textview.reader.util.FileUtils;
 import com.textview.reader.util.PrefsManager;
+import com.textview.reader.util.ReaderKeyMap;
 import com.textview.reader.view.ZoomImageView;
 
 import java.io.File;
@@ -444,6 +446,39 @@ public class ImageReaderActivity extends AppCompatActivity {
         super.onConfigurationChanged(newConfig);
         updateRotationMenuTitle(newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE);
         if (imageView != null) imageView.post(imageView::configureBaseMatrix);
+    }
+
+    // --- Hardware page-turn keys ---
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (handleImagePageTurnKey(event)) return true;
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // Fallback for devices that route hardware keys through onKeyDown() instead
+        // of dispatchKeyEvent(). dispatchKeyEvent() normally consumes these first.
+        if (handleImagePageTurnKey(event)) return true;
+        return super.onKeyDown(keyCode, event);
+    }
+
+    private boolean handleImagePageTurnKey(@Nullable KeyEvent event) {
+        if (event == null || prefs == null || !prefs.getVolumeKeyScroll()) {
+            return false;
+        }
+        int direction = ReaderKeyMap.pageTurnDirectionForKey(event.getKeyCode());
+        if (direction == 0) return false;
+
+        int action = event.getAction();
+        if (action == KeyEvent.ACTION_DOWN) {
+            if (event.getRepeatCount() == 0) {
+                showAdjacentImage(direction);
+            }
+            return true;
+        }
+        return action == KeyEvent.ACTION_UP;
     }
 
     private void toggleChrome() {

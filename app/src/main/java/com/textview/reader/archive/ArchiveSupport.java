@@ -144,7 +144,9 @@ public final class ArchiveSupport {
         if (!file.isFile()) return null;
         Type splitType = getAlzipSplitArchiveType(file);
         if (splitType != null) return splitType;
-        return getSupportedArchiveType(file.getName());
+        Type nameType = getSupportedArchiveType(file.getName());
+        if (nameType != null) return nameType;
+        return hasEmbeddedRarSignatureForSfx(file) ? Type.RAR : null;
     }
 
     @Nullable
@@ -187,6 +189,18 @@ public final class ArchiveSupport {
 
     private static boolean isFirstNumericSplitName(@NonNull String lowerName) {
         return lowerName.endsWith(".001") && lowerName.length() > 4;
+    }
+
+    private static boolean hasEmbeddedRarSignatureForSfx(@NonNull File file) {
+        String name = file.getName().toLowerCase(Locale.ROOT);
+        if (!name.endsWith(".exe") && !name.endsWith(".sfx") && !name.endsWith(".bin")) {
+            return false;
+        }
+        try {
+            return RarArchiveReader.findEmbeddedRarSignatureOffsetForBackend(file) >= 0L;
+        } catch (IOException | SecurityException ignored) {
+            return false;
+        }
     }
 
     private static boolean isFirstNumericSplitArchive(@NonNull File file) {
@@ -305,9 +319,9 @@ public final class ArchiveSupport {
         try (PreparedArchive prepared = prepareArchiveForRead(archive)) {
             switch (prepared.type) {
                 case ZIP:
-                    return listZipEntries(prepared.file, password);
+                    return listZipEntriesWithFallback(prepared.file, prepared.type, password);
                 case SEVEN_Z:
-                    return listSevenZEntries(prepared.file, password);
+                    return listSevenZEntriesWithFallback(prepared.file, prepared.type, password);
                 case RAR:
                     return RarArchiveReader.listEntries(prepared.file, password);
                 case ALZ:
@@ -320,7 +334,7 @@ public final class ArchiveSupport {
                 case TAR_XZ:
                 case TAR_LZMA:
                 case TAR_Z:
-                    return listTarEntries(prepared.file, prepared.type);
+                    return listTarEntriesWithFallback(prepared.file, prepared.type, password);
                 case SINGLE_GZ:
                 case SINGLE_BZ2:
                 case SINGLE_XZ:
@@ -476,6 +490,61 @@ public final class ArchiveSupport {
         }
     }
 
+    @NonNull
+    private static List<EntryInfo> listZipEntriesWithFallback(@NonNull File archive,
+                                                              @NonNull Type type,
+                                                              @Nullable char[] password) throws IOException {
+        try {
+            return listZipEntries(archive, password);
+        } catch (PasswordRequiredException e) {
+            throw e;
+        } catch (IOException e) {
+            List<EntryInfo> fallback = tryListEntriesWithLibarchive(archive, type, password);
+            if (fallback != null) return fallback;
+            throw e;
+        } catch (SecurityException e) {
+            List<EntryInfo> fallback = tryListEntriesWithLibarchive(archive, type, password);
+            if (fallback != null) return fallback;
+            throw new IOException(e);
+        }
+    }
+
+    @NonNull
+    private static List<EntryInfo> listSevenZEntriesWithFallback(@NonNull File archive,
+                                                                 @NonNull Type type,
+                                                                 @Nullable char[] password) throws IOException {
+        try {
+            return listSevenZEntries(archive, password);
+        } catch (PasswordRequiredException e) {
+            throw e;
+        } catch (IOException e) {
+            List<EntryInfo> fallback = tryListEntriesWithLibarchive(archive, type, password);
+            if (fallback != null) return fallback;
+            throw e;
+        } catch (SecurityException e) {
+            List<EntryInfo> fallback = tryListEntriesWithLibarchive(archive, type, password);
+            if (fallback != null) return fallback;
+            throw new IOException(e);
+        }
+    }
+
+    @NonNull
+    private static List<EntryInfo> listTarEntriesWithFallback(@NonNull File archive,
+                                                              @NonNull Type type,
+                                                              @Nullable char[] password) throws IOException {
+        try {
+            return listTarEntries(archive, type);
+        } catch (IOException e) {
+            List<EntryInfo> fallback = tryListEntriesWithLibarchive(archive, type, password);
+            if (fallback != null) return fallback;
+            throw e;
+        } catch (SecurityException e) {
+            List<EntryInfo> fallback = tryListEntriesWithLibarchive(archive, type, password);
+            if (fallback != null) return fallback;
+            throw new IOException(e);
+        }
+    }
+
     public static boolean extractArchive(@NonNull File archive,
                                          @NonNull File destinationDir,
                                          boolean overwrite,
@@ -582,10 +651,10 @@ public final class ArchiveSupport {
             boolean ok;
             switch (prepared.type) {
                 case ZIP:
-                    ok = extractSingleZipEntry(prepared.file, normalized, outFile, password);
+                    ok = extractSingleZipEntryWithFallback(prepared.file, prepared.type, normalized, outFile, password);
                     break;
                 case SEVEN_Z:
-                    ok = extractSingleSevenZEntry(prepared.file, normalized, outFile, password);
+                    ok = extractSingleSevenZEntryWithFallback(prepared.file, prepared.type, normalized, outFile, password);
                     break;
                 case RAR:
                     ok = extractSingleRarEntry(prepared.file, normalized, outFile, password);
@@ -602,7 +671,7 @@ public final class ArchiveSupport {
                 case TAR_XZ:
                 case TAR_LZMA:
                 case TAR_Z:
-                    ok = extractSingleTarEntry(prepared.file, normalized, outFile, prepared.type);
+                    ok = extractSingleTarEntryWithFallback(prepared.file, prepared.type, normalized, outFile);
                     break;
                 case SINGLE_GZ:
                 case SINGLE_BZ2:
@@ -678,9 +747,9 @@ public final class ArchiveSupport {
             if (progress != null) progress.setDetail(archive.getName());
             switch (prepared.type) {
                 case ZIP:
-                    return extractZipIntoDirectory(prepared.file, targetDir, password, progress, entryProgress);
+                    return extractZipIntoDirectoryWithFallback(prepared.file, prepared.type, targetDir, password, progress, entryProgress);
                 case SEVEN_Z:
-                    return extractSevenZIntoDirectory(prepared.file, targetDir, password, progress, entryProgress);
+                    return extractSevenZIntoDirectoryWithFallback(prepared.file, prepared.type, targetDir, password, progress, entryProgress);
                 case RAR:
                     return extractRarIntoDirectory(prepared.file, targetDir, password, progress, entryProgress);
                 case ALZ:
@@ -693,7 +762,7 @@ public final class ArchiveSupport {
                 case TAR_XZ:
                 case TAR_LZMA:
                 case TAR_Z:
-                    return extractTarIntoDirectory(prepared.file, targetDir, prepared.type, progress, entryProgress);
+                    return extractTarIntoDirectoryWithFallback(prepared.file, prepared.type, targetDir, progress, entryProgress);
                 case SINGLE_GZ:
                 case SINGLE_BZ2:
                 case SINGLE_XZ:
@@ -703,6 +772,251 @@ public final class ArchiveSupport {
                 default:
                     return false;
             }
+        }
+    }
+
+
+    private static boolean extractZipIntoDirectoryWithFallback(@NonNull File archive,
+                                                               @NonNull Type type,
+                                                               @NonNull File targetDir,
+                                                               @Nullable char[] password,
+                                                               @Nullable FileOperationProgress progress,
+                                                               @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
+        try {
+            return extractZipIntoDirectory(archive, targetDir, password, progress, entryProgress);
+        } catch (PasswordRequiredException e) {
+            throw e;
+        } catch (UnsupportedArchiveFeatureException e) {
+            Boolean fallback = tryExtractArchiveWithLibarchiveAfterDedicatedFailure(
+                    archive, type, targetDir, password, progress, entryProgress);
+            if (fallback != null) return fallback;
+            throw e;
+        } catch (IOException e) {
+            Boolean fallback = tryExtractArchiveWithLibarchiveAfterDedicatedFailure(
+                    archive, type, targetDir, password, progress, entryProgress);
+            if (fallback != null) return fallback;
+            throw e;
+        } catch (SecurityException e) {
+            Boolean fallback = tryExtractArchiveWithLibarchiveAfterDedicatedFailure(
+                    archive, type, targetDir, password, progress, entryProgress);
+            if (fallback != null) return fallback;
+            throw new IOException(e);
+        }
+    }
+
+    private static boolean extractSevenZIntoDirectoryWithFallback(@NonNull File archive,
+                                                                  @NonNull Type type,
+                                                                  @NonNull File targetDir,
+                                                                  @Nullable char[] password,
+                                                                  @Nullable FileOperationProgress progress,
+                                                                  @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
+        try {
+            return extractSevenZIntoDirectory(archive, targetDir, password, progress, entryProgress);
+        } catch (PasswordRequiredException e) {
+            throw e;
+        } catch (IOException e) {
+            Boolean fallback = tryExtractArchiveWithLibarchiveAfterDedicatedFailure(
+                    archive, type, targetDir, password, progress, entryProgress);
+            if (fallback != null) return fallback;
+            throw e;
+        } catch (SecurityException e) {
+            Boolean fallback = tryExtractArchiveWithLibarchiveAfterDedicatedFailure(
+                    archive, type, targetDir, password, progress, entryProgress);
+            if (fallback != null) return fallback;
+            throw new IOException(e);
+        }
+    }
+
+    private static boolean extractTarIntoDirectoryWithFallback(@NonNull File archive,
+                                                               @NonNull Type type,
+                                                               @NonNull File targetDir,
+                                                               @Nullable FileOperationProgress progress,
+                                                               @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
+        try {
+            return extractTarIntoDirectory(archive, targetDir, type, progress, entryProgress);
+        } catch (IOException e) {
+            Boolean fallback = tryExtractArchiveWithLibarchiveAfterDedicatedFailure(
+                    archive, type, targetDir, null, progress, entryProgress);
+            if (fallback != null) return fallback;
+            throw e;
+        } catch (SecurityException e) {
+            Boolean fallback = tryExtractArchiveWithLibarchiveAfterDedicatedFailure(
+                    archive, type, targetDir, null, progress, entryProgress);
+            if (fallback != null) return fallback;
+            throw new IOException(e);
+        }
+    }
+
+    private static boolean extractSingleZipEntryWithFallback(@NonNull File archive,
+                                                             @NonNull Type type,
+                                                             @NonNull String entryPath,
+                                                             @NonNull File outFile,
+                                                             @Nullable char[] password) throws IOException {
+        try {
+            return extractSingleZipEntry(archive, entryPath, outFile, password);
+        } catch (PasswordRequiredException e) {
+            throw e;
+        } catch (UnsupportedArchiveFeatureException e) {
+            Boolean fallback = tryExtractSingleEntryWithLibarchiveAfterDedicatedFailure(
+                    archive, type, entryPath, outFile, password, null);
+            if (fallback != null) return fallback;
+            throw e;
+        } catch (IOException e) {
+            Boolean fallback = tryExtractSingleEntryWithLibarchiveAfterDedicatedFailure(
+                    archive, type, entryPath, outFile, password, null);
+            if (fallback != null) return fallback;
+            throw e;
+        } catch (SecurityException e) {
+            Boolean fallback = tryExtractSingleEntryWithLibarchiveAfterDedicatedFailure(
+                    archive, type, entryPath, outFile, password, null);
+            if (fallback != null) return fallback;
+            throw new IOException(e);
+        }
+    }
+
+    private static boolean extractSingleSevenZEntryWithFallback(@NonNull File archive,
+                                                                @NonNull Type type,
+                                                                @NonNull String entryPath,
+                                                                @NonNull File outFile,
+                                                                @Nullable char[] password) throws IOException {
+        try {
+            return extractSingleSevenZEntry(archive, entryPath, outFile, password);
+        } catch (PasswordRequiredException e) {
+            throw e;
+        } catch (IOException e) {
+            Boolean fallback = tryExtractSingleEntryWithLibarchiveAfterDedicatedFailure(
+                    archive, type, entryPath, outFile, password, null);
+            if (fallback != null) return fallback;
+            throw e;
+        } catch (SecurityException e) {
+            Boolean fallback = tryExtractSingleEntryWithLibarchiveAfterDedicatedFailure(
+                    archive, type, entryPath, outFile, password, null);
+            if (fallback != null) return fallback;
+            throw new IOException(e);
+        }
+    }
+
+    private static boolean extractSingleTarEntryWithFallback(@NonNull File archive,
+                                                             @NonNull Type type,
+                                                             @NonNull String entryPath,
+                                                             @NonNull File outFile) throws IOException {
+        try {
+            return extractSingleTarEntry(archive, entryPath, outFile, type);
+        } catch (IOException e) {
+            Boolean fallback = tryExtractSingleEntryWithLibarchiveAfterDedicatedFailure(
+                    archive, type, entryPath, outFile, null, null);
+            if (fallback != null) return fallback;
+            throw e;
+        } catch (SecurityException e) {
+            Boolean fallback = tryExtractSingleEntryWithLibarchiveAfterDedicatedFailure(
+                    archive, type, entryPath, outFile, null, null);
+            if (fallback != null) return fallback;
+            throw new IOException(e);
+        }
+    }
+
+    @Nullable
+    private static Boolean tryExtractArchiveWithLibarchiveAfterDedicatedFailure(@NonNull File archive,
+                                                                                @NonNull Type type,
+                                                                                @NonNull File targetDir,
+                                                                                @Nullable char[] password,
+                                                                                @Nullable FileOperationProgress progress,
+                                                                                @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
+        if (!shouldUseLibarchiveFallbackAfterDedicated(type)) return null;
+        if (!clearDirectoryContents(targetDir)) return null;
+        return tryExtractArchiveWithLibarchive(archive, type, targetDir, password, progress, entryProgress);
+    }
+
+    @Nullable
+    private static Boolean tryExtractSingleEntryWithLibarchiveAfterDedicatedFailure(@NonNull File archive,
+                                                                                    @NonNull Type type,
+                                                                                    @NonNull String entryPath,
+                                                                                    @NonNull File outFile,
+                                                                                    @Nullable char[] password,
+                                                                                    @Nullable FileOperationProgress progress) throws IOException {
+        if (!shouldUseLibarchiveFallbackAfterDedicated(type)) return null;
+        try { outFile.delete(); } catch (SecurityException ignored) {}
+        return tryExtractSingleEntryWithLibarchive(archive, type, entryPath, outFile, password, progress);
+    }
+
+
+    @Nullable
+    private static List<EntryInfo> tryListEntriesWithLibarchive(@NonNull File archive,
+                                                                @NonNull Type type,
+                                                                @Nullable char[] password) throws IOException {
+        if (!canUseGenericLibarchive(type)) return null;
+        if (!LibarchiveArchiveReader.isAvailable()) return null;
+        try {
+            return LibarchiveArchiveReader.listEntries(archive, password);
+        } catch (PasswordRequiredException e) {
+            throw e;
+        } catch (UnsupportedArchiveFeatureException | SecurityException e) {
+            return null;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    @Nullable
+    private static Boolean tryExtractArchiveWithLibarchive(@NonNull File archive,
+                                                           @NonNull Type type,
+                                                           @NonNull File targetDir,
+                                                           @Nullable char[] password,
+                                                           @Nullable FileOperationProgress progress,
+                                                           @Nullable ArchiveExtractionProgressTracker entryProgress) throws IOException {
+        if (!canUseGenericLibarchive(type)) return null;
+        if (!LibarchiveArchiveReader.isAvailable()) return null;
+        try {
+            return LibarchiveArchiveReader.extractArchiveIntoDirectory(
+                    archive, targetDir, password, progress, entryProgress);
+        } catch (PasswordRequiredException e) {
+            throw e;
+        } catch (UnsupportedArchiveFeatureException | SecurityException e) {
+            return null;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    @Nullable
+    private static Boolean tryExtractSingleEntryWithLibarchive(@NonNull File archive,
+                                                               @NonNull Type type,
+                                                               @NonNull String entryPath,
+                                                               @NonNull File outFile,
+                                                               @Nullable char[] password,
+                                                               @Nullable FileOperationProgress progress) throws IOException {
+        if (!canUseGenericLibarchive(type)) return null;
+        if (!LibarchiveArchiveReader.isAvailable()) return null;
+        try {
+            return LibarchiveArchiveReader.extractSingleEntry(archive, entryPath, outFile, password, progress);
+        } catch (PasswordRequiredException e) {
+            throw e;
+        } catch (UnsupportedArchiveFeatureException | SecurityException e) {
+            try { outFile.delete(); } catch (SecurityException ignored) {}
+            return null;
+        } catch (IOException e) {
+            try { outFile.delete(); } catch (SecurityException ignored) {}
+            return null;
+        }
+    }
+
+    private static boolean shouldUseLibarchiveFallbackAfterDedicated(@NonNull Type type) {
+        return canUseGenericLibarchive(type);
+    }
+
+    private static boolean canUseGenericLibarchive(@NonNull Type type) {
+        switch (type) {
+            case ZIP:
+            case SEVEN_Z:
+            case TAR:
+            case TAR_GZ:
+            case TAR_BZ2:
+            case TAR_XZ:
+            case TAR_LZMA:
+            case TAR_Z:
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -1674,6 +1988,22 @@ public final class ArchiveSupport {
             try { destination.delete(); } catch (SecurityException ignored) {}
         }
         return copied;
+    }
+
+    private static boolean clearDirectoryContents(@NonNull File directory) {
+        if (!directory.exists()) return true;
+        if (!directory.isDirectory()) return false;
+        File[] children;
+        try {
+            children = directory.listFiles();
+        } catch (SecurityException ignored) {
+            return false;
+        }
+        if (children == null) return false;
+        for (File child : children) {
+            if (!deleteFileSystemItem(child)) return false;
+        }
+        return true;
     }
 
     private static boolean deleteFileSystemItem(@NonNull File target) {

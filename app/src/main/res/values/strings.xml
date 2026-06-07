@@ -89,14 +89,19 @@
     <string name="archive_password_title">Password required</string>
     <string name="archive_password_message">Enter the archive password.</string>
     <string name="archive_password_hint">Password</string>
+    <string name="archive_password_show">Show password</string>
+    <string name="archive_password_hide">Hide password</string>
     <string name="archive_password_failed">Password check failed</string>
     <string name="extract_archive">Extract</string>
     <string name="archive_folder_preview">Archive preview</string>
     <string name="archive_extracting">Extracting…</string>
     <string name="archive_extracted">Extracted</string>
+    <string name="archive_failure_detail_title">Archive failure detail</string>
+    <string name="archive_failure_detail_message">The short toast is intentionally brief. Use this detail text to check the libarchive/native failure reason.</string>
+    <string name="archive_failure_detail_copied">Failure detail copied</string>
     <string name="archive_extract_failed">Extract failed</string>
     <string name="archive_extract_unsupported_feature">This archive uses a feature that is not supported yet</string>
-    <string name="archive_extract_unsupported_rar">This RAR uses RAR5 compression or another unsupported RAR feature</string>
+    <string name="archive_extract_unsupported_rar">This RAR uses compression, solid mode, encryption, or another unsupported RAR feature</string>
     <string name="archive_extract_unsupported_alz">This ALZ variant is not supported yet</string>
     <string name="archive_extract_unsupported_egg">Unsupported EGG archive variant</string>
     <string name="archive_extract_conflict_title">Extraction folder already exists</string>
@@ -210,7 +215,7 @@
     <string name="folder_name">Folder name</string>
     <string name="follow_system">Follow System</string>
     <string name="font">Font</string>
-    <string name="font_size_default">Font Size: 18sp</string>
+    <string name="font_size_default">Font Size: 16sp</string>
     <string name="font_size_format">Font Size: %.0fsp</string>
     <string name="found_at_position">Found at position %1$d</string>
     <string name="go">Go</string>
@@ -248,7 +253,7 @@
     <string name="language_vietnamese">Vietnamese</string>
     <string name="language_thai">Thai</string>
     <string name="light">Light</string>
-    <string name="line_spacing_default">Line Spacing: 1.5</string>
+    <string name="line_spacing_default">Line Spacing: 1.4</string>
     <string name="line_spacing_format">Line Spacing: %.1f</string>
     <string name="lines">Lines</string>
     <string name="loading">Loading...</string>
@@ -320,9 +325,9 @@
     <string name="txt_top_offset_format">TXT top boundary: %1$dpx</string>
     <string name="txt_bottom_offset_default">TXT bottom boundary: 0px</string>
     <string name="txt_bottom_offset_format">TXT bottom boundary: %1$dpx</string>
-    <string name="txt_left_inset_default">TXT left boundary: 0px</string>
+    <string name="txt_left_inset_default">TXT left boundary: 68px</string>
     <string name="txt_left_inset_format">TXT left boundary: %1$dpx</string>
-    <string name="txt_right_inset_default">TXT right boundary: 0px</string>
+    <string name="txt_right_inset_default">TXT right boundary: 68px</string>
     <string name="txt_right_inset_format">TXT right boundary: %1$dpx</string>
     <string name="large_txt_partition_mode">Large TXT partition mode</string>
     <string name="large_txt_partition_mode_standard">Standard — 4,000 / 400 lines</string>
@@ -437,8 +442,14 @@ Open a text, PDF, EPUB, or Word file to get started.</string>
     <string name="recent_folder_cleared">Recent folder cleared</string>
     <string name="clear_from_recently_viewed">Clear from recently viewed</string>
     <string name="recent_file_cleared">Recent file cleared</string>
+    <string name="remove_selected_from_recent_list">Remove from recent list</string>
+    <string name="selected_recent_files_cleared">%1$d recent item(s) removed</string>
     <string name="settings_section_updates">Updates</string>
     <string name="update_check_description">Check updates at https://github.com/k1717/TextView-Reader/releases</string>
+    <string name="contact_developer">Contact developer</string>
+    <string name="contact_developer_chooser">Contact developer</string>
+    <string name="contact_developer_subject">TextView Reader support</string>
+    <string name="contact_developer_address_copied">Developer contact address copied</string>
 
 <string name="add">Add</string>
     <string name="edit">Edit</string>

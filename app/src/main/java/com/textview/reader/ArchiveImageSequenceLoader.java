@@ -85,8 +85,7 @@ final class ArchiveImageSequenceLoader {
         }
 
         int openIndex = targetIndex;
-        if (!selectedReady && selectedResult != null
-                && selectedResult.failure == ArchiveSupport.ExtractionFailure.UNSUPPORTED_FEATURE) {
+        if (!selectedReady && shouldTryAlternateImageEntry(selectedResult)) {
             for (int i = 0; i < sequence.size(); i++) {
                 if (i == targetIndex) continue;
                 ArchiveSupport.EntryInfo imageEntry = sequence.get(i);
@@ -110,6 +109,12 @@ final class ArchiveImageSequenceLoader {
         }
 
         return new Result(imagePaths, displayNames, entryPaths, openIndex, selectedReady, selectedResult);
+    }
+
+    static boolean shouldTryAlternateImageEntry(@Nullable ArchiveSupport.ExtractionResult result) {
+        return result != null
+                && !result.success
+                && result.failure != ArchiveSupport.ExtractionFailure.PASSWORD_REQUIRED;
     }
 
     @NonNull

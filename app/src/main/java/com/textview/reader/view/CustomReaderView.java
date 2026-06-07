@@ -383,8 +383,9 @@ public class CustomReaderView extends View {
     public void setTextZoneAdjustments(int topOffsetPx, int bottomOffsetPx, int leftInsetPx, int rightInsetPx) {
         int nextTopOffset = Math.max(0, Math.min(240, topOffsetPx));
         int nextBottomOffset = Math.max(0, Math.min(240, bottomOffsetPx));
-        int nextLeftInset = Math.max(0, Math.min(240, leftInsetPx));
-        int nextRightInset = Math.max(0, Math.min(240, rightInsetPx));
+        int minHorizontalInset = -Math.max(0, marginHorizontalPx);
+        int nextLeftInset = Math.max(minHorizontalInset, Math.min(240, leftInsetPx));
+        int nextRightInset = Math.max(minHorizontalInset, Math.min(240, rightInsetPx));
 
         boolean widthChanged = this.leftTextInsetPx != nextLeftInset
                 || this.rightTextInsetPx != nextRightInset;

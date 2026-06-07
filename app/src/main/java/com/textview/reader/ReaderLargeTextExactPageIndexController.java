@@ -162,7 +162,8 @@ final class ReaderLargeTextExactPageIndexController {
         int width = activity.readerView.getTextLayoutWidthForIndex();
         int height = activity.readerView.getViewportHeight();
         if (width <= 0 || height <= 0) return "";
-        return "w=" + width
+        return "txt-v5-px-boundary"
+                + "|w=" + width
                 + "|h=" + height
                 + "|mv=" + activity.readerView.getMarginVerticalPxForIndex()
                 + "|ol=" + activity.readerView.getOverlapLinesForIndex()
@@ -188,7 +189,8 @@ final class ReaderLargeTextExactPageIndexController {
             stableTypefaceKey = typeface == null ? "default" : ("style:" + typeface.getStyle());
         }
 
-        return source.getAbsolutePath()
+        return "txt-v5-px-boundary"
+                + "|" + source.getAbsolutePath()
                 + "|len=" + source.length()
                 + "|mod=" + source.lastModified()
                 + "|w=" + layoutWidth

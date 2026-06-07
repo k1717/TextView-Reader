@@ -8,7 +8,7 @@ The fallback is deliberately not used for encrypted ZIP entries. AES/password ha
 
 Unsupported methods and native-codec load failures should fail cleanly. The code checks `canReadEntryData()` and still catches `LinkageError` defensively. ZSTD is normally available because zstd-jni is bundled, but an ABI-specific native load failure should be reported as unsupported rather than crashing. AES+XZ remains unsupported because encrypted entries stay on Zip4j and Commons Compress does not supply the AES path for that combination.
 
-Licensing note: the fallback broadens the runtime use of the already declared `org.apache.commons:commons-compress:1.28.0` dependency, which is Apache License 2.0 and is listed in `THIRD_PARTY_NOTICES.md`. ZSTD support also uses the bundled `com.github.luben:zstd-jni:1.5.7-9` dependency. The JNI binding artifact is BSD-2-Clause, and upstream notes the bundled/native Zstandard library is available under BSD-3-Clause or GPL-2.0; this project relies on the permissive BSD licensing path. The dependency is listed in `THIRD_PARTY_NOTICES.md`.
+Licensing note: this fallback does not introduce a new third-party dependency. It broadens the runtime use of the already declared `org.apache.commons:commons-compress:1.28.0` dependency, which is Apache License 2.0 and is listed in `THIRD_PARTY_NOTICES.md`.
 
 ## Release minification note
 

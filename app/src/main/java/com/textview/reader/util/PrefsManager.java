@@ -6,9 +6,14 @@ import java.io.File;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.util.Base64;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.os.LocaleListCompat;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.security.spec.InvalidKeySpecException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -18,14 +23,21 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 public class PrefsManager {
+    private static final int DEFAULT_PAGE_MARGIN_HORIZONTAL_DP = 24;
+    private static final int DEFAULT_READER_TEXT_BOUNDARY_PX = 68;
+    private static final String KEY_READER_TEXT_LEFT_OFFSET = "reader_text_left_inset_px";
+    private static final String KEY_READER_TEXT_RIGHT_OFFSET = "reader_text_right_inset_px";
     private static final String PREFS_NAME = "textview_reader_prefs";
-    public static final float DEFAULT_FONT_SIZE = 18f;
-    public static final float DEFAULT_LINE_SPACING = 1.5f;
+    public static final float DEFAULT_FONT_SIZE = 16f;
+    public static final float DEFAULT_LINE_SPACING = 1.4f;
     public static final int DARK_MODE_FOLLOW_SYSTEM = 0;
     public static final int DARK_MODE_OFF = 1;
     public static final int DARK_MODE_ON = 2;
@@ -60,11 +72,21 @@ public class PrefsManager {
     public static final int ARCHIVE_OPEN_MODE_NORMAL = 0;
     public static final int ARCHIVE_OPEN_MODE_COMIC = 1;
 
+    private static final String KEY_LOCK_PIN = "lock_pin";
+    private static final String KEY_LOCK_ENABLED = "lock_enabled";
+    private static final String LOCK_PIN_SCHEME_SHA256 = "pbkdf2-sha256";
+    private static final String LOCK_PIN_SCHEME_SHA1 = "pbkdf2-sha1";
+    private static final int LOCK_PIN_ITERATIONS = 120_000;
+    private static final int LOCK_PIN_SALT_BYTES = 16;
+    private static final int LOCK_PIN_HASH_BITS = 256;
+
     private final SharedPreferences prefs;
+    private final Context appContext;
     private static PrefsManager instance;
 
     private PrefsManager(Context context) {
-        prefs = context.getApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        appContext = context.getApplicationContext();
+        prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
     public static synchronized PrefsManager getInstance(Context context) {
         if (instance == null) instance = new PrefsManager(context);
@@ -77,8 +99,8 @@ public class PrefsManager {
     // without a matching PIN can lock the user into a broken state, and exporting the
     // PIN would place sensitive data in a plain JSON backup file.
     private boolean isBackupExcludedKey(String key) {
-        return "lock_pin".equals(key)
-                || "lock_enabled".equals(key)
+        return KEY_LOCK_PIN.equals(key)
+                || KEY_LOCK_ENABLED.equals(key)
                 || (key != null && key.startsWith("auto_text_encoding::"))
                 || (key != null && key.startsWith("auto_text_encoding_label::"));
     }
@@ -201,8 +223,8 @@ public class PrefsManager {
                 "page_margin_v",
                 "reader_text_top_offset_px",
                 "reader_text_bottom_offset_px",
-                "reader_text_left_inset_px",
-                "reader_text_right_inset_px",
+                KEY_READER_TEXT_LEFT_OFFSET,
+                KEY_READER_TEXT_RIGHT_OFFSET,
                 "sort_mode",
                 "recent_sort_mode",
                 "file_search_all_folders",
@@ -952,14 +974,15 @@ public class PrefsManager {
         prefs.edit().putString("folder_shortcuts", sb.toString()).apply();
     }
 
-    public int getMarginHorizontal() { return prefs.getInt("page_margin_h", 24); }
+    public int getMarginHorizontal() { return prefs.getInt("page_margin_h", DEFAULT_PAGE_MARGIN_HORIZONTAL_DP); }
     public void setMarginHorizontal(int dp) { prefs.edit().putInt("page_margin_h", dp).apply(); }
     public int getMarginVertical() { return prefs.getInt("page_margin_v", 16); }
     public void setMarginVertical(int dp) { prefs.edit().putInt("page_margin_v", dp).apply(); }
 
-    // TXT reader layout tuning. Offsets/insets are raw pixels.
+    // TXT reader layout tuning. Horizontal sliders show the actual boundary in px,
+    // while paging still uses the legacy pixel inset fields for stable page counts.
     // Top: positive moves the top boundary down. Bottom: negative moves the bottom boundary up.
-    // Left/right: positive shrinks the readable width from that side.
+    // Left/right default to page_margin_h converted to pixels, preserving the old page width.
     public int getReaderTextTopOffsetPx() { return prefs.getInt("reader_text_top_offset_px", 0); }
     public void setReaderTextTopOffsetPx(int px) {
         prefs.edit().putInt("reader_text_top_offset_px", Math.max(0, Math.min(240, px))).apply();
@@ -968,20 +991,150 @@ public class PrefsManager {
     public void setReaderTextBottomOffsetPx(int px) {
         prefs.edit().putInt("reader_text_bottom_offset_px", Math.max(0, Math.min(240, px))).apply();
     }
-    public int getReaderTextLeftInsetPx() { return prefs.getInt("reader_text_left_inset_px", 0); }
-    public void setReaderTextLeftInsetPx(int px) {
-        prefs.edit().putInt("reader_text_left_inset_px", Math.max(0, Math.min(240, px))).apply();
+    public int getReaderTextLeftInsetPx() {
+        return normalizeReaderTextInsetPx(prefs.getInt(
+                KEY_READER_TEXT_LEFT_OFFSET,
+                DEFAULT_READER_TEXT_BOUNDARY_PX - getMarginHorizontalPx()));
     }
-    public int getReaderTextRightInsetPx() { return prefs.getInt("reader_text_right_inset_px", 0); }
+    public void setReaderTextLeftInsetPx(int px) {
+        prefs.edit().putInt(KEY_READER_TEXT_LEFT_OFFSET, normalizeReaderTextInsetPx(px)).apply();
+    }
+    public int getReaderTextRightInsetPx() {
+        return normalizeReaderTextInsetPx(prefs.getInt(
+                KEY_READER_TEXT_RIGHT_OFFSET,
+                DEFAULT_READER_TEXT_BOUNDARY_PX - getMarginHorizontalPx()));
+    }
     public void setReaderTextRightInsetPx(int px) {
-        prefs.edit().putInt("reader_text_right_inset_px", Math.max(0, Math.min(240, px))).apply();
+        prefs.edit().putInt(KEY_READER_TEXT_RIGHT_OFFSET, normalizeReaderTextInsetPx(px)).apply();
+    }
+
+    public int getReaderTextLeftBoundaryPx() {
+        return Math.max(0, getMarginHorizontalPx() + getReaderTextLeftInsetPx());
+    }
+
+    public void setReaderTextLeftBoundaryPx(int px) {
+        setReaderTextLeftInsetPx(Math.max(0, Math.min(360, px)) - getMarginHorizontalPx());
+    }
+
+    public int getReaderTextRightBoundaryPx() {
+        return Math.max(0, getMarginHorizontalPx() + getReaderTextRightInsetPx());
+    }
+
+    public void setReaderTextRightBoundaryPx(int px) {
+        setReaderTextRightInsetPx(Math.max(0, Math.min(360, px)) - getMarginHorizontalPx());
+    }
+
+    public int getDefaultReaderTextBoundaryPx() {
+        return DEFAULT_READER_TEXT_BOUNDARY_PX;
+    }
+
+    public void resetReaderTextSideBoundariesToDefault() {
+        setReaderTextLeftBoundaryPx(DEFAULT_READER_TEXT_BOUNDARY_PX);
+        setReaderTextRightBoundaryPx(DEFAULT_READER_TEXT_BOUNDARY_PX);
+    }
+
+    private int normalizeReaderTextInsetPx(int px) {
+        return Math.max(-getMarginHorizontalPx(), Math.min(240, px));
+    }
+
+    private int getMarginHorizontalPx() {
+        float density = appContext.getResources().getDisplayMetrics().density;
+        return Math.max(0, Math.round(getMarginHorizontal() * density));
     }
 
     // Lock
-    public boolean isLockEnabled() { return prefs.getBoolean("lock_enabled", false); }
-    public void setLockEnabled(boolean v) { prefs.edit().putBoolean("lock_enabled", v).apply(); }
-    public String getLockPin() { return prefs.getString("lock_pin", ""); }
-    public void setLockPin(String pin) { prefs.edit().putString("lock_pin", pin).apply(); }
+    public boolean isLockEnabled() { return prefs.getBoolean(KEY_LOCK_ENABLED, false); }
+    public void setLockEnabled(boolean v) { prefs.edit().putBoolean(KEY_LOCK_ENABLED, v).apply(); }
+
+
+    public void setLockPin(String pin) {
+        if (pin == null || pin.isEmpty()) {
+            prefs.edit().remove(KEY_LOCK_PIN).apply();
+            return;
+        }
+        prefs.edit().putString(KEY_LOCK_PIN, createLockPinVerifier(pin)).apply();
+    }
+
+    public boolean verifyLockPin(String pin) {
+        if (pin == null || pin.isEmpty()) return false;
+        String stored = prefs.getString(KEY_LOCK_PIN, "");
+        if (stored == null || stored.isEmpty()) return false;
+
+        if (isLockPinVerifier(stored)) {
+            return verifyLockPinVerifier(pin, stored);
+        }
+
+        // Legacy migration path: versions before 2.2.6-pass93 stored the PIN in
+        // plain SharedPreferences. On the first successful unlock/change, replace
+        // it with a salted PBKDF2 verifier and never re-export the plain value.
+        boolean matchesLegacyPlainPin = MessageDigest.isEqual(
+                stored.getBytes(StandardCharsets.UTF_8),
+                pin.getBytes(StandardCharsets.UTF_8));
+        if (matchesLegacyPlainPin) {
+            setLockPin(pin);
+        }
+        return matchesLegacyPlainPin;
+    }
+
+    private boolean isLockPinVerifier(String stored) {
+        return stored.startsWith(LOCK_PIN_SCHEME_SHA256 + "$")
+                || stored.startsWith(LOCK_PIN_SCHEME_SHA1 + "$");
+    }
+
+    private String createLockPinVerifier(String pin) {
+        byte[] salt = new byte[LOCK_PIN_SALT_BYTES];
+        new SecureRandom().nextBytes(salt);
+        try {
+            byte[] hash = deriveLockPinHash(pin, salt, LOCK_PIN_ITERATIONS, "PBKDF2WithHmacSHA256");
+            return LOCK_PIN_SCHEME_SHA256 + "$" + LOCK_PIN_ITERATIONS + "$"
+                    + base64(salt) + "$" + base64(hash);
+        } catch (RuntimeException sha256Failure) {
+            byte[] hash = deriveLockPinHash(pin, salt, LOCK_PIN_ITERATIONS, "PBKDF2WithHmacSHA1");
+            return LOCK_PIN_SCHEME_SHA1 + "$" + LOCK_PIN_ITERATIONS + "$"
+                    + base64(salt) + "$" + base64(hash);
+        }
+    }
+
+    private boolean verifyLockPinVerifier(String pin, String stored) {
+        try {
+            String[] parts = stored.split("\\$", -1);
+            if (parts.length != 4) return false;
+            String scheme = parts[0];
+            int iterations = Integer.parseInt(parts[1]);
+            if (iterations < 10_000) return false;
+            byte[] salt = Base64.decode(parts[2], Base64.NO_WRAP);
+            byte[] expected = Base64.decode(parts[3], Base64.NO_WRAP);
+            if (salt.length < 8 || expected.length < 16) return false;
+            String algorithm;
+            if (LOCK_PIN_SCHEME_SHA256.equals(scheme)) {
+                algorithm = "PBKDF2WithHmacSHA256";
+            } else if (LOCK_PIN_SCHEME_SHA1.equals(scheme)) {
+                algorithm = "PBKDF2WithHmacSHA1";
+            } else {
+                return false;
+            }
+            byte[] actual = deriveLockPinHash(pin, salt, iterations, algorithm);
+            return MessageDigest.isEqual(expected, actual);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private byte[] deriveLockPinHash(String pin, byte[] salt, int iterations, String algorithm) {
+        PBEKeySpec spec = new PBEKeySpec(pin.toCharArray(), salt, iterations, LOCK_PIN_HASH_BITS);
+        try {
+            SecretKeyFactory factory = SecretKeyFactory.getInstance(algorithm);
+            return factory.generateSecret(spec).getEncoded();
+        } catch (InvalidKeySpecException | java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("PIN hash algorithm unavailable", e);
+        } finally {
+            spec.clearPassword();
+        }
+    }
+
+    private String base64(byte[] bytes) {
+        return Base64.encodeToString(bytes, Base64.NO_WRAP);
+    }
 
     // Sort
     public int getSortMode() { return prefs.getInt("sort_mode", SORT_NAME_ASC); }

@@ -1,18 +1,46 @@
-# TextView Reader Patch Notes
+# Patch notes
+
+## 2.2.6
+
+### Privacy / local-data behavior
+- Android app-data Auto Backup is disabled in the manifest with `android:allowBackup="false"`.
+- `PRIVACY.md` now states the actual local-data boundary: TextView Reader has no analytics, ads, account system, cloud sync, remote telemetry, or app network permission in the default manifest.
+- User-triggered external flows are documented separately: opening video files with other apps, sharing files, exporting/importing settings JSON, and contacting the developer through the user's own mail app.
+- The developer contact address is now `textview.ahnyb@addy.io`.
+
+### Documentation cleanup
+- Public documentation is consolidated around final 2.2.6 behavior instead of pass-by-pass internal development notes.
+- The release package keeps concise archive support, RAR backend, FOSS status, GitHub release, privacy, and third-party notice documents.
+- Internal RAR pass handoff/report documents are removed from the public ZIP to avoid noisy release notes and local-path leakage.
+
+### Archive / RAR backend
+- Junrar/UnRAR-license fallback code is removed from the default build.
+- Common RAR3/RAR4 compressed extraction is attempted through bundled `libarchive-android`.
+- First-party Java RAR remains scoped to metadata, stored entries, covered stored split paths, safe path handling, diagnostics, and limited stored RAR5 cases.
+- Split RAR, encrypted RAR, compressed-solid RAR, PPMd/VM-filtered first-party decoding, broad SFX handling, and RAR5 compressed/solid/encrypted-header handling are not advertised as guaranteed support.
+- Long archive failure details now appear in a scrollable/copyable dialog instead of only a toast.
+
+### UI / behavior changes
+- Archive password prompts use compact buttons and include a show/hide password toggle.
+- Image viewer honors the hardware page-turn key setting.
+- Default TXT font size is 16sp and default TXT line spacing is 1.4 for new/default preference states.
+- Normal release packaging keeps ARM Android ABIs and excludes unnecessary x86/x86_64 and desktop native payloads.
 
 ## 2.2.5
+- Fixed ZIP Commons fallback build error by collapsing the optional-codec catch to LinkageError only.
+
+
+### RAR decoder pass 24
+- Corrected RAR3/RAR4 table-length repeat semantics: `16/17` repeat the previous length and `18/19` encode zero runs.
+- Reworked first-party old-distance tracking toward RAR3 move-to-front behavior and updated match execution state updates accordingly.
+- Added optional real-fixture probing for a tiny `sample-5.rar` compressed entry. The first-party path reaches declared output size but still fails CRC, so normal compressed RAR remains libarchive-primary and full first-party compressed RAR is not claimed.
 
 ### Archive handling
 - ZIP extraction now uses Zip4j as the primary path and Apache Commons Compress as a non-encrypted fallback when Zip4j rejects an unsupported compression method. The fallback covers whole-archive and single-entry extraction for methods Commons Compress can decode with the bundled runtime, notably Deflate64, BZip2, XZ through XZ for Java, and ZSTD through zstd-jni. Methods that neither bundled path can decode, plus ABI/native codec load failures, fail as unsupported instead of crashing.
-- Bundled `com.github.luben:zstd-jni:1.5.7-9`, so release R8 no longer reports Commons Compress Zstandard support as a missing class and non-encrypted ZSTD ZIP entries can be attempted by the Commons fallback.
 - Archive-format notes now distinguish verified synthetic/code-mapping coverage from broad real-fixture compatibility. ALZ unsupported errors now identify unsupported features or variants instead of saying ALZ decoding is unavailable.
 - Encrypted ZIP entries remain on Zip4j. AES-encrypted entries combined with a non-Zip4j compression method are still unsupported because no single bundled path provides both AES handling and that codec.
+- The ZIP Commons fallback uses the existing `org.apache.commons:commons-compress:1.28.0` dependency already declared for 7z/TAR/single-stream archive handling, so no additional third-party license file is required beyond the updated Commons Compress use notice.
 - Fixed pending ZIP creation so the destination is resolved from the folder where the pending action is executed, not from the original source folder. Queued compression now behaves like extraction/copy/move queue actions: add the task, open the destination folder, then run the pending action there.
-
-### Direct archive image opening
-- Main-list comic/image archive opening can now prepare the image sequence in the background and launch the image reader directly.
-- The direct path avoids the previous intermediate archive-preview screen flash during archive-to-image-reader handoff.
-- The existing archive-preview screen remains the fallback for no-image archives, password/unsupported cases, and explicit preview navigation.
 
 ### Browse-state and folder navigation
 - Added bidirectional browse-state cache: fully loaded folders keep their adapter snapshot and RecyclerView scroll state, so A -> B -> A and A -> B -> A -> B navigation can restore instantly when the folders have not changed.
@@ -20,7 +48,6 @@
 - Returning from TXT/PDF/EPUB/Word/image/archive viewers now keeps the existing main folder adapter and RecyclerView state when the same folder is still visible. If the folder changed while in the viewer, the folder reloads to show added/generated files and clear stale rows.
 - Screen off/on and Home/app-switcher returns now keep the visible browse-folder adapter instead of rescanning when the folder signature, sort mode, and hidden-file setting still match.
 - Current-folder type filters can return to the cached All-file list without a rescan when the folder did not change.
-- Long main-list file/folder names keep a small right-side inset so ellipsized text does not press directly against the row edge or reading-progress badge.
 - Refactored browse-folder state preservation into `MainBrowseStateController`, keeping viewer-return, resume, filter-return, drawer shortcut, folder-signature, and folder-snapshot logic out of `MainActivity` while preserving behavior.
 
 ### Main file-list touch
@@ -30,19 +57,9 @@
 ### File-operation progress
 - Fixed a multi-select delete progress-window re-entry bug. Multi-delete now exits selection mode immediately after deletion is confirmed, before the worker starts, so the active progress button is available right away.
 - `MainActivity.onResume()` refreshes main toolbar progress/pending visibility so paused or backgrounded file operations can be reopened after returning to the app.
-- Progress windows for extraction, copy, move/cut, delete, and ZIP creation now follow the delete-style interface: active file/folder names on the left, fixed right-side `(current/total)` count columns, and stable row heights.
-- File counts use the active operation's recursive regular-file total. Archive extraction uses the current archive's full regular-file count, while copy/move/delete/ZIP creation use recursive selected-workload totals.
-- Folder counts remain visible for extraction, copy, and move/cut and no longer collapse to `(1/1)` during multi-selection when multiple folders/top-level workloads are involved.
-- Progress popups reserve file/folder row height from the start, preventing the dialog from growing vertically as rows appear or as folder names wrap.
-- Pause/resume now uses a fixed-size monochrome icon button instead of text or emoji glyphs, so pause and resume states keep the same popup size.
-- Folder information now calculates recursive folder size in the background instead of showing an inaccurate raw directory size.
-
-### UI polish
-- Color-palette dialog buttons now use the same rounded themed button color as the app's other popups instead of default gray Android buttons.
-- File and folder progress counter colors/sizing were aligned for a consistent visual weight.
 
 ### Refactoring
-- Split archive browser list shaping into `ArchiveEntryListController`, archive image-sequence preparation into `ArchiveImageSequenceLoader`, direct archive image routing into `MainArchiveImageOpenController`, and archive create/extract validation and naming policy into `MainArchiveCreationPlanner` / `MainArchiveExtractionPlanner`.
+- Split archive browser list shaping into `ArchiveEntryListController`, archive image-sequence preparation into `ArchiveImageSequenceLoader`, and archive create/extract validation and naming policy into `MainArchiveCreationPlanner` / `MainArchiveExtractionPlanner`.
 
 ### Release metadata
 - Android metadata: `versionCode 2250`, `versionName "2.2.5"`.
@@ -58,7 +75,7 @@
 ### Final changes included in this upload
 - Compress actions now enter the pending-actions queue instead of running immediately; queued ZIP creation can be executed individually or through **Compress all pending**.
 - Archive support was expanded and stabilized across RAR/CBR, ALZ, EGG, 7z/CB7 split volumes, ZIP/CBZ, TAR-family archives, and single-file compressor streams.
-- RAR4/RAR3 complex extraction attempts Junrar fallback where possible. RAR5 compressed/solid/encrypted extraction remains optional through `app/libs/unrar5j-v1.0.3.jar`; without the jar, unsupported RAR5 cases fail cleanly.
+- RAR support includes first-party metadata/stored-entry handling plus the then-bundled Junrar extraction fallback for older RAR4/RAR3 complex cases. RAR5 compressed/solid/encrypted extraction remains optional through `app/libs/unrar5j-v1.0.3.jar`; without the jar, unsupported RAR5 cases fail cleanly.
 - EGG AZO extraction is supported through an extraction-only modified Java port of `kippler/xunazo`; encrypted/split/solid EGG remains unsupported.
 - Standard `.7z.001` / `.7z.002` and `.cb7.001` / `.cb7.002` split chains are opened as one ordered seekable channel without creating a temporary combined archive.
 - Archive image-preview caching now avoids stale same-path archive previews and internal entry-name collisions.
@@ -189,8 +206,8 @@ This 2.2.2 package adds TXT text-to-speech on top of the 2.2.1 GitHub-ready sour
 
 ### File browser
 
-- APK and common video files, including MPEG transport stream `.ts` files, now appear in the All filter.
-- APK and video short taps are routed to Android/external apps rather than TextView's internal readers.
+- Common video files, including MPEG transport stream `.ts` files, appear in the All filter and short taps are routed to external video-capable apps rather than TextView's internal readers.
+- APK installer delegation is disabled in the default build; the manifest no longer requests `REQUEST_INSTALL_PACKAGES`.
 - Added an icon search-scope toggle next to the main file search field, before Sort.
 - Redrew the All-folders scope icon to remove darker edge seams caused by overlapping vector paths.
 - File-search results now show each item's parent-folder path beneath the metadata line.
@@ -320,7 +337,6 @@ This 2.2.1 package is prepared for GitHub upload with Android metadata `versionC
 
 - Recent-folder drawer top inset/header now matches the main Recent files header surface while folder rows keep the normal row surface.
 - Kept the recent-folder header on the same surface as the main Recent files header while recent-folder rows use the same plain surface treatment as recent-read file rows.
-
 
 - Drawer recent-folder rows no longer inherit the shortcut-box color setting; only the Recent folders header strip and the drawer top inset above it use the main Recent files header surface across all themes.
 - Tuned Deep Navy outline, selected, file-type button, and selected file-type button colors to `#042045`, `#0A1D42`, `#06163A`, and `#0A2455`.
@@ -654,3 +670,4 @@ This section remains the 2.1.4 release history. It is not folded into later rele
 
 ZIP integrity and Markdown structure were checked. Full Gradle verification should be run locally in Android Studio or another network-enabled environment if the Gradle wrapper needs to download Gradle.
 
+- Build fix: bundled `com.github.luben:zstd-jni` so Commons Compress Zstandard support is available to release builds without a missing-class suppression.

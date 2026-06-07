@@ -180,7 +180,7 @@ public class LockActivity extends AppCompatActivity {
 
         switch (mode) {
             case MODE_UNLOCK:
-                if (pin.equals(prefs.getLockPin())) {
+                if (prefs.verifyLockPin(pin)) {
                     setResult(RESULT_OK);
                     finish();
                 } else {
@@ -212,7 +212,7 @@ public class LockActivity extends AppCompatActivity {
             case MODE_CHANGE_PIN:
                 if (firstEntry == null) {
                     // Verify current PIN
-                    if (pin.equals(prefs.getLockPin())) {
+                    if (prefs.verifyLockPin(pin)) {
                         firstEntry = "VERIFIED";
                         messageText.setText("Enter new PIN");
                         pinInput.setText("");

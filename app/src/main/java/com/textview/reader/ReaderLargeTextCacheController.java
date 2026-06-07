@@ -80,11 +80,16 @@ final class ReaderLargeTextCacheController {
         String fontName = activity.prefs.getFontFamily();
         if (fontName == null) fontName = "default";
 
-        return "txt-v1"
+        int effectiveWidth = activity.readerView != null
+                ? activity.readerView.getTextLayoutWidthForIndex()
+                : -1;
+
+        return "txt-v5-px-boundary"
                 + "|fontSize=" + activity.prefs.getFontSize()
                 + "|lineSpacing=" + activity.prefs.getLineSpacing()
                 + "|marginH=" + activity.prefs.getMarginHorizontal()
                 + "|marginV=" + activity.prefs.getMarginVertical()
+                + "|layoutW=" + effectiveWidth
                 + "|top=" + activity.prefs.getReaderTextTopOffsetPx()
                 + "|bottom=" + activity.prefs.getReaderTextBottomOffsetPx()
                 + "|left=" + activity.prefs.getReaderTextLeftInsetPx()

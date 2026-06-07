@@ -18,6 +18,8 @@ import androidx.appcompat.widget.AppCompatImageView;
 
 /** Lightweight pan/zoom/fling image surface for ImageReaderActivity. */
 public class ZoomImageView extends AppCompatImageView {
+    private static final float DOUBLE_TAP_BASE_EPSILON = 0.005f;
+
     public interface Callbacks {
         void onSingleTap();
         void onSwipeLeft();
@@ -33,7 +35,10 @@ public class ZoomImageView extends AppCompatImageView {
     private final OverScroller scroller;
     private final int touchSlop;
     private float minScale = 1f;
+    private float fitScale = 1f;
+    private float defaultScale = 1f;
     private float maxScale = 5f;
+    private boolean smallImageWidthFillDefault;
     private float lastX;
     private float lastY;
     private int lastScrollerX;
@@ -75,7 +80,7 @@ public class ZoomImageView extends AppCompatImageView {
             @Override
             public void onScaleEnd(@NonNull ScaleGestureDetector detector) {
                 applyBounds();
-                if (!isZoomed()) disallowParentIntercept(false);
+                if (!canPanCurrentImage()) disallowParentIntercept(false);
             }
         });
         gestureDetector = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener() {
@@ -88,21 +93,28 @@ public class ZoomImageView extends AppCompatImageView {
             @Override
             public boolean onDoubleTap(@NonNull MotionEvent e) {
                 stopImageFling();
-                if (!isZoomed() && callbacks != null) callbacks.onZoomRequested();
+                if (willDoubleTapZoomIn() && callbacks != null) callbacks.onZoomRequested();
                 toggleZoom(e.getX(), e.getY());
                 return true;
             }
 
             @Override
             public boolean onFling(@Nullable MotionEvent e1, @NonNull MotionEvent e2, float velocityX, float velocityY) {
-                if (isZoomed()) {
+                if (e1 != null && callbacks != null) {
+                    float dx = e2.getX() - e1.getX();
+                    float dy = e2.getY() - e1.getY();
+                    if (isHorizontalPageSwipe(dx, dy) && !canPanHorizontally()) {
+                        if (dx < 0) callbacks.onSwipeLeft(); else callbacks.onSwipeRight();
+                        return true;
+                    }
+                }
+                if (canPanCurrentImage()) {
                     return startImageFling(velocityX, velocityY);
                 }
                 if (e1 == null || callbacks == null) return false;
                 float dx = e2.getX() - e1.getX();
                 float dy = e2.getY() - e1.getY();
-                float threshold = Math.max(72f, getResources().getDisplayMetrics().density * 56f);
-                if (Math.abs(dx) < threshold || Math.abs(dx) < Math.abs(dy) * 1.25f) return false;
+                if (!isHorizontalPageSwipe(dx, dy)) return false;
                 if (dx < 0) callbacks.onSwipeLeft(); else callbacks.onSwipeRight();
                 return true;
             }
@@ -126,8 +138,7 @@ public class ZoomImageView extends AppCompatImageView {
         imageWidth = nextBitmap.getWidth();
         imageHeight = nextBitmap.getHeight();
         setImageBitmap(nextBitmap);
-        configureBaseMatrix();
-        post(this::configureBaseMatrix);
+        configureBaseMatrixWhenReady();
     }
 
     public void setImageDrawableReady(@NonNull Drawable nextDrawable) {
@@ -138,8 +149,15 @@ public class ZoomImageView extends AppCompatImageView {
         if (nextDrawable instanceof AnimatedImageDrawable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             ((AnimatedImageDrawable) nextDrawable).start();
         }
-        configureBaseMatrix();
-        post(this::configureBaseMatrix);
+        configureBaseMatrixWhenReady();
+    }
+
+    private void configureBaseMatrixWhenReady() {
+        if (getWidth() > 0 && getHeight() > 0 && getContentWidth() > 0 && getContentHeight() > 0) {
+            configureBaseMatrix();
+        } else {
+            post(this::configureBaseMatrix);
+        }
     }
 
     @Override
@@ -160,7 +178,7 @@ public class ZoomImageView extends AppCompatImageView {
                 lastY = event.getY();
                 dragging = false;
                 panGestureStarted = false;
-                disallowParentIntercept(isZoomed());
+                disallowParentIntercept(canPanCurrentImage());
                 return true;
             case MotionEvent.ACTION_MOVE:
                 handleMove(event);
@@ -180,7 +198,7 @@ public class ZoomImageView extends AppCompatImageView {
             case MotionEvent.ACTION_CANCEL:
                 dragging = false;
                 panGestureStarted = false;
-                if (!isZoomed()) disallowParentIntercept(false);
+                if (!canPanCurrentImage()) disallowParentIntercept(false);
                 return true;
             default:
                 return true;
@@ -209,12 +227,21 @@ public class ZoomImageView extends AppCompatImageView {
         float bh = imageHeight;
         if (bw <= 0 || bh <= 0) return;
         matrix.reset();
-        minScale = Math.min(contentW / bw, contentH / bh);
-        if (minScale <= 0f) minScale = 1f;
-        maxScale = Math.max(minScale * 5f, 5f);
-        float dx = getPaddingLeft() + (contentW - bw * minScale) * 0.5f;
-        float dy = getPaddingTop() + (contentH - bh * minScale) * 0.5f;
-        matrix.postScale(minScale, minScale);
+        fitScale = Math.min(contentW / bw, contentH / bh);
+        if (fitScale <= 0f) fitScale = 1f;
+        float fitWidthScale = contentW / bw;
+
+        // Small images now open in a width-filled reading state instead of the
+        // old original-size state. Keep the true original size as minScale so
+        // double tap and pinch can still return to 1:1 without treating the
+        // initial width-filled view as an extra zoomed-in state.
+        smallImageWidthFillDefault = bw <= contentW && bh <= contentH && fitWidthScale > 1f;
+        minScale = smallImageWidthFillDefault ? 1f : Math.min(1f, fitScale);
+        defaultScale = smallImageWidthFillDefault ? fitWidthScale : minScale;
+        maxScale = Math.max(Math.max(Math.max(minScale, fitScale), defaultScale) * 5f, 5f);
+        float dx = getPaddingLeft() + (contentW - bw * defaultScale) * 0.5f;
+        float dy = getPaddingTop() + (contentH - bh * defaultScale) * 0.5f;
+        matrix.postScale(defaultScale, defaultScale);
         matrix.postTranslate(dx, dy);
         setImageMatrix(matrix);
     }
@@ -229,9 +256,9 @@ public class ZoomImageView extends AppCompatImageView {
             float distanceSquared = dx * dx + dy * dy;
             if (distanceSquared < touchSlop * touchSlop) return;
             panGestureStarted = true;
-            dragging = isZoomed();
+            dragging = canPanCurrentImage();
         }
-        if (dragging && isZoomed()) {
+        if (dragging && canPanCurrentImage()) {
             disallowParentIntercept(true);
             matrix.postTranslate(dx, dy);
             applyBounds();
@@ -251,22 +278,50 @@ public class ZoomImageView extends AppCompatImageView {
         if (imageWidth <= 0 || imageHeight <= 0) return;
         float current = getCurrentScale();
         if (current <= 0f) return;
-        float target;
-        if (current > minScale * 1.2f) {
-            target = minScale;
-        } else {
-            int contentW = getContentWidth();
-            float fitWidthScale = contentW > 0 ? contentW / (float) imageWidth : minScale;
-            target = Math.max(minScale * 2.5f, fitWidthScale);
-            target = Math.min(maxScale, Math.max(minScale, target));
-        }
+        float target = getDoubleTapTargetScale(current);
+        target = Math.min(maxScale, Math.max(minScale, target));
         float factor = target / current;
         matrix.postScale(factor, factor, focusX, focusY);
         applyBounds();
     }
 
+    private boolean willDoubleTapZoomIn() {
+        return willDoubleTapZoomIn(getCurrentScale());
+    }
+
+    private boolean willDoubleTapZoomIn(float current) {
+        if (smallImageWidthFillDefault) {
+            return current <= minScale + getDoubleTapBaseEpsilon();
+        }
+        return current <= defaultScale + getDoubleTapBaseEpsilon();
+    }
+
+    private float getDoubleTapTargetScale(float current) {
+        if (smallImageWidthFillDefault) {
+            // Small image toggle is intentionally reversed from the previous build:
+            // initial/default = width-filled, double tap = original 1:1, next double
+            // tap = width-filled again.
+            return current <= minScale + getDoubleTapBaseEpsilon() ? defaultScale : minScale;
+        }
+        return willDoubleTapZoomIn(current) ? getDoubleTapZoomScale() : defaultScale;
+    }
+
+    private float getDoubleTapZoomScale() {
+        if (smallImageWidthFillDefault) return defaultScale;
+        if (fitScale > minScale + getDoubleTapBaseEpsilon()) {
+            return fitScale;
+        }
+        int contentW = getContentWidth();
+        float fitWidthScale = contentW > 0 ? contentW / (float) imageWidth : minScale;
+        return Math.max(minScale * 2.5f, fitWidthScale);
+    }
+
+    private float getDoubleTapBaseEpsilon() {
+        return Math.max(DOUBLE_TAP_BASE_EPSILON, minScale * DOUBLE_TAP_BASE_EPSILON);
+    }
+
     private boolean startImageFling(float velocityX, float velocityY) {
-        if (imageWidth <= 0 || imageHeight <= 0 || !isZoomed()) return false;
+        if (imageWidth <= 0 || imageHeight <= 0 || !canPanCurrentImage()) return false;
         mapImageRect();
         int contentW = getContentWidth();
         int contentH = getContentHeight();
@@ -308,8 +363,9 @@ public class ZoomImageView extends AppCompatImageView {
 
     private void setImageBitmapPreserveViewport(@NonNull Bitmap nextBitmap) {
         stopImageFling();
-        float oldMinScale = minScale <= 0f ? 1f : minScale;
-        float oldZoomFactor = Math.max(1f, getCurrentScale() / oldMinScale);
+        float oldBaseScale = defaultScale <= 0f ? (minScale <= 0f ? 1f : minScale) : defaultScale;
+        float oldScaleRatio = getCurrentScale() / oldBaseScale;
+        if (Float.isNaN(oldScaleRatio) || Float.isInfinite(oldScaleRatio) || oldScaleRatio <= 0f) oldScaleRatio = 1f;
         float normX = 0.5f;
         float normY = 0.5f;
         Matrix inverse = new Matrix();
@@ -329,7 +385,7 @@ public class ZoomImageView extends AppCompatImageView {
         configureBaseMatrix();
 
         float current = getCurrentScale();
-        float target = Math.max(minScale, Math.min(maxScale, minScale * oldZoomFactor));
+        float target = Math.max(minScale, Math.min(maxScale, defaultScale * oldScaleRatio));
         if (current > 0f && Math.abs(target - current) > 0.001f) {
             float cx = getPaddingLeft() + getContentWidth() * 0.5f;
             float cy = getPaddingTop() + getContentHeight() * 0.5f;
@@ -351,7 +407,29 @@ public class ZoomImageView extends AppCompatImageView {
     }
 
     private boolean isZoomed() {
-        return getCurrentScale() > minScale * 1.03f;
+        return getCurrentScale() > defaultScale * 1.03f;
+    }
+
+    private boolean canPanCurrentImage() {
+        if (imageWidth <= 0 || imageHeight <= 0) return false;
+        int contentW = getContentWidth();
+        int contentH = getContentHeight();
+        if (contentW <= 0 || contentH <= 0) return false;
+        mapImageRect();
+        return imageRect.width() > contentW + 1f || imageRect.height() > contentH + 1f;
+    }
+
+    private boolean canPanHorizontally() {
+        if (imageWidth <= 0 || imageHeight <= 0) return false;
+        int contentW = getContentWidth();
+        if (contentW <= 0) return false;
+        mapImageRect();
+        return imageRect.width() > contentW + 1f;
+    }
+
+    private boolean isHorizontalPageSwipe(float dx, float dy) {
+        float threshold = Math.max(72f, getResources().getDisplayMetrics().density * 56f);
+        return Math.abs(dx) >= threshold && Math.abs(dx) >= Math.abs(dy) * 1.25f;
     }
 
     private void applyBounds() {

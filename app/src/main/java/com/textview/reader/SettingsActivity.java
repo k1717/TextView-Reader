@@ -66,6 +66,7 @@ import java.util.Locale;
 public class SettingsActivity extends AppCompatActivity {
 
     private static final String RELEASES_URL = "https://github.com/k1717/TextView-Reader/releases";
+    private static final String DEVELOPER_CONTACT_EMAIL = "textview.ahnyb@addy.io";
     private static final String TXT_ACTUAL_FILE_EDIT_PREFS = "txt_actual_file_edit";
     private static final String KEY_TXT_ACTUAL_FILE_EDIT_PATH = "modified_path";
     private static final String KEY_TXT_ACTUAL_FILE_EDIT_TOKEN = "modified_token";
@@ -128,6 +129,7 @@ public class SettingsActivity extends AppCompatActivity {
         setupResetSettings();
         setupTheme();
         setupUpdateLink();
+        setupDeveloperContact();
 
         // Force readable colors for every control after Android/Material defaults are applied.
         applySettingsReadableTheme();
@@ -167,6 +169,32 @@ public class SettingsActivity extends AppCompatActivity {
                     getString(R.string.settings_section_updates),
                     RELEASES_URL));
         });
+    }
+
+    private void setupDeveloperContact() {
+        View contact = findViewById(R.id.btn_contact_developer);
+        if (contact == null) return;
+
+        contact.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_SENDTO);
+            intent.setData(Uri.parse("mailto:" + Uri.encode(DEVELOPER_CONTACT_EMAIL)));
+            intent.putExtra(Intent.EXTRA_EMAIL, new String[]{DEVELOPER_CONTACT_EMAIL});
+            intent.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.contact_developer_subject));
+            try {
+                startActivity(Intent.createChooser(intent, getString(R.string.contact_developer_chooser)));
+            } catch (Exception e) {
+                copyDeveloperContactAddress();
+            }
+        });
+    }
+
+    private void copyDeveloperContactAddress() {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboard == null) return;
+        clipboard.setPrimaryClip(ClipData.newPlainText(
+                getString(R.string.contact_developer),
+                DEVELOPER_CONTACT_EMAIL));
+        ShortToast.show(this, R.string.contact_developer_address_copied);
     }
 
     private void setupLanguage() {

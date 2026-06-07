@@ -2,65 +2,76 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, Word, image, and archive workflows. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow.
 
-Current version: **2.2.5**
+Current version: **2.2.6**
+
+## 2.2.6 release summary
+
+- Android metadata is `versionCode 2260` and `versionName "2.2.6"`.
+- The default build no longer bundles Junrar or other UnRAR-license fallback code.
+- The default RAR/CBR path is now **first-party Java for stored RAR entries** plus **bundled libarchive-android for compressed RAR fallback attempts**.
+- RAR3/RAR4 normal non-encrypted compressed `.rar` / `.cbr` files are routed to `me.zhanghai.android.libarchive:library:1.1.6` in the normal APK. RAR5 compressed entries are also attempted through the bundled backend, with first-party stored-entry fallback where applicable. No manual NDK/CMake flag or local `libarchive.so` is required.
+- RAR split/multi-volume and encrypted RAR paths are **not guaranteed for this GitHub-ready build**. Some first-party routing, stored-split, visible-header rewrite/decrypt, and RAR5 stored-encryption code exists, but split RAR and encrypted RAR have not been re-tested for this release package, so they must be described as unverified / best-effort only.
+- RAR3/RAR4 solid, compressed split, encrypted compressed, header-encrypted, generic SFX, and unusual variants remain **limited / not guaranteed**. Embedded-signature SFX wrappers are routed conservatively as RAR, but ordinary `.exe` files are not archive-routed by filename alone. Passing a password to libarchive is only an attempt; it is not a public compatibility claim for encrypted RAR.
+- First-party RAR metadata listing, safe path handling, RAR4 Unicode filename decoding, stored method-0/0x30 extraction, partial-output cleanup with pre-existing output restoration, split-volume routing diagnostics, fixture-report automation, solid-boundary reporting, compressed-solid probe/failure classification, and RAR5 stored-entry handling remain available where covered by the Java reader.
+- RAR5 compressed/solid/encrypted-header extraction is **backend-dependent, not first-party complete**. The optional `unrar5j` bridge remains outside the default FOSS build and must not be used for FOSS-default claims.
+- Added `docs/ARCHIVE_SUPPORT_MATRIX_2_2_6.md` to separate recognized formats, implemented paths, library-dependent paths, optional custom paths, and unsupported boundaries.
+- Added `docs/GITHUB_RELEASE_NOTES_2_2_6.md` as the suggested GitHub release-note text, including explicit caveats that split/multi-volume RAR and encrypted RAR are not guaranteed because they were not re-tested for this package.
+- Release APK packaging keeps ARM ABIs (`armeabi-v7a`, `arm64-v8a`) and excludes x86/x86_64 native payloads. zstd-jni desktop resource payloads are excluded from Android packaging.
+- If updating a local source folder by extracting ZIPs over it, stale removed files are cleaned before build; `scripts/clean_removed_sources.ps1` can also be run manually.
+- `junrar/commons-vfs-rar` was reviewed and not adopted. The provider itself is MIT-licensed, but it depends on `com.github.junrar:junrar`, so it does not remove the UnRAR-license concern.
+
+## FOSS / license status
+
+TextView Reader 2.2.6 is intended to be the FOSS-friendly source/APK line. The first-party source is Apache License 2.0, the default build no longer includes Junrar or other UnRAR-license fallback code, and the bundled runtime dependencies are documented in `THIRD_PARTY_NOTICES.md`. See [`docs/FOSS_STATUS.md`](docs/FOSS_STATUS.md) for the current FOSS assessment, optional-jar boundary, and binary release notice requirements. See [`PRIVACY.md`](PRIVACY.md) for the local-data, manual-update-link, and developer-contact privacy notes.
+
+The default source package contains no optional decoder jar under `app/libs`; the folder may be absent in a clean package. If a developer adds any local jar to `app/libs`, that custom build must be rechecked before calling the resulting APK FOSS.
 
 ## 2.2.5 release summary
-- ZIP extraction uses Zip4j as the primary path and Apache Commons Compress as a non-encrypted fallback when Zip4j rejects an unsupported compression method. With Commons Compress plus the bundled XZ for Java and zstd-jni dependencies, this broadens extraction for non-encrypted Deflate64, BZip2, XZ, and ZSTD ZIP entries. Encrypted ZIP entries stay on Zip4j, so AES combined with a non-Zip4j method such as AES+XZ still fails cleanly as unsupported.
-- Comic/image archives can open directly from the main file list into the image reader without briefly showing the archive-preview screen. If the archive has no image entry, requires password handling, or cannot be handled by the direct path, the app falls back to the existing archive preview flow.
-- Archive validation notes separate code-mapping/synthetic-fixture coverage from broad real-world compatibility claims for TAR, single-compressor streams, ALZ, and EGG; ALZ unsupported errors now report an unsupported variant rather than saying decoding is unavailable.
+
+- Android metadata is `versionCode 2250` and `versionName "2.2.5"`.
+- ZIP extraction uses Zip4j as the primary path and Apache Commons Compress as a non-encrypted fallback when Zip4j rejects an unsupported compression method. With Commons Compress plus XZ for Java and zstd-jni, this broadens extraction for non-encrypted Deflate64, BZip2, XZ, and ZSTD ZIP entries.
 - Pending ZIP creation uses the current folder at execution time, so queued compression can be run from the intended destination folder.
-- Main file/folder action short-hold on the main list now opens after 200 ms instead of the previous roughly 500 ms delay. The separate multi-select hold now enters after 800 ms.
-- Returning from an internal viewer preserves the current main-folder list and scroll state only when the original folder is unchanged; if a file is added, deleted, renamed, moved, or modified while the viewer is open, the folder is reloaded.
-- Returning to already loaded folders restores cached adapter lists and scroll state in both directions. A -> B -> A and A -> B -> A -> B can reuse cached state when the folder contents, sort mode, and hidden-file setting are unchanged.
-- Drawer shortcut and recent-folder navigation use a faster path: cached target folders are shown immediately, then validated in the background; uncached large folders publish their first visible list earlier.
-- Screen off/on and Home/app-switcher returns keep the visible browse folder without a rescan when the folder did not change.
-- Clearing a current-folder type filter back to All restores the cached full-folder list when possible instead of rescanning the folder.
-- File-operation progress windows are unified around the delete-style interface for extraction, copy, move/cut, delete, and ZIP creation. File counts and folder counts use stable right-side count columns, recursive file/folder totals, fixed-height rows, and a monochrome pause/resume icon so the popup does not resize or shift while work runs.
-- Folder information now computes recursive folder size in the background instead of displaying the unreliable directory `File.length()` value.
-- Color-palette confirmation buttons now use the app's rounded themed button style instead of Android's default gray button tint.
-- Very long main-list file and folder names keep a small right-side inset so text no longer presses directly against the row edge or progress badge area.
-- Updated Android metadata to `versionCode 2250` and `versionName "2.2.5"`.
-- Refactored browse-folder state/cache handling into `MainBrowseStateController`, reducing `MainActivity` size while preserving viewer-return, resume, drawer shortcut, filter-return, and A/B/A/B folder state behavior.
-- Refactored archive UI/planning code into `ArchiveEntryListController`, `ArchiveImageSequenceLoader`, `MainArchiveCreationPlanner`, `MainArchiveExtractionPlanner`, and `MainArchiveImageOpenController`.
+- Main file/folder action short-hold on the main list opens after 200 ms. The separate multi-select hold enters after 800 ms.
+- Returning from an internal viewer preserves the current main-folder list and scroll state when the original folder is unchanged.
+- Already loaded folders restore cached adapter lists and scroll state in both directions, including A -> B -> A and A -> B -> A -> B navigation.
+- Drawer shortcut and recent-folder navigation use a faster path: cached target folders are shown immediately, then validated in the background.
 - Fixed multi-select delete progress re-entry after pause/background by leaving selection mode immediately after delete confirmation and refreshing progress-toolbar visibility on resume.
-- 2.2.5 keeps the 2.2.4 palette, TXT page-label, dependency, Apache-2.0, and archive-management baseline while adding the ZIP Commons fallback, direct archive-image handoff, browse-state cache, and progress-window polish.
-
-### Archive support status in 2.2.5
-
-| Format family | Current support | Known limits |
-| --- | --- | --- |
-| ZIP / ZIPX / CBZ | Primary production path through Zip4j for ZIP/CBZ listing, extraction, encrypted ZIP, and standard split ZIP. If Zip4j rejects a non-encrypted entry because of an unsupported compression method, extraction falls back to Apache Commons Compress for methods Commons can decode, notably Deflate64, BZip2, XZ through XZ for Java, and ZSTD through zstd-jni. ZIPX names are recognized and AES/password detection has a raw-header fallback when Zip4j cannot parse the compression method. | Encrypted entries stay on Zip4j and cannot use the Commons fallback. AES combined with a non-Zip4j method such as AES+XZ, LZMA/PPMd, and ABI/native codec load failures are not guaranteed and fail cleanly as unsupported. ZIP creation is plain ZIP only; encrypted ZIP creation is not implemented. |
-| 7z / CB7 | Listing and extraction through Apache Commons Compress, with password forwarding. Standard split chains (`.7z.001` / `.7z.002` and `.cb7.001` / `.cb7.002`) are opened through a concatenated seekable channel without building a temporary combined file. | Unsupported 7z methods depend on Commons Compress coverage. Missing/gapped volumes and 7z split creation are not supported. |
-| TAR / CBT and TAR.GZ / TAR.BZ2 / TAR.XZ / TAR.LZMA / TAR.Z | Listing, single-entry extraction, and full extraction through Commons Compress stream wrappers. Sample magic/header mapping has been checked for the five TAR variants; Android Java end-to-end fixtures remain part of release QA. | These formats do not have an internal password layer; `.tar.*.gpg` would require a separate OpenPGP decrypt step. |
-| GZ / BZ2 / XZ / LZMA / Z | Single-file decompression paths. `.gz`, `.bz2`, `.xz`, and `.lzma` sample payloads have been checked against the expected decoder mapping. | These are compressor streams, not multi-file archives. `.Z` is mapped to Commons Compress `ZCompressorInputStream` but still needs a real compress-format fixture in release QA. |
-| RAR / CBR | First-party metadata listing, safe paths, RAR4 Unicode names, stored method-0 extraction, limited RAR5 encrypted stored-data decrypt, stored split-payload assembly, Junrar fallback extraction for older RAR4/RAR3 compressed/solid/split/encrypted cases, and optional unrar5j fallback for RAR5 compressed/solid/encrypted extraction when `app/libs/unrar5j-v1.0.3.jar` is present. | RAR creation is not supported. RAR5 compressed extraction needs the optional local unrar5j jar; split/multi-volume RAR5 remains not guaranteed because upstream marks it partial. |
-| ALZ | First-party local-header parsing with Store/Deflate/BZip2 extraction, including ZipCrypto for covered cases. Store/Deflate synthetic fixtures have been run through the Java reader with CRC verification and corrupt-output cleanup. | Real ESTsoft-created ALZ fixtures, BZip2 payloads on Android, unusual descriptors, broader split handling, and unverified legacy variants remain release-QA items. |
-| EGG | First-party container parser with Store/Deflate/BZip2/AZO/LZMA extraction, per-block CRC32 verification, and path-traversal-safe names. AZO extraction is handled by an extraction-only modified Java port of `kippler/xunazo`. | Encrypted, split, and solid EGG archives are unsupported. Real ESTsoft-created EGG fixtures should remain in release QA before claiming broad compatibility. EGG creation is not implemented. |
-| Archive creation | Plain ZIP creation through queued pending actions. | RAR/7z/ALZ/EGG creation and encrypted ZIP creation are not implemented. |
+- Refactored browse-folder state/cache handling into `MainBrowseStateController` and split archive browser/list/image-sequence plus archive create/extract planning into focused helper classes.
 
 ## 2.2.4 release summary
 
 - Android metadata is `versionCode 2240` and `versionName "2.2.4"`.
 - The first-party project source is licensed under Apache License 2.0 with `Copyright 2026 k1717 aka Delphinium`; include `LICENSE`, `NOTICE`, and `THIRD_PARTY_NOTICES.md` with source releases.
-- Compress actions now add pending ZIP creation tasks instead of running immediately. Pending copy, move, extract, and compress tasks are managed from the same pending-actions menu.
-- RAR/CBR support includes RAR5 and RAR4/RAR3 metadata listing, RAR4 Unicode filename decoding, stored method-0 extraction, stored split-payload assembly, limited RAR5 encrypted stored-data handling, Junrar fallback for older RAR4/RAR3 compressed/solid/split/encrypted extraction, and optional unrar5j fallback for RAR5 compressed/solid/encrypted extraction when `app/libs/unrar5j-v1.0.3.jar` is supplied.
+- Compress actions add pending ZIP creation tasks instead of running immediately. Pending copy, move, extract, and compress tasks are managed from the same pending-actions menu.
+- RAR/CBR support included the then-bundled Junrar extraction fallback for older RAR4/RAR3 compressed/solid/split/encrypted extraction. The 2.2.6 line removes that fallback from the default build for FOSS compatibility.
 - ALZ supports Store/Deflate/BZip2 extraction with CRC verification. EGG supports Store/Deflate/BZip2/AZO/LZMA through the first-party `EggArchiveReader`; unsupported encrypted/split/solid variants fail cleanly.
 - Standard 7z/CB7 split volumes (`.7z.001` / `.7z.002`, `.cb7.001` / `.cb7.002`) are resolved to the first part and opened as a concatenated seekable channel for listing, extraction, and image preview.
 - Archive management includes safer preview caching, stricter path sanitization, background password preflight, backup/restore overwrite extraction, conservative extraction/free-space guards, and cache pruning.
-- File-operation progress now keeps item/file progress and folder counters separate, resets byte progress per payload, and supports queue inspection while work is backgrounded.
 - Custom main-theme and reading-theme color editors include a lightweight shader-based color palette picker while keeping HEX/RGB input.
-- Image viewer handoff from the file list and archive previews uses a short fade/scale transition.
-- TXT page labels show `current / total` at exact page-start positions and `current (line-in-page) / total` at mid-page positions; the in-page number is numeric-only and aligned with bookmark restore anchors.
-- Build/runtime/test dependencies were refreshed on the SDK-35 release line: AGP `9.2.0`, Gradle `9.4.1`, AppCompat `1.7.1`, Material Components `1.14.0`, RecyclerView `1.4.0`, ConstraintLayout `2.2.1`, Activity `1.10.1`, XZ for Java `1.12`, Zip4j `2.11.6`, AndroidX Test Runner `1.7.0`, and AndroidX Test Ext JUnit `1.3.0`.
+
+### Archive support status in 2.2.6
+
+See [`docs/ARCHIVE_SUPPORT_MATRIX_2_2_6.md`](docs/ARCHIVE_SUPPORT_MATRIX_2_2_6.md) for the release support matrix and [`docs/RAR_STATUS_2_2_6.md`](docs/RAR_STATUS_2_2_6.md) for the consolidated RAR boundary. Short version:
+
+| Format family | Current support | Known limits |
+| --- | --- | --- |
+| ZIP / ZIPX / CBZ | Zip4j handles normal ZIP/CBZ, encrypted ZIP, and standard split ZIP. Apache Commons Compress is used only as a fallback for **non-encrypted** entries using methods Commons can decode, notably Deflate64, BZip2, XZ, and ZSTD. | AES/password entries stay on Zip4j and cannot use the Commons method fallback. AES+XZ/BZip2/ZSTD ZIPX and other encryption+special-method combinations are unsupported in the current backend routing. ZIP creation is plain ZIP only. |
+| 7z / CB7 | Apache Commons Compress handles listing/extraction, password forwarding, and standard `.7z.001` / `.cb7.001` chains through a concatenated seekable channel. | Unsupported 7z method chains depend on Commons Compress coverage. Missing/gapped volumes and 7z split creation are not supported. |
+| TAR / CBT and TAR.GZ / TAR.BZ2 / TAR.XZ / TAR.LZMA / TAR.Z | Commons Compress stream wrappers provide listing, single-entry extraction, and full extraction for regular files. | TAR special entries such as symlinks/hardlinks are limited for safety. `.Z` still needs real fixture QA. |
+| GZ / BZ2 / XZ / LZMA / Z | Single-file decompression paths. | These are compressor streams, not multi-file archives. |
+| RAR / CBR | First-party Java handles metadata, safe paths, RAR4 Unicode names, stored method-0/0x30 extraction, partial-output cleanup, embedded-signature SFX routing, RAR5 stored extraction, and covered archive image/entry fallback behavior. Common compressed RAR is attempted through bundled libarchive-android, with RAR5 archive extraction falling back to per-entry extraction when whole-archive extraction fails. | No RAR creation. No Junrar/UnRAR-license fallback. First-party compressed RAR is not complete. Split/multi-volume RAR and encrypted RAR are not guaranteed in this GitHub-ready package because they have not been re-tested for this release. PPMd, custom VM bytecode, non-E8/E8E9 VM filters, broad solid archives, generic executable/SFX compatibility, compressed split chains, broad encrypted compressed variants, and RAR5 encrypted headers remain gaps unless a specific file is handled by the bundled backend or a covered first-party path. |
+| ALZ | First-party local-header parsing with Store/Deflate/BZip2 extraction and CRC verification; covered ALZ ZipCrypto-style encryption is attempted. | Real ESTsoft fixtures, unusual descriptors, broader split handling, and legacy variants remain release-QA items. |
+| EGG | First-party parser supports Store/Deflate/BZip2/AZO/LZMA extraction with CRC checks and path-traversal-safe names. AZO uses an extraction-only modified Java port of `kippler/xunazo`. | Encrypted, split, and solid EGG archives are unsupported. Broad real-world EGG compatibility still needs fixture QA. |
+| Archive creation | Plain ZIP creation through queued pending actions. | RAR/7z/ALZ/EGG creation and encrypted ZIP creation are not implemented. |
 
 ## 2.2.3 release summary
 
 - Updated Android version metadata to `versionCode 2230` and `versionName "2.2.3"`.
 - Added the first pass of a RAR/CBR engine. `.rar` and `.cbr` files are recognized as archives, RAR5 and RAR4/RAR3-style headers can be listed directly, RAR4 Unicode filenames are decoded, and entries stored without compression can be extracted.
-- Expanded Junrar as a RAR extraction-only fallback for older RAR4/RAR3 compressed, solid, split/multi-volume, and encrypted cases. RAR creation is not supported, and the Junrar/UnRAR code path must not be used for RAR compression.
+- Removed the bundled Junrar RAR fallback. The default build keeps first-party stored-RAR support and adds the bundled libarchive-android backend for a FOSS-friendly RAR3/RAR4 compressed fallback.
 - Compressed RAR5 remains blocked when the optional jar is absent, but `Rar5LibraryFallback` can now route RAR5 compressed/solid/encrypted extraction through unrar5j when `app/libs/unrar5j-v1.0.3.jar` is present.
 - Added ALZ/EGG archive support. ALZ extracts Store/Deflate/BZip2; EGG is parsed and extracted from a first-party decoder (Store/Deflate/BZip2/AZO/LZMA). Proprietary or encrypted/split/solid variants fail cleanly instead of writing partial output, and every block CRC is verified.
-- RAR password and split-volume handling is safer: encrypted headers enter the password flow, visible encrypted entries can still be listed, `.partN.rar` / `.rNN` names resolve through the first volume for listing, and older split/encrypted extraction now attempts the Junrar fallback instead of being blocked preemptively.
+- RAR password and split-volume handling is safer: visible encrypted entries can still be listed where headers are readable, and `.partN.rar` / `.rNN` names resolve through the first volume for listing. Older normal non-encrypted compressed extraction now routes to the bundled libarchive-android backend for common samples, while solid/encrypted/SFX/split variants remain limited or unsupported.
 - Added a limited first-party RAR5 encrypted stored-data decrypt attempt for method-0 entries. Compressed RAR5 is now delegated to the optional unrar5j bridge when the local jar is present; otherwise it still fails cleanly as unsupported.
 - Stored split RAR payloads can now be assembled across `.partN.rar` / `.rNN` volumes when the entry itself is not compressed, solid, or encrypted.
 - Repaired the main drawer gesture split so right swipes can still open the drawer from the main screen, while a real left swipe from the outside area closes an already open or partially open drawer without turning a light tap into a close action.
@@ -87,7 +98,7 @@ Current version: **2.2.5**
 - Image decode thresholds are tuned to keep preview memory bounded: images up to roughly 12MP open at original preview quality, larger previews are capped near 12MP, and zoom/detail decode uses an approximately 48MP original/detail cap with OOM fallback.
 - Adjacent-image movement is disabled until the full image sequence is ready, avoiding inconsistent temporary ordering while keeping the initial image open path light.
 - The image viewer title/subtitle text is slightly smaller for better toolbar fit on narrow screens.
-- The All file filter now also shows APK and common video files, including MPEG transport stream `.ts`; tapping them opens the Android package installer or an external video app instead of trying to load them in TextView.
+- The All file filter now also shows common video files, including MPEG transport stream `.ts`; tapping them opens an external video-capable app instead of trying to load them in TextView. The default build does not request APK-install permission or route APK files into Android's package installer.
 - Main file search now has a compact icon scope toggle beside the search field, shows parent-folder paths in search results, uses a centered spinner instead of occupying the sort-button row, and the main/recent lists have right-edge drag fast scrolling for large result sets. The All-folders search icon was redrawn to avoid darker edge seams caused by overlapping vector layers.
 - Current-folder type filters keep folders visible above matching files, so IMG/PDF/etc. filtering still allows folder navigation while showing matching files below.
 - Already loaded folders can restore their adapter list and scroll position in both directions, and unchanged folders are kept across viewer returns, filter clearing, and ordinary app resumes.
@@ -393,6 +404,11 @@ Current version: **2.2.5**
 - Folded toolbar mode keeps 6dp extra safe-area padding around punch-hole/status-bar and navigation-bar regions.
 - Word keeps gesture-style viewing controls; EPUB uses font-size controls in **More** for reader text size.
 
+
+## RAR5 build boundary
+
+TextView Reader 2.2.6's default FOSS build does not include an optional local RAR5 decoder jar. RAR5 stored entries have covered first-party handling where implemented, while RAR5 compressed/solid/encrypted-header extraction remains backend-dependent through the bundled archive backend and is not a first-party compatibility claim. If a developer adds any local decoder jar under `app/libs`, that custom APK must be treated as a separate build and rechecked for licensing before it is described as FOSS.
+
 ## Features
 
 ### File browsing and navigation
@@ -539,15 +555,17 @@ Current version: **2.2.5**
 
 ### Privacy
 
-TextView Reader is intended as a local reader. Settings shows a static GitHub releases link for manual update checking; the app does not contact GitHub itself.
+TextView Reader is intended as a local reader. Settings shows a static GitHub releases link for manual update checking and a developer contact button; the app does not contact GitHub itself and does not send email itself.
 
 - No analytics SDK.
 - No advertising SDK.
 - No account login.
 - No cloud sync backend.
 - No remote telemetry collection.
+- Android app-data backup is disabled with `android:allowBackup="false"`.
 - No in-app network update checks.
 - No background update checks.
+- Developer contact uses a `mailto:` intent to the user's chosen mail app. No logs, files, bookmarks, reading history, or settings are attached automatically.
 
 See [`PRIVACY.md`](PRIVACY.md) for details.
 
@@ -563,6 +581,8 @@ Command-line build:
 ```bash
 ./gradlew assembleDebug
 ```
+
+RAR3/RAR4 compressed fallback is included in the normal APK through the Apache-2.0 libarchive-android AAR. No separate NDK/CMake flag is needed for the default release build.
 
 Command-line verification:
 
@@ -598,7 +618,9 @@ Main dependencies:
 - JUniversalChardet
 - Apache Commons Compress
 - XZ for Java
+- zstd-jni
 - Zip4j
+- libarchive-android
 
 See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for runtime, test, and build-tool notices.
 
@@ -634,3 +656,16 @@ Do not upload duplicate root-level Android folders such as `java/`, `res/`, or r
 
 See [`CHANGELOG.md`](CHANGELOG.md) and [`PATCHNOTES.md`](PATCHNOTES.md).
 
+## libarchive RAR3/RAR4 backend
+
+TextView Reader 2.2.6 removes Junrar from the dependency set. Stored RAR entries that the first-party Java reader can handle remain available. Common RAR3/RAR4 normal non-encrypted compressed `.rar` and `.cbr` extraction is attempted through the bundled Apache-2.0 libarchive-android backend in the normal APK.
+
+No manual `libarchive.so`, NDK/CMake flag, or separate native build is required for the default APK. See `docs/RAR_LIBARCHIVE_BACKEND_NOTES.md` and `docs/ARCHIVE_SUPPORT_MATRIX_2_2_6.md` for the current backend scope.
+
+RAR support must still be described as limited. In particular, do not claim complete support for RAR3/RAR4 solid archives, encrypted RAR3/RAR4 archives, SFX wrappers, compressed split chains, RAR5 compressed data, or unusual RAR variants. The app may route some of these cases to libarchive, but routing is not the same thing as guaranteed support.
+
+The compressed-solid track now has diagnostic fixture reporting and first-party probe failure classification that separates libarchive probe results, PPMd/VM gaps, CRC/size mismatches, table/bitstream failures, and dictionary-continuation failures. This is documentation/QA infrastructure only; it does not enable first-party solid extraction.
+
+### RAR3/RAR4 backend status
+
+The default 2.2.6 RAR3/RAR4 compressed path uses `libarchive-android`. There is no secondary native RAR fallback beyond that dependency in the default source package. RAR5 compressed support remains outside the default FOSS assessment unless a compatible optional RAR5 decoder is supplied, audited, and documented separately.

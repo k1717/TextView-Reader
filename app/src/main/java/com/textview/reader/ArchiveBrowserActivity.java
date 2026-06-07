@@ -15,11 +15,14 @@ import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
 import android.text.TextUtils;
+import android.text.method.HideReturnsTransformationMethod;
+import android.text.method.PasswordTransformationMethod;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -931,17 +934,21 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
         input.setHintTextColor(sub);
         input.setHint(R.string.archive_password_hint);
         input.setSelectAllOnFocus(false);
-        box.addView(input, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(52)));
+        box.addView(makePasswordInputRow(input, fg, panel), new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(52)));
 
         final Dialog[] ref = new Dialog[1];
-        addDialogRow(box, getString(R.string.ok), fg, panel, () -> {
-            if (ref[0] != null) ref[0].dismiss();
-            callback.onPassword(input.getText() == null ? "" : input.getText().toString());
-        });
-        addDialogRow(box, getString(R.string.cancel), sub, panel, () -> {
-            if (ref[0] != null) ref[0].dismiss();
-            if (allEntries.isEmpty()) finish();
-        });
+        LinearLayout actions = makeDialogActionRow();
+        TextView cancel = makeDialogActionButton(getString(R.string.cancel), sub, panel);
+        TextView ok = makeDialogActionButton(getString(R.string.ok), fg, panel);
+        actions.addView(cancel, new LinearLayout.LayoutParams(0, dpToPx(44), 1f));
+        LinearLayout.LayoutParams okLp = new LinearLayout.LayoutParams(0, dpToPx(44), 1f);
+        okLp.setMargins(dpToPx(8), 0, 0, 0);
+        actions.addView(ok, okLp);
+        LinearLayout.LayoutParams actionsLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        actionsLp.setMargins(0, dpToPx(12), 0, 0);
+        box.addView(actions, actionsLp);
 
         Dialog dialog = new Dialog(this);
         dialog.setContentView(box);
@@ -949,12 +956,83 @@ public class ArchiveBrowserActivity extends AppCompatActivity {
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }
         ref[0] = dialog;
+        cancel.setOnClickListener(v -> {
+            dialog.dismiss();
+            if (allEntries.isEmpty()) finish();
+        });
+        ok.setOnClickListener(v -> {
+            dialog.dismiss();
+            callback.onPassword(input.getText() == null ? "" : input.getText().toString());
+        });
         dialog.setOnShowListener(d -> input.requestFocus());
         dialog.show();
         if (dialog.getWindow() != null) {
             int width = Math.min((int) (getResources().getDisplayMetrics().widthPixels * 0.88f), dpToPx(420));
             dialog.getWindow().setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
+    }
+
+    private LinearLayout makeDialogActionRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+        return row;
+    }
+
+    private TextView makeDialogActionButton(@NonNull String label, int textColor, int panelColor) {
+        TextView button = new TextView(this);
+        button.setText(label);
+        button.setTextColor(textColor);
+        button.setTextSize(15f);
+        button.setGravity(Gravity.CENTER);
+        button.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setIncludeFontPadding(false);
+        button.setPadding(dpToPx(10), 0, dpToPx(10), 0);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(panelColor);
+        bg.setCornerRadius(dpToPx(12));
+        button.setBackground(bg);
+        return button;
+    }
+
+    private LinearLayout makePasswordInputRow(@NonNull EditText input, int iconColor, int panelColor) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        row.addView(input, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+
+        ImageButton toggle = new ImageButton(this);
+        toggle.setImageResource(R.drawable.ic_visibility);
+        toggle.setColorFilter(iconColor);
+        toggle.setBackground(makePasswordToggleBackground(panelColor));
+        toggle.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));
+        toggle.setContentDescription(getString(R.string.archive_password_show));
+        final boolean[] visible = {false};
+        toggle.setOnClickListener(v -> {
+            visible[0] = !visible[0];
+            input.setTransformationMethod(visible[0]
+                    ? HideReturnsTransformationMethod.getInstance()
+                    : PasswordTransformationMethod.getInstance());
+            toggle.setImageResource(visible[0] ? R.drawable.ic_visibility_off : R.drawable.ic_visibility);
+            toggle.setColorFilter(iconColor);
+            toggle.setContentDescription(getString(visible[0]
+                    ? R.string.archive_password_hide
+                    : R.string.archive_password_show));
+            input.setSelection(input.length());
+        });
+        LinearLayout.LayoutParams toggleLp = new LinearLayout.LayoutParams(dpToPx(48), dpToPx(48));
+        toggleLp.setMargins(dpToPx(8), 0, 0, 0);
+        row.addView(toggle, toggleLp);
+        return row;
+    }
+
+    private GradientDrawable makePasswordToggleBackground(int panelColor) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(panelColor);
+        bg.setCornerRadius(dpToPx(12));
+        return bg;
     }
 
     private void addDialogRow(@NonNull LinearLayout box, @NonNull String label, int textColor, int panelColor, @NonNull Runnable action) {

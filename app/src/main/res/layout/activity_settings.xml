@@ -1000,12 +1000,20 @@
                 android:id="@+id/update_release_link"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="8dp"
                 android:clickable="true"
                 android:focusable="true"
                 android:text="@string/update_check_description"
                 android:textColor="?attr/colorPrimary"
                 android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_contact_developer"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                android:text="@string/contact_developer" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

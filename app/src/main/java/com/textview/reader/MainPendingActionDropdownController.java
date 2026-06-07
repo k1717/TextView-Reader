@@ -5,12 +5,14 @@ import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.content.Context;
 import android.text.Layout;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -108,9 +110,20 @@ final class MainPendingActionDropdownController {
             activity.confirmAllPendingArchiveCreations();
         });
 
+        MaxHeightScrollView queueScroller = new MaxHeightScrollView(activity);
+        queueScroller.setFillViewport(false);
+        queueScroller.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        queueScroller.setVerticalScrollBarEnabled(true);
+        queueScroller.setMaxHeight(Math.min(
+                activity.dpToPx(310),
+                Math.max(activity.dpToPx(150), activity.getResources().getDisplayMetrics().heightPixels / 3)));
+
         LinearLayout rowsContainer = new LinearLayout(activity);
         rowsContainer.setOrientation(LinearLayout.VERTICAL);
-        box.addView(rowsContainer, new LinearLayout.LayoutParams(
+        queueScroller.addView(rowsContainer, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT,
+                ScrollView.LayoutParams.WRAP_CONTENT));
+        box.addView(queueScroller, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -355,5 +368,29 @@ final class MainPendingActionDropdownController {
         bg.setCornerRadius(activity.dpToPx(8));
         button.setBackground(bg);
         return button;
+    }
+    private static final class MaxHeightScrollView extends ScrollView {
+        private int maxHeight;
+
+        MaxHeightScrollView(@NonNull Context context) {
+            super(context);
+        }
+
+        void setMaxHeight(int maxHeight) {
+            this.maxHeight = Math.max(0, maxHeight);
+            requestLayout();
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            int limitedHeightSpec = heightMeasureSpec;
+            if (maxHeight > 0) {
+                int mode = MeasureSpec.getMode(heightMeasureSpec);
+                int size = MeasureSpec.getSize(heightMeasureSpec);
+                int height = mode == MeasureSpec.UNSPECIFIED ? maxHeight : Math.min(size, maxHeight);
+                limitedHeightSpec = MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST);
+            }
+            super.onMeasure(widthMeasureSpec, limitedHeightSpec);
+        }
     }
 }

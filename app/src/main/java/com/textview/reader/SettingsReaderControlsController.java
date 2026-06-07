@@ -18,6 +18,7 @@ import com.textview.reader.util.PrefsManager;
 final class SettingsReaderControlsController {
     private static final int STEP_PX = 5;
     private static final int MAX_INSET_PX = 240;
+    private static final int MAX_BOUNDARY_PX = 360;
 
     private final SettingsActivity activity;
     private final PrefsManager prefs;
@@ -89,18 +90,18 @@ final class SettingsReaderControlsController {
                 prefs.getReaderTextBottomOffsetPx(),
                 R.string.txt_bottom_offset_format,
                 prefs::setReaderTextBottomOffsetPx);
-        bindReaderInsetSeekBar(
+        bindReaderPixelInsetSeekBar(
                 R.id.txt_left_inset_seekbar,
                 R.id.txt_left_inset_label,
-                prefs.getReaderTextLeftInsetPx(),
+                prefs.getReaderTextLeftBoundaryPx(),
                 R.string.txt_left_inset_format,
-                prefs::setReaderTextLeftInsetPx);
-        bindReaderInsetSeekBar(
+                prefs::setReaderTextLeftBoundaryPx);
+        bindReaderPixelInsetSeekBar(
                 R.id.txt_right_inset_seekbar,
                 R.id.txt_right_inset_label,
-                prefs.getReaderTextRightInsetPx(),
+                prefs.getReaderTextRightBoundaryPx(),
                 R.string.txt_right_inset_format,
-                prefs::setReaderTextRightInsetPx);
+                prefs::setReaderTextRightBoundaryPx);
     }
 
     private void bindReaderInsetSeekBar(
@@ -126,6 +127,34 @@ final class SettingsReaderControlsController {
             @Override public void onStartTrackingTouch(SeekBar bar) {}
             @Override public void onStopTrackingTouch(SeekBar bar) {
                 setter.set(roundToInsetStep(bar.getProgress() * STEP_PX));
+            }
+        });
+    }
+
+    private void bindReaderPixelInsetSeekBar(
+            int seekBarId,
+            int labelId,
+            int currentPx,
+            int labelFormatResId,
+            @NonNull IntSetter setter
+    ) {
+        SeekBar seekBar = activity.findViewById(seekBarId);
+        TextView label = activity.findViewById(labelId);
+        if (seekBar == null || label == null) return;
+        int current = Math.max(0, Math.min(MAX_BOUNDARY_PX, currentPx));
+        seekBar.setMax(MAX_BOUNDARY_PX);
+        seekBar.setProgress(current);
+        label.setText(activity.getString(labelFormatResId, current));
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                int value = Math.max(0, Math.min(MAX_BOUNDARY_PX, progress));
+                label.setText(activity.getString(labelFormatResId, value));
+                if (fromUser) setter.set(value);
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {
+                int value = Math.max(0, Math.min(MAX_BOUNDARY_PX, bar.getProgress()));
+                setter.set(value);
             }
         });
     }

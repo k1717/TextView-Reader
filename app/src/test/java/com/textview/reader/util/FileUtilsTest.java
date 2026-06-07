@@ -296,9 +296,10 @@ public class FileUtilsTest {
     }
 
     @Test
-    public void visibleAllFilter_includesExternalOpenableApkAndVideo() {
-        assertTrue(FileUtils.isVisibleInAllFilesFilter("sample.apk"));
-        assertTrue(FileUtils.isExternalOpenableFile("sample.apk"));
+    public void visibleAllFilter_includesExternalOpenableVideoButNotApkInstaller() {
+        assertFalse("APK installer delegation is disabled in the default build",
+                FileUtils.isVisibleInAllFilesFilter("sample.apk"));
+        assertFalse(FileUtils.isExternalOpenableFile("sample.apk"));
         assertEquals("APK", FileUtils.getReadableFileType("sample.apk"));
 
         assertTrue(FileUtils.isVisibleInAllFilesFilter("movie.mkv"));

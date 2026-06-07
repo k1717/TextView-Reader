@@ -240,7 +240,7 @@ public class FileUtils {
     }
 
     public static boolean isExternalOpenableFile(String fileName) {
-        return isApkFile(fileName) || isVideoFile(fileName);
+        return isVideoFile(fileName);
     }
 
     public static boolean isArchiveFile(String fileName) {

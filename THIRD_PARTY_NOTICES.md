@@ -3,6 +3,13 @@
 TextView Reader first-party source code is licensed under the Apache License 2.0 in `LICENSE`. The root `LICENSE` file includes the applied first-party copyright notice, and the root `NOTICE` file is part of the Apache-2.0 source distribution.
 This file records third-party components that are used by the Android build or by the app at runtime. Keep this file with source releases and with binary release materials such as APK/AAB release assets.
 
+
+## Default FOSS build boundary
+
+The default 2.2.6 source package is intended to be FOSS-friendly: first-party source is Apache License 2.0, Junrar/UnRAR-license fallback code is not bundled, and the normal dependency graph uses FOSS-compatible licenses recorded below. The default source package contains no optional decoder jar in `app/libs`; in a clean package the folder may be absent. Adding any local jar creates a custom build that must be audited separately before being described as FOSS.
+
+See `docs/FOSS_STATUS.md` for the project-level FOSS assessment and release checklist. A direct-dependency license report is included at `docs/LICENSE_REPORT_2_2_6.md`, and a source-declared direct-dependency SPDX draft is included at `docs/SBOM_2_2_6.spdx.json`. These do not replace a fully resolved Gradle/transitive SBOM for stricter repository submission.
+
 ## Runtime / app dependencies
 
 ### Android platform APIs
@@ -11,30 +18,27 @@ TXT text-to-speech in 2.2.2 uses Android platform TTS, foreground-service notifi
 
 ### RAR / CBR support boundary
 
-The RAR/CBR reader parses RAR5 and RAR4/RAR3-style archive metadata in this source tree, decodes RAR4 Unicode filename records, extracts entries stored without compression, assembles stored split payloads, and includes a limited first-party RAR5 encrypted stored-data decrypt attempt. Junrar is additionally bundled as a RAR extraction-only fallback for older RAR4/RAR3 compressed, solid, split/multi-volume, and encrypted cases. RAR5 compressed/solid/encrypted extraction can be enabled by adding the optional RealBurst/unrar5j jar to `app/libs`; without that jar, compressed RAR5 remains unsupported in the bundled decoder.
+The RAR/CBR reader parses RAR5 and RAR4/RAR3-style archive metadata in this source tree, decodes RAR4 Unicode filename records, extracts entries stored without compression, assembles stored split payloads, and includes a limited first-party RAR5 encrypted stored-data decrypt attempt. The default build no longer bundles Junrar, unrar5j, or other UnRAR-license/provenance-risk fallback code. Common compressed RAR paths route by default to the bundled Apache-2.0 libarchive-android dependency. RAR cases not handled by libarchive or the stored-data Java path fail cleanly as unsupported.
 
 
 
 ### zstd-jni
 - Artifact: `com.github.luben:zstd-jni:1.5.7-9`
-- License: BSD 2-Clause for the JNI binding artifact. Upstream also notes that the bundled/native Zstandard library is available under BSD 3-Clause or GPL-2.0; this project relies on the permissive BSD licensing path for binary distribution.
+- License position used by this project: BSD 2-Clause for the JNI binding artifact, with the bundled/native Zstandard library distributed under the permissive BSD licensing path rather than a GPL path.
 - Purpose: Provides the native Zstandard codec used by Apache Commons Compress for non-encrypted ZIP method 93 fallback and Zstandard stream support.
+- Binary-release notice requirement: keep this notice file available with APK/AAB release materials and, when producing a stricter repository submission, regenerate a resolved dependency notice bundle from the exact Gradle artifacts so the native Zstandard notice text is carried forward. The APK packaging excludes desktop native resource folders that Android does not use, but the Android ARM native payload remains part of the runtime build.
 
-### Junrar
+### libarchive-android
 
-Artifact: `com.github.junrar:junrar:7.6.0`
+Artifact: `me.zhanghai.android.libarchive:library:1.1.6`
 
-Use in this project: RAR extraction-only fallback for older RAR4/RAR3 compressed, solid, split/multi-volume, and encrypted entries. This code path is not used for RAR creation, RAR compression, or building a WinRAR-compatible archiver.
+Project: https://github.com/zhanghai/libarchive-android
 
-License: UnRAR License. The UnRAR license permits use and distribution for processing RAR archives, but prohibits using the source to develop a RAR-compatible compression/archiving product.
+Use in this project: default RAR3/RAR4 compressed fallback backend through Android libarchive native libraries and Java bindings. It is used for RAR listing, password preflight, single-entry extraction, and whole-archive extraction when the first-party stored-RAR reader cannot handle a compressed entry.
 
-### RealBurst/unrar5j optional RAR5 fallback
+License position used by this project: Apache License 2.0 for the Android library artifact, plus permissive BSD-style upstream notices for the bundled native libarchive code.
 
-Project: https://github.com/RealBurst/unrar5j
-
-Use in this project: optional local-jar, extraction-only RAR5 fallback loaded reflectively by `Rar5LibraryFallback` when `app/libs/unrar5j-v1.0.3.jar` is present. It is not required for normal builds and is not used for RAR creation/compression. RAR5 split/multi-volume support is not treated as guaranteed.
-
-License: Apache License 2.0.
+Binary-release notice requirement: keep this notice file available with APK/AAB release materials and, for stricter repository submission, regenerate/copy the resolved libarchive-android/libarchive native notices from the exact Gradle artifact used to build the APK. Do not describe an APK as having complete native notices if the binary release materials omit the libarchive native notice bundle.
 
 ### First-party ALZ / EGG support boundary
 
@@ -165,5 +169,8 @@ License: Apache License 2.0. The plugin is resolved by Gradle at build time and 
 
 ## Release-distribution note
 
-The Gradle packaging block may exclude duplicate `META-INF/LICENSE*` and `META-INF/NOTICE*` files from packaged Android resources to avoid resource merge conflicts. That does not remove the need to provide third-party notices with public binary releases. Include this file, the root `LICENSE`, and any generated dependency-license report if one is later added to the build.
+The Gradle packaging block may exclude duplicate `META-INF/LICENSE*` and `META-INF/NOTICE*` files from packaged Android resources to avoid resource merge conflicts. That does not remove the need to provide third-party notices with public binary releases. Include this file, the root `LICENSE`, `NOTICE`, `docs/LICENSE_REPORT_2_2_6.md`, and `docs/SBOM_2_2_6.spdx.json` with public source and binary release materials.
 
+## RAR5 key-derivation algorithm reference
+
+The RAR5 password-based key derivation (PBKDF2-HMAC-SHA256 producing the AES key, HMAC hash key, and 8-byte password-check value) is a first-party Java implementation written from the publicly documented RAR5 algorithm (unrar cryp5.cpp behavior, as also described by lclevy/unarcrypto). No third-party code is copied; only the algorithm/parameter layout is followed. The implementation was validated against published reference vectors.
