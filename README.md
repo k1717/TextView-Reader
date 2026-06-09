@@ -2,6 +2,8 @@
 
 TextView Reader is a local Android reader for TXT, PDF, EPUB, Word, image, and archive workflows. It is designed around fast opening, simple navigation, bookmarks, theme control, custom fonts, and a file-browser workflow.
 
+> TextView Reader has changed to **Readwide**. The current repository is [https://github.com/k1717/Readwide](https://github.com/k1717/Readwide).
+
 Current version: **2.2.6**
 
 ## 2.2.6 release summary
